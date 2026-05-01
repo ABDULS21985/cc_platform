@@ -1,0 +1,39 @@
+# VCS and metadata
+.git
+.gitignore
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local environment and secrets
+.env
+.env.*
+firebase_credentials.json
+
+# Logs and runtime artifacts
+logs/
+*.log
+
+# Tests and docs not needed at runtime
+tests/
+docs/
+
+# Editor/OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Build outputs and temp files
+build/
+dist/
+*.tmp
+*.bak

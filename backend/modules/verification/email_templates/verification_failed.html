@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification Failed - CCPay</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+            padding: 50px 20px;
+            text-align: center;
+            color: white;
+        }
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 20px;
+            color: #333333;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .message {
+            font-size: 16px;
+            color: #666666;
+            line-height: 1.8;
+            margin-bottom: 25px;
+        }
+        .error-info {
+            background-color: #fff5f5;
+            border-left: 4px solid #ff6b6b;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .error-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #c92a2a;
+            margin-bottom: 10px;
+        }
+        .error-detail {
+            font-size: 14px;
+            color: #666666;
+            margin: 8px 0;
+        }
+        .reasons {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+        .reasons-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333333;
+            margin-bottom: 15px;
+        }
+        .reason-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            padding-left: 20px;
+        }
+        .reason-item:last-child {
+            margin-bottom: 0;
+        }
+        .reason-text {
+            font-size: 14px;
+            color: #666666;
+            line-height: 1.6;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .help-box {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .help-title {
+            font-weight: 600;
+            color: #1565c0;
+            margin-bottom: 10px;
+        }
+        .help-text {
+            font-size: 14px;
+            color: #666666;
+            line-height: 1.6;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e9ecef;
+        }
+        .footer-text {
+            font-size: 14px;
+            color: #999999;
+            line-height: 1.6;
+        }
+        .footer-links {
+            margin-top: 15px;
+        }
+        .footer-links a {
+            color: #667eea;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <div class="error-icon">❌</div>
+            <div class="logo">CCPay</div>
+            <h1>Verification Failed</h1>
+        </div>
+
+        <div class="content">
+            <div class="greeting">
+                Hi {{firstname}},
+            </div>
+
+            <div class="message">
+                We were unable to complete your {{verification_type}} verification at this time. Don't worry - this is a common issue and can usually be resolved quickly.
+            </div>
+
+            <div class="error-info">
+                <div class="error-title">Verification Status</div>
+                <div class="error-detail"><strong>Type:</strong> {{verification_type_upper}}</div>
+                <div class="error-detail"><strong>Status:</strong> Failed</div>
+                <div class="error-detail"><strong>Attempted At:</strong> {{attempted_at}}</div>
+            </div>
+
+            <div class="reasons">
+                <div class="reasons-title">Common Reasons for Failure:</div>
+
+                <div class="reason-item">
+                    <div class="reason-text">
+                        <strong>• Incorrect {{verification_type_upper}} Number:</strong> Double-check that you entered your {{verification_type_upper}} number correctly.
+                    </div>
+                </div>
+
+                <div class="reason-item">
+                    <div class="reason-text">
+                        <strong>• Mismatched Date of Birth:</strong> Ensure the date of birth matches exactly with your {{verification_type_upper}} records.
+                    </div>
+                </div>
+
+                <div class="reason-item">
+                    <div class="reason-text">
+                        <strong>• Service Provider Issues:</strong> Temporary issues with the verification service provider.
+                    </div>
+                </div>
+
+                <div class="reason-item">
+                    <div class="reason-text">
+                        <strong>• Database Mismatch:</strong> Your information may not be updated in the national database.
+                    </div>
+                </div>
+            </div>
+
+            <div class="message">
+                <strong>What to Do Next:</strong>
+            </div>
+
+            <div class="help-box">
+                <div class="help-title">💡 Try Again</div>
+                <div class="help-text">
+                    You can attempt verification again. Make sure all information is accurate and matches your official records exactly.
+                </div>
+            </div>
+
+            <div style="text-align: center;">
+                <a href="https://ccpay.com/app/verification" class="cta-button">Try Again</a>
+            </div>
+
+            <div class="help-box" style="background-color: #fff3cd; border-left-color: #ffc107;">
+                <div class="help-title" style="color: #856404;">📞 Need Assistance?</div>
+                <div class="help-text">
+                    If you continue to experience issues, our support team is ready to help you complete the verification process. Contact us anytime at <strong>support@ccpay.com</strong> or through the app.
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-text">
+                <strong>Need help?</strong><br>
+                Contact our 24/7 support team for assistance.
+            </div>
+            <div class="footer-links">
+                <a href="https://ccpay.com/help">Help Center</a>
+                <a href="https://ccpay.com/support">Contact Support</a>
+                <a href="https://ccpay.com/faq">FAQ</a>
+            </div>
+            <div class="footer-text" style="margin-top: 20px;">
+                © 2025 CCPay. All rights reserved.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

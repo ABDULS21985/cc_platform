@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # Flask API Service
+  app:
+    image: docker.io/abdulabdullah1000/ccp-backend:v1.2.9.2
+    container_name: ccp-backend-api
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./firebase_credentials.json:/secrets/firebase_credentials.json:ro
+    depends_on:
+      - redis
+      - typesense
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker Service
+  celery-worker:
+    image: docker.io/abdulabdullah1000/ccp-backend:v1.2.9.2
+    container_name: ccp-backend-worker
+    env_file:
+      - .env
+    command: celery -A modules.tasks.celery_app.celery worker --loglevel=info --pool=solo --concurrency=2
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - app
+
+  redis:
+    image: redis:latest
+    container_name: redis-server
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  typesense:
+    image: typesense/typesense:0.25.1
+    container_name: typesense-server
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-xyz_local_dev_key}
+      TYPESENSE_DATA_DIR: /data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  typesense-data:
+
+
+
+
+
