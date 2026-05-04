@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Env files (any case, any depth) — covers .env, .ENV, .env.local, .env.production
+.env
+.ENV
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs/
+*.log
+
+# PM2
+.pm2/
+ecosystem.config.local.js
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python (root-level safety net)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node (root-level safety net)
+node_modules/
+
+# Secrets / credentials
+*.pem
+*.p8
+firebase_credentials.json
+apple_private_key.p8
+*credentials*.json
+!*credentials*.example.json
