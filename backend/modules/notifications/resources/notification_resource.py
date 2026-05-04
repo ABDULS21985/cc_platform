@@ -118,6 +118,61 @@ class NotificationMarkAllReadResource(MethodView):
             return format_internal_error(str(exc))
 
 
+@notification_blp.route('/unread-by-category')
+class NotificationUnreadByCategoryResource(MethodView):
+    """Per-category unread counts. Used to badge sidebar nav items."""
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def get(self, current_user=None):
+        try:
+            result, status = notification_service.unread_by_category(current_user.id)
+            return format_data(data=result, message='OK', status_code=status)
+        except Exception as exc:
+            logger.error('Error counting per-category unread: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
+@notification_blp.route('/community-mutes')
+class NotificationCommunityMutesResource(MethodView):
+    """List the IDs of communities muted by the current user."""
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def get(self, current_user=None):
+        try:
+            result, status = notification_service.list_muted_communities(current_user.id)
+            return format_data(data=result, message='OK', status_code=status)
+        except Exception as exc:
+            logger.error('Error listing muted communities: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
+@notification_blp.route('/community-mutes/<int:community_id>')
+class NotificationCommunityMuteItemResource(MethodView):
+    """Mute or unmute notifications from a single community."""
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def post(self, community_id, current_user=None):
+        try:
+            result, status = notification_service.mute_community(current_user.id, community_id)
+            return format_data(data=result, message='Community muted', status_code=status)
+        except Exception as exc:
+            logger.error('Error muting community: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def delete(self, community_id, current_user=None):
+        try:
+            result, status = notification_service.unmute_community(current_user.id, community_id)
+            return format_data(data=result, message='Community unmuted', status_code=status)
+        except Exception as exc:
+            logger.error('Error unmuting community: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
 @notification_blp.route('/preferences')
 class NotificationPreferencesResource(MethodView):
     """Per-user category mute settings."""

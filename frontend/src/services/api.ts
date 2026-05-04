@@ -902,6 +902,27 @@ export const ApiService = {
         "/v2/notifications/preferences",
         flags,
       ),
+
+    unreadByCategory: () =>
+      axiosInstance.get<ApiResponse<{
+        unread_by_category: Record<string, number>;
+        total: number;
+      }>>("/v2/notifications/unread-by-category"),
+
+    listMutedCommunities: () =>
+      axiosInstance.get<ApiResponse<{ community_ids: number[] }>>(
+        "/v2/notifications/community-mutes",
+      ),
+
+    muteCommunity: (communityId: number) =>
+      axiosInstance.post<ApiResponse<{ muted: boolean; community_id: number }>>(
+        `/v2/notifications/community-mutes/${communityId}`,
+      ),
+
+    unmuteCommunity: (communityId: number) =>
+      axiosInstance.delete<ApiResponse<{ muted: boolean; community_id: number }>>(
+        `/v2/notifications/community-mutes/${communityId}`,
+      ),
   },
 
   // =========================================================================

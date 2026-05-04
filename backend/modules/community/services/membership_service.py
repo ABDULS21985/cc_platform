@@ -104,6 +104,7 @@ class MembershipService:
                         category='communities',
                         source=community_name,
                         action_href=f'/dashboard/community/{community_id}',
+                        community_id=community_id,
                     )
             except Exception as exc:
                 logger.warning('post-join notify/audit failed: %s', exc)
@@ -200,6 +201,7 @@ class MembershipService:
                         category='communities',
                         source=community_name,
                         action_href=f'/dashboard/community/{community_id}',
+                        community_id=community_id,
                     )
                 AuditService().record(
                     user_id=user_id,

@@ -107,6 +107,7 @@ class BillService:
                         action_href='/dashboard/bills',
                         amount_value=f"{bill.amount:,.2f}",
                         amount_direction='out',
+                        community_id=community_id,
                     )
                 AuditService().record(
                     user_id=creator_id,

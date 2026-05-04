@@ -9,14 +9,35 @@ type Listener = (n: NotificationApi) => void;
 
 type OSPermission = 'default' | 'granted' | 'denied' | 'unsupported';
 
+type NotifCategory =
+  | 'money'
+  | 'bills'
+  | 'communities'
+  | 'events'
+  | 'security'
+  | 'system';
+
+type CategoryCounts = Record<NotifCategory, number>;
+
+const EMPTY_COUNTS: CategoryCounts = {
+  money: 0,
+  bills: 0,
+  communities: 0,
+  events: 0,
+  security: 0,
+  system: 0,
+};
+
 interface NotificationContextValue {
   unreadCount: number;
+  /** Per-category unread counts for sidebar badges, etc. */
+  unreadByCategory: CategoryCounts;
   /** Subscribe to live notifications. Returns an unsubscribe function. */
   onNotification: (cb: Listener) => () => void;
   /** Imperatively refresh unread count from the server. */
   refresh: () => Promise<void>;
   /** Mark a single notification read (also decrements the local count). */
-  markRead: (id: number) => void;
+  markRead: (id: number, category?: NotifCategory) => void;
   /** Mark all read (locally + on the server). */
   markAllRead: () => Promise<void>;
   /** Current OS-level Notification permission state. */

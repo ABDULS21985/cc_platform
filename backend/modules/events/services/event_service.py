@@ -74,6 +74,7 @@ class EventService:
                         category='events',
                         source=community_name or 'CCPay',
                         action_href='/dashboard/events',
+                        community_id=community_id,
                     )
             AuditService().record(
                 user_id=creator_id,

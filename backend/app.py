@@ -194,7 +194,7 @@ def create_app():
                 Organization,
                 InstitutionMember,
             )
-            from modules.notifications.models import Notification, NotificationPreference
+            from modules.notifications.models import Notification, NotificationPreference, CommunityMute
             from modules.bookmarks.models import Bookmark
             from modules.events.models import Event, EventAttendee
             from modules.audit.models import AuditEvent

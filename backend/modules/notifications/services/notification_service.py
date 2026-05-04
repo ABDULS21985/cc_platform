@@ -129,3 +129,21 @@ class NotificationService:
     ) -> Tuple[Dict[str, Any], int]:
         pref = self.repo.update_preferences(user_id, **flags)
         return {'preferences': pref.to_dict()}, 200
+
+    def unread_by_category(self, user_id: int) -> Tuple[Dict[str, Any], int]:
+        from modules.notifications.models.notification import CATEGORIES
+        counts = self.repo.count_unread_by_category(user_id)
+        # Always emit every category so the frontend doesn't have to defensively check.
+        full = {c: counts.get(c, 0) for c in CATEGORIES}
+        return {'unread_by_category': full, 'total': sum(full.values())}, 200
+
+    def list_muted_communities(self, user_id: int) -> Tuple[Dict[str, Any], int]:
+        return {'community_ids': self.repo.list_muted_community_ids(user_id)}, 200
+
+    def mute_community(self, user_id: int, community_id: int) -> Tuple[Dict[str, Any], int]:
+        self.repo.mute_community(user_id, community_id)
+        return {'muted': True, 'community_id': community_id}, 200
+
+    def unmute_community(self, user_id: int, community_id: int) -> Tuple[Dict[str, Any], int]:
+        existed = self.repo.unmute_community(user_id, community_id)
+        return {'muted': False, 'community_id': community_id, 'existed': existed}, 200
