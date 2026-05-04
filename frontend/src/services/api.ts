@@ -922,7 +922,128 @@ export const ApiService = {
         `/v2/bookmarks/${id}`,
       ),
   },
+
+  // =========================================================================
+  // Events
+  // =========================================================================
+  events: {
+    list: (params?: {
+      scope?: "upcoming" | "live" | "hosting" | "past" | "all";
+      limit?: number;
+      offset?: number;
+    }) =>
+      axiosInstance.get<ApiResponse<{
+        events: EventApi[];
+        pagination: { total: number; limit: number; offset: number };
+      }>>("/v2/events/", { params }),
+
+    create: (data: {
+      title: string;
+      description?: string;
+      category?: string;
+      starts_at: string;
+      ends_at?: string;
+      duration_label?: string;
+      community_id?: number | null;
+      location?: string;
+      is_online?: boolean;
+      is_private?: boolean;
+      capacity?: number;
+      ticket_price?: string | null;
+      cover_image?: string | null;
+    }) =>
+      axiosInstance.post<ApiResponse<{ event: EventApi }>>("/v2/events/", data),
+
+    get: (id: number) =>
+      axiosInstance.get<ApiResponse<{ event: EventApi }>>(`/v2/events/${id}`),
+
+    cancel: (id: number) =>
+      axiosInstance.delete<ApiResponse<{ cancelled: boolean }>>(`/v2/events/${id}`),
+
+    attend: (id: number) =>
+      axiosInstance.post<ApiResponse<{ event: EventApi }>>(`/v2/events/${id}/attend`),
+
+    cancelAttendance: (id: number) =>
+      axiosInstance.delete<ApiResponse<{ event: EventApi }>>(`/v2/events/${id}/attend`),
+  },
+
+  // =========================================================================
+  // Audit (user-facing activity log)
+  // =========================================================================
+  audit: {
+    list: (params?: {
+      limit?: number;
+      offset?: number;
+      category?: "money" | "security" | "admin" | "system";
+      severity?: "info" | "warning" | "critical";
+    }) =>
+      axiosInstance.get<ApiResponse<{
+        events: AuditApi[];
+        pagination: { total: number; limit: number; offset: number };
+      }>>("/v2/audit/", { params }),
+  },
+
+  // =========================================================================
+  // Discovery (trending topics)
+  // =========================================================================
+  discovery: {
+    trending: (params?: { limit?: number }) =>
+      axiosInstance.get<ApiResponse<{ topics: TrendingTopicApi[] }>>(
+        "/v2/discovery/trending",
+        { params },
+      ),
+  },
 };
+
+export interface TrendingTopicApi {
+  tag: string;
+  category: string;
+  posts: number;
+  velocity: "rising" | "hot" | "steady";
+  community_ids: number[];
+}
+
+export interface AuditApi {
+  id: number;
+  user_id: number;
+  category: "money" | "security" | "admin" | "system";
+  severity: "info" | "warning" | "critical";
+  action: string;
+  details: string;
+  actor: string;
+  target: string | null;
+  ip: string | null;
+  device: string | null;
+  hashPrefix: string;
+  timestamp: string;
+  created_at: string;
+}
+
+export interface EventApi {
+  id: number;
+  community_id: number | null;
+  creator_id: number | null;
+  title: string;
+  description: string;
+  category: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  duration_label: string | null;
+  location: string;
+  is_online: boolean;
+  is_private: boolean;
+  capacity: number;
+  ticket_price: string | null;
+  cover_image: string | null;
+  community_name: string | null;
+  community_initial: string;
+  status: "upcoming" | "live" | "past";
+  attendees: number;
+  is_attending: boolean;
+  is_hosting: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
 
 export interface BookmarkApi {
   id: number;

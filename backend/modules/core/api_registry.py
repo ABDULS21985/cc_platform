@@ -58,6 +58,12 @@ def register_api_blueprints(api):
         ("modules.notifications.resources.notification_resource", "notification_blp"),
         # Bookmarks — user-saved items (posts, events, communities, bills, transactions)
         ("modules.bookmarks.resources.bookmark_resource", "bookmark_blp"),
+        # Events — community events with attendance tracking
+        ("modules.events.resources.event_resource", "event_blp"),
+        # Audit — user-facing activity log (sign-ins, transfers, role changes)
+        ("modules.audit.resources.audit_resource", "audit_blp"),
+        # Discovery — trending topics computed from posts
+        ("modules.discovery.resources.trending_resource", "discovery_blp"),
         # Dev tools — seed endpoints gated on FLASK_ENV=development
         ("modules.dev_tools.resources.seed_resource", "dev_seed_blp"),
     ]

@@ -196,6 +196,8 @@ def create_app():
             )
             from modules.notifications.models import Notification
             from modules.bookmarks.models import Bookmark
+            from modules.events.models import Event, EventAttendee
+            from modules.audit.models import AuditEvent
             logger.info("✓ All models imported for migration detection")
         except ImportError as e:
             logger.error(f"✗ Failed to import models: {str(e)}")

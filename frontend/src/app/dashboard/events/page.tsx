@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiService, type EventApi } from '@/services/api';
 import {
   Calendar as CalendarIcon,
   Compass,
@@ -259,13 +260,65 @@ const BUCKET_ORDER: Array<ReturnType<typeof dateBucket>> = [
   'later',
 ];
 
+function mapApiEvent(e: EventApi): EventItem {
+  return {
+    id: `srv-${e.id}`,
+    title: e.title,
+    community: e.community_name ?? 'Public',
+    communityInitial: e.community_initial,
+    isPrivate: e.is_private,
+    startsAt: e.starts_at,
+    duration: e.duration_label ?? '',
+    location: e.location || (e.is_online ? 'Online' : ''),
+    isOnline: e.is_online,
+    attendees: e.attendees,
+    capacity: e.capacity,
+    ticketPrice: e.ticket_price ?? null,
+    status: e.status,
+    isAttending: e.is_attending,
+    isHosting: e.is_hosting,
+    category: e.category ?? undefined,
+  };
+}
+
+const SRV_PREFIX = 'srv-';
+const isServerId = (id: string) => id.startsWith(SRV_PREFIX);
+const serverIdNum = (id: string) => Number(id.slice(SRV_PREFIX.length));
+
 export default function EventsPage() {
-  const [events, setEvents] = useState<EventItem[]>(MOCK_EVENTS);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [usingMock, setUsingMock] = useState(false);
   const [activeTab, setActiveTab] = useState<TabValue>('upcoming');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'soonest' | 'popular' | 'newest'>('soonest');
   const [createOpen, setCreateOpen] = useState(false);
   const [rightRailOpen, setRightRailOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.events.list({ scope: 'all', limit: 200 });
+        const list = res.data?.data?.events ?? [];
+        if (cancelled) return;
+        if (list.length === 0) {
+          setEvents(MOCK_EVENTS);
+          setUsingMock(true);
+        } else {
+          setEvents(list.map(mapApiEvent));
+          setUsingMock(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setEvents(MOCK_EVENTS);
+          setUsingMock(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(
     () => ({
@@ -351,6 +404,27 @@ export default function EventsPage() {
       )
     );
     const event = events.find((e) => e.id === id);
+    if (!usingMock && isServerId(id)) {
+      const numericId = serverIdNum(id);
+      const promise = event?.isAttending
+        ? ApiService.events.cancelAttendance(numericId)
+        : ApiService.events.attend(numericId);
+      promise.catch(() => {
+        // revert on failure
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === id
+              ? {
+                  ...e,
+                  isAttending: !e.isAttending,
+                  attendees: e.isAttending ? e.attendees - 1 : e.attendees + 1,
+                }
+              : e
+          )
+        );
+        toast.error('Could not update attendance');
+      });
+    }
     toast.success(
       event?.isAttending ? 'Removed from your events' : 'Added to your events'
     );

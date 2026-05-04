@@ -6,6 +6,7 @@ import { ArrowRight, Flame, Hash, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { ApiService, type TrendingTopicApi } from '@/services/api';
 
 interface Topic {
   id: number;
@@ -35,7 +36,45 @@ const velocityTone = {
   steady: 'text-muted-foreground',
 } as const;
 
-export default function TrendingTopics({ loading = false }: { loading?: boolean }) {
+function mapApiTopic(t: TrendingTopicApi, idx: number): Topic {
+  return {
+    id: idx + 1,
+    tag: t.tag,
+    category: t.category,
+    posts: t.posts,
+    velocity: t.velocity,
+  };
+}
+
+export default function TrendingTopics({ loading: loadingProp = false }: { loading?: boolean }) {
+  const [topics, setTopics] = React.useState<Topic[]>(TOPICS);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await ApiService.discovery.trending({ limit: 5 });
+        const list = res.data?.data?.topics ?? [];
+        if (cancelled) return;
+        if (list.length === 0) {
+          setTopics(TOPICS);
+        } else {
+          setTopics(list.map(mapApiTopic));
+        }
+      } catch {
+        if (!cancelled) setTopics(TOPICS);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  void loadingProp;
   return (
     <Card variant="default" density="compact">
       <CardContent className="space-y-4 px-5">
@@ -69,7 +108,7 @@ export default function TrendingTopics({ loading = false }: { loading?: boolean 
           </ul>
         ) : (
           <ul role="list" className="-mx-2 space-y-0.5">
-            {TOPICS.map((t, i) => {
+            {topics.map((t, i) => {
               const Icon = velocityIcon[t.velocity];
               return (
                 <li key={t.id}>

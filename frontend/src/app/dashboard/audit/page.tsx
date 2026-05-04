@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiService, type AuditApi } from '@/services/api';
 import {
   Activity,
   AlertTriangle,
@@ -425,26 +426,64 @@ function timeOnly(iso: string): string {
   });
 }
 
+function mapApiAudit(a: AuditApi): AuditEvent {
+  return {
+    id: `srv-${a.id}`,
+    category: a.category,
+    severity: a.severity,
+    action: a.action,
+    details: a.details,
+    actor: a.actor,
+    target: a.target ?? undefined,
+    timestamp: a.timestamp || a.created_at,
+    ip: a.ip ?? undefined,
+    device: a.device ?? undefined,
+    hashPrefix: a.hashPrefix,
+  };
+}
+
 export default function AuditPage() {
+  const [events, setEvents] = useState<AuditEvent[]>(MOCK);
   const [tab, setTab] = useState<TabValue>('all');
   const [period, setPeriod] = useState<Period>('7d');
   const [search, setSearch] = useState('');
   const [actor, setActor] = useState<'all' | 'you' | 'system' | 'others'>('all');
 
-  const stats = useMemo(() => {
-    const cutoff24 = Date.now() - 86_400_000;
-    const last24 = MOCK.filter((e) => new Date(e.timestamp).getTime() >= cutoff24);
-    return {
-      last24: last24.length,
-      moneyEvents: MOCK.filter((e) => e.category === 'money').length,
-      securityEvents: MOCK.filter((e) => e.category === 'security').length,
-      criticalEvents: MOCK.filter((e) => e.severity === 'critical').length,
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.audit.list({ limit: 200 });
+        const list = res.data?.data?.events ?? [];
+        if (cancelled) return;
+        if (list.length === 0) {
+          setEvents(MOCK);
+        } else {
+          setEvents(list.map(mapApiAudit));
+        }
+      } catch {
+        if (!cancelled) setEvents(MOCK);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
+  const stats = useMemo(() => {
+    const cutoff24 = Date.now() - 86_400_000;
+    const last24 = events.filter((e) => new Date(e.timestamp).getTime() >= cutoff24);
+    return {
+      last24: last24.length,
+      moneyEvents: events.filter((e) => e.category === 'money').length,
+      securityEvents: events.filter((e) => e.category === 'security').length,
+      criticalEvents: events.filter((e) => e.severity === 'critical').length,
+    };
+  }, [events]);
+
   const counts = useMemo<Record<TabValue, number>>(() => {
     const cutoff = periodCutoff(period);
-    const inWindow = MOCK.filter(
+    const inWindow = events.filter(
       (e) => new Date(e.timestamp).getTime() >= cutoff
     );
     return {
@@ -454,12 +493,12 @@ export default function AuditPage() {
       admin: inWindow.filter((e) => e.category === 'admin').length,
       system: inWindow.filter((e) => e.category === 'system').length,
     };
-  }, [period]);
+  }, [events, period]);
 
   const filtered = useMemo(() => {
     const cutoff = periodCutoff(period);
     const q = search.trim().toLowerCase();
-    return MOCK.filter((e) => {
+    return events.filter((e) => {
       if (cutoff > 0 && new Date(e.timestamp).getTime() < cutoff) return false;
       if (tab !== 'all' && e.category !== tab) return false;
       if (actor === 'you' && e.actor !== 'You') return false;
@@ -479,7 +518,7 @@ export default function AuditPage() {
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-  }, [tab, period, search, actor]);
+  }, [events, tab, period, search, actor]);
 
   const grouped = useMemo(() => {
     const map = new Map<Bucket, AuditEvent[]>();

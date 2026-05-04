@@ -82,9 +82,28 @@ class LoginService:
         
         # Create Flask-Login session directly (no OTP required)
         login_user(user, remember=remember)
-        
+
         # Generate tokens for mobile/API access
         tokens = self.token_service.generate_tokens(user.id, user.email)
+
+        # Record sign-in to user audit log (best-effort, never blocks login).
+        try:
+            from flask import request
+            from modules.audit.services.audit_service import AuditService
+            ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip() if request else None
+            device = request.headers.get('User-Agent') if request else None
+            AuditService().record(
+                user_id=user.id,
+                action='Sign-in successful',
+                details='Signed in with email and password',
+                category='security',
+                severity='info',
+                actor='You',
+                ip=ip,
+                device=device,
+            )
+        except Exception:
+            pass
         
         return {
             "message": "Login successful",

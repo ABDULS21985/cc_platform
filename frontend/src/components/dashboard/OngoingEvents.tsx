@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { ApiService, type EventApi } from '@/services/api';
 
 interface CommunityEvent {
   id: number;
@@ -69,7 +70,62 @@ const statusBadge: Record<
   upcoming: { variant: 'soft', label: 'Upcoming' },
 };
 
-export default function OngoingEvents({ loading = false }: { loading?: boolean }) {
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function mapApi(e: EventApi): CommunityEvent {
+  const d = new Date(e.starts_at);
+  const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  let s: CommunityEvent['status'] = 'upcoming';
+  if (e.status === 'live') s = 'live';
+  else if (e.status === 'upcoming') {
+    const ms = d.getTime() - Date.now();
+    if (ms < 1000 * 60 * 60 * 24 * 2) s = 'starting-soon';
+  }
+  return {
+    id: e.id,
+    title: e.title,
+    community: e.community_name ?? 'Public',
+    date: { day: d.getDate(), month: MONTHS_SHORT[d.getMonth()] },
+    time,
+    location: e.location || (e.is_online ? 'Online' : 'TBA'),
+    attendees: e.attendees,
+    capacity: e.capacity || Math.max(e.attendees, 1),
+    status: s,
+  };
+}
+
+export default function OngoingEvents({ loading: loadingProp = false }: { loading?: boolean }) {
+  const [items, setItems] = React.useState<CommunityEvent[]>(EVENTS);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await ApiService.events.list({ scope: 'all', limit: 20 });
+        const list = res.data?.data?.events ?? [];
+        if (cancelled) return;
+        const ongoing = list
+          .filter((e) => e.status !== 'past')
+          .slice(0, 3);
+        if (ongoing.length === 0) {
+          setItems(EVENTS);
+        } else {
+          setItems(ongoing.map(mapApi));
+        }
+      } catch {
+        if (!cancelled) setItems(EVENTS);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  void loadingProp;
   return (
     <Card variant="default" density="compact">
       <CardContent className="space-y-4 px-5">
@@ -103,7 +159,7 @@ export default function OngoingEvents({ loading = false }: { loading?: boolean }
           </ul>
         ) : (
           <ul role="list" className="space-y-3">
-            {EVENTS.map((e) => {
+            {items.map((e) => {
               const status = statusBadge[e.status];
               const pct = (e.attendees / e.capacity) * 100;
               return (
