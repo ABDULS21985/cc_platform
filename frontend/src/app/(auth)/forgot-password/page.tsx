@@ -3,13 +3,13 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useInView } from '@/hooks/useInView';
 import { ApiService } from '@/services/api';
 import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
+import { AuthLayout } from '@/components/layout/AuthLayout';
 
 export default function ForgotPassword() {
   const [step, setStep] = useState<1 | 2>(1);
@@ -19,31 +19,31 @@ export default function ForgotPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { ref, isInView } = useInView({ threshold: 0.1 });
 
-  const handleRequestReset = async () => {
+  const handleRequestReset = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       toast.error('Please enter a valid email address');
       return;
     }
-
     setIsLoading(true);
     try {
       const res = await ApiService.auth.forgotPassword({ email });
       if (res.data.success) {
-        toast.success(res.data.message || 'Password reset OTP sent to your email');
+        toast.success(res.data.message || 'Reset code sent to your email');
         setStep(2);
       }
     } catch (error) {
-      toastAxiosError(error, 'Failed to send reset OTP');
+      toastAxiosError(error, 'Failed to send reset code');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleResetPassword = async () => {
+  const handleResetPassword = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!otp || otp.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
+      toast.error('Please enter the 6-digit code');
       return;
     }
     if (!password || password.length < 8) {
@@ -60,10 +60,10 @@ export default function ForgotPassword() {
       const res = await ApiService.auth.resetPassword({
         email,
         otp,
-        new_password: password
+        new_password: password,
       });
       if (res.data.success) {
-        toast.success('Password reset successfully. You can now login.');
+        toast.success('Password reset — you can sign in now');
         router.push('/signin');
       }
     } catch (error) {
@@ -74,121 +74,120 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#f8fafc] relative overflow-hidden">
-      {/* Background Decorative Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-         <div className="absolute top-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-[#0E9DA5]/10 to-[#0E9DA5]/5 blur-3xl opacity-60" />
-         <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-gradient-to-tr from-[#0E9DA5]/10 to-[#0E9DA5]/5 blur-3xl opacity-60" />
+    <AuthLayout
+      title={step === 1 ? 'Forgot password' : 'Reset password'}
+      subtitle={
+        step === 1
+          ? "Enter your email and we'll send a 6-digit code to reset your password."
+          : 'Enter the code we sent and choose a new password.'
+      }
+      onBack={() => (step === 2 ? setStep(1) : router.push('/signin'))}
+      heroTitle={
+        <>
+          We&apos;ll get you
+          <br />
+          back in.
+        </>
+      }
+      heroDescription="Resetting your password takes under a minute. Check your inbox for the verification code."
+      footer={
+        step === 1 ? (
+          <>
+            Remembered it?{' '}
+            <Link
+              href="/signin"
+              className="font-semibold text-primary hover:underline underline-offset-4"
+            >
+              Sign in
+            </Link>
+          </>
+        ) : null
+      }
+    >
+      <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-xs font-medium text-accent-foreground">
+        <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+        Step {step} of 2
       </div>
 
-      <div 
-        ref={ref}
-        className={`w-full max-w-[440px] z-10 transition-all duration-700 ${isInView ? 'animate-scale-in opacity-100' : 'opacity-0 translate-y-4'}`}
-      >
-        <div className="glass-card p-8 rounded-2xl shadow-elevated border border-white/50 backdrop-blur-xl">
-          {/* Header */}
-          <div className="mb-8">
-            <button 
-              onClick={() => step === 2 ? setStep(1) : router.push('/signin')} 
-              className="inline-flex items-center text-gray-500 hover:text-gray-900 border border-gray-200 rounded-full p-2 mb-6 hover:bg-gray-50 smooth-transition"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            
-            <div className="flex justify-center mb-6">
-               <div className="w-16 h-16 bg-[#e0f2f3] rounded-full flex items-center justify-center text-3xl animate-bounce-slow">
-                 🔐
-               </div>
-            </div>
-
-            <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">
-              {step === 1 ? 'Forgot Password' : 'Reset Password'}
-            </h1>
-            <p className="text-gray-500 text-sm text-center">
-              {step === 1 
-                ? 'Enter your email address and we will send you an OTP to reset your password.' 
-                : 'Enter the 6-digit OTP sent to your email and your new password.'}
-            </p>
+      {step === 1 ? (
+        <form onSubmit={handleRequestReset} className="space-y-5" noValidate>
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="block text-sm font-medium text-foreground">
+              Email address
+            </label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="h-12"
+            />
+          </div>
+          <Button type="submit" size="xl" block loading={isLoading} className="h-12 text-base">
+            {isLoading ? 'Sending…' : 'Send reset code'}
+          </Button>
+        </form>
+      ) : (
+        <form onSubmit={handleResetPassword} className="space-y-5" noValidate>
+          <div className="space-y-1.5">
+            <label htmlFor="otp" className="block text-sm font-medium text-foreground">
+              Verification code
+            </label>
+            <Input
+              id="otp"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="one-time-code"
+              placeholder="123456"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              maxLength={6}
+              className="h-12 text-center text-lg tracking-[0.5em] font-semibold"
+            />
           </div>
 
-          {/* Form */}
-          {step === 1 ? (
-            <div className="space-y-5 mb-8">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 ml-1">
-                  Email Address
-                </label>
-                <Input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="input-modern w-full"
-                />
-              </div>
-              <Button
-                onClick={handleRequestReset}
-                disabled={isLoading}
-                className="btn-primary w-full py-6 text-base font-semibold shadow-soft hover-glow flex items-center justify-center gap-2"
-              >
-                {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
-                Send Reset OTP
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-5 mb-8">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 ml-1">
-                  OTP Code
-                </label>
-                <Input
-                  type="text"
-                  placeholder="123456"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="input-modern w-full tracking-widest text-center"
-                  maxLength={6}
-                />
-              </div>
+          <div className="space-y-1.5">
+            <label htmlFor="new-password" className="block text-sm font-medium text-foreground">
+              New password
+            </label>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-12"
+            />
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 ml-1">
-                  New Password
-                </label>
-                <Input
-                  type="password"
-                  placeholder="Enter new password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="input-modern w-full"
-                />
-              </div>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="confirm-password"
+              className="block text-sm font-medium text-foreground"
+            >
+              Confirm password
+            </label>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              placeholder="Re-enter password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="h-12"
+            />
+          </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5 ml-1">
-                  Confirm Password
-                </label>
-                <Input
-                  type="password"
-                  placeholder="Re-enter password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-modern w-full"
-                />
-              </div>
-
-              <Button
-                onClick={handleResetPassword}
-                disabled={isLoading}
-                className="btn-primary w-full py-6 text-base font-semibold shadow-soft hover-glow flex items-center justify-center gap-2"
-              >
-                {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
-                Reset Password
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+          <Button type="submit" size="xl" block loading={isLoading} className="h-12 text-base">
+            {isLoading ? 'Resetting…' : 'Reset password'}
+          </Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }

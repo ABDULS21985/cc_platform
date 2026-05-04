@@ -20,6 +20,8 @@ import { toast } from 'sonner';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
+import { CommandPalette } from '@/components/layout/CommandPalette';
+import { MobileNav } from '@/components/layout/MobileNav';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -30,6 +32,7 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsDropdownOpen, setSettingsDropdownOpen] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -102,6 +105,18 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
       setSettingsDropdownOpen(true);
     }
   }, [pathname]);
+
+  // Global Cmd/Ctrl+K opens the command palette.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] font-sans">
@@ -302,15 +317,21 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
             </div>
 
             <div className="flex items-center space-x-4">
-              {/* Modern Search Bar */}
-              <div className="hidden md:flex relative group w-[320px]">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-[#0E9DA5] w-4 h-4 smooth-transition" />
-                <Input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-11 pr-4 w-full h-10 bg-gray-50/80 border-gray-100 focus:bg-white focus:border-[#0E9DA5] focus:ring-[#0E9DA5] rounded-xl text-xs font-medium smooth-transition shadow-sm"
-                />
-              </div>
+              {/* Cmd-K command palette trigger */}
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(true)}
+                aria-label="Open command palette"
+                className="hidden md:flex items-center justify-between gap-3 w-[320px] h-10 px-4 rounded-xl bg-muted/40 border border-border text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:border-input transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="flex items-center gap-2">
+                  <Search className="w-4 h-4" aria-hidden="true" />
+                  Search routes &amp; actions
+                </span>
+                <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded-md border border-border bg-background px-1.5 font-mono text-[10px] tracking-tight">
+                  <span className="text-[10px]">⌘</span>K
+                </kbd>
+              </button>
 
               {/* Action Icons */}
               <div className="flex items-center space-x-2">
@@ -332,13 +353,15 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
 
         <LogoutDialog isOpen={logoutDialogOpen} toggleDialog={toggleLogoutDialog} />
 
-        <main className="flex-1 overflow-y-auto p-6 custom-scrollbar relative">
+        <main className="flex-1 overflow-y-auto p-6 pb-20 lg:pb-6 custom-scrollbar relative">
           <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-teal-50/20 rounded-full blur-[100px] pointer-events-none -z-10 translate-x-1/2 -translate-y-1/2" />
-          
+
           <div className="max-w-7xl mx-auto animate-fade-in">
             {children}
           </div>
         </main>
+        <MobileNav />
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       </div>
     </div>
   );
