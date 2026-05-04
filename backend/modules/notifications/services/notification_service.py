@@ -24,6 +24,7 @@ class NotificationService:
         amount_value: Optional[str] = None,
         amount_direction: Optional[str] = None,
         initials: Optional[str] = None,
+        community_id: Optional[int] = None,
     ):
         if category not in CATEGORIES:
             category = 'system'
@@ -37,6 +38,17 @@ class NotificationService:
                 logger.debug(
                     'skip notification for user %s — category %s muted',
                     user_id, category,
+                )
+                return None
+            # Per-community mute also honored, except for security category.
+            if (
+                category != 'security'
+                and community_id is not None
+                and self.repo.is_community_muted(user_id, community_id)
+            ):
+                logger.debug(
+                    'skip notification for user %s — community %s muted',
+                    user_id, community_id,
                 )
                 return None
         except Exception as exc:

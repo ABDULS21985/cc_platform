@@ -7,6 +7,8 @@ from sqlalchemy import desc
 from modules.auth_v2.extensions import db
 from modules.notifications.models.notification import Notification
 from modules.notifications.models.preference import NotificationPreference
+from modules.notifications.models.community_mute import CommunityMute
+from sqlalchemy import func as sa_func
 
 
 class NotificationRepository:
@@ -78,6 +80,55 @@ class NotificationRepository:
             db.session.add(pref)
             db.session.commit()
         return pref
+
+    def count_unread_by_category(self, user_id: int) -> dict:
+        """Return {category: int} for unread notifications.
+
+        Categories with zero unread are omitted from the result; the caller
+        should treat missing keys as 0.
+        """
+        rows = (
+            db.session.query(Notification.category, sa_func.count(Notification.id))
+            .filter(Notification.user_id == user_id, Notification.is_read.is_(False))
+            .group_by(Notification.category)
+            .all()
+        )
+        return {category: int(count) for category, count in rows}
+
+    def list_muted_community_ids(self, user_id: int) -> list[int]:
+        rows = (
+            db.session.query(CommunityMute.community_id)
+            .filter(CommunityMute.user_id == user_id)
+            .all()
+        )
+        return [r[0] for r in rows]
+
+    def is_community_muted(self, user_id: int, community_id: int) -> bool:
+        return (
+            CommunityMute.query.filter_by(user_id=user_id, community_id=community_id).first()
+            is not None
+        )
+
+    def mute_community(self, user_id: int, community_id: int) -> CommunityMute:
+        existing = CommunityMute.query.filter_by(
+            user_id=user_id, community_id=community_id
+        ).first()
+        if existing:
+            return existing
+        mute = CommunityMute(user_id=user_id, community_id=community_id)
+        db.session.add(mute)
+        db.session.commit()
+        return mute
+
+    def unmute_community(self, user_id: int, community_id: int) -> bool:
+        mute = CommunityMute.query.filter_by(
+            user_id=user_id, community_id=community_id
+        ).first()
+        if not mute:
+            return False
+        db.session.delete(mute)
+        db.session.commit()
+        return True
 
     def update_preferences(self, user_id: int, **flags: bool) -> NotificationPreference:
         pref = self.get_or_create_preferences(user_id)
