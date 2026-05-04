@@ -58,10 +58,10 @@ export default function SignInPage() {
 
     setIsLoading(true);
     try {
-      const response = await ApiService.auth.login({ email, password });
-      const loginData = response.data;
+      const response = await ApiService.auth.login({ email, password, remember: rememberMe });
+      const loginData = response.data.data;
 
-      if (loginData.tokens && loginData.tokens.access_token) {
+      if (loginData?.tokens && loginData.tokens.access_token) {
         localStorage.setItem('access_token', loginData.tokens.access_token);
         localStorage.setItem('refresh_token', loginData.tokens.refresh_token);
         if (loginData.user) {
@@ -76,7 +76,7 @@ export default function SignInPage() {
         toast.success('Welcome back');
         router.push('/dashboard');
       } else {
-        toast.error('Login failed: ' + (loginData.message || 'No token received'));
+        toast.error('Login failed: ' + (response.data.message || 'No token received'));
       }
     } catch (error: unknown) {
       console.error('Login error:', error);

@@ -534,7 +534,7 @@ export const ApiService = {
       axiosInstance.post<AuthSuccess>("/v2/auth/signup", data),
 
     login: (data: LoginPayload) =>
-      axiosInstance.post<AuthSuccess>("/v2/auth/login", data),
+      axiosInstance.post<ApiResponse<AuthSuccess>>("/v2/auth/login", data),
 
     verifyEmail: (data: VerifyOTPPyload) =>
       axiosInstance.post<AuthSuccess>("/v2/auth/verify-email", data),
