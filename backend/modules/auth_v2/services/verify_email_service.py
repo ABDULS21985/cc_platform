@@ -70,7 +70,31 @@ class VerifyEmailService:
             user.lastname,
             created_at
         )
-        
+
+        # Best-effort: drop a welcome notification + audit row for the new user.
+        try:
+            from modules.notifications.services.notification_service import NotificationService
+            from modules.audit.services.audit_service import AuditService
+            NotificationService().create_for_user(
+                user_id=user.id,
+                title=f"Welcome, {user.firstname}!",
+                body="Verify your identity to unlock the wallet, then join a community to start collecting bills together.",
+                category='system',
+                source='CCPay',
+                action_href='/dashboard/wallet',
+                action_label='Verify identity',
+            )
+            AuditService().record(
+                user_id=user.id,
+                action='Account verified',
+                details='Email confirmed via OTP',
+                category='security',
+                severity='info',
+                actor='You',
+            )
+        except Exception:
+            pass
+
         return {
             "message": "Email verified successfully! Welcome to CCPay.",
             "user": {

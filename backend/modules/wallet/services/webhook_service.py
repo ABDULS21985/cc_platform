@@ -132,12 +132,39 @@ class WebhookService:
                     )
             
             db.session.commit()
-            
+
             logger.info(
                 f"Payment processed successfully: {transaction.reference}",
                 extra={"transaction_id": transaction.id, "amount": str(transaction.amount)}
             )
-            
+
+            # Best-effort notification + audit (non-blocking, never raises).
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                if transaction.user_id and not transaction.community_id:
+                    NotificationService().create_for_user(
+                        user_id=transaction.user_id,
+                        title="Wallet funded",
+                        body=f"Your wallet was credited with ₦{transaction.net_amount:,.2f}.",
+                        category='money',
+                        source=source_bank or 'Bank',
+                        amount_value=f"{transaction.net_amount:,.2f}",
+                        amount_direction='in',
+                        action_href='/dashboard/activity',
+                    )
+                    AuditService().record(
+                        user_id=transaction.user_id,
+                        action='Wallet funded',
+                        details=f"Top-up of ₦{transaction.net_amount:,.2f} from {source_bank or 'Bank'}",
+                        category='money',
+                        severity='info',
+                        actor='System',
+                        target='CCPay wallet',
+                    )
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "message": "Payment processed successfully",

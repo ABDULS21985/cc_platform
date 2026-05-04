@@ -83,8 +83,45 @@ class BillService:
             
             db.session.commit()
             logger.info(f"Created bill {bill.id} in community {community_id}")
+
+            # Best-effort: notify community members of the new bill + audit
+            # the creator. Failures here must not roll back the bill.
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                from modules.community.repositories.community_repository import CommunityRepository
+                community = CommunityRepository().find_by_id(community_id)
+                community_name = community.name if community else 'Community'
+                notif_service = NotificationService()
+                # Members other than the creator get a Bills inbox item.
+                members, _ = self.member_repo.find_by_community(community_id, status='active', limit=500)
+                for m in members:
+                    if m.user_id == creator_id:
+                        continue
+                    notif_service.create_for_user(
+                        user_id=m.user_id,
+                        title=f"New bill: {bill.title}",
+                        body=f"{community_name} posted a bill of ₦{bill.amount:,.2f}.",
+                        category='bills',
+                        source=community_name,
+                        action_href='/dashboard/bills',
+                        amount_value=f"{bill.amount:,.2f}",
+                        amount_direction='out',
+                    )
+                AuditService().record(
+                    user_id=creator_id,
+                    action='Bill created',
+                    details=f"Created bill '{bill.title}' for ₦{bill.amount:,.2f}",
+                    category='admin',
+                    severity='info',
+                    actor='You',
+                    target=community_name,
+                )
+            except Exception as exc:
+                logger.warning('post-bill notify/audit failed: %s', exc)
+
             return bill, None
-            
+
         except Exception as e:
             logger.error(f"Error creating bill: {str(e)}")
             db.session.rollback()

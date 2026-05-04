@@ -55,6 +55,38 @@ class EventService:
         # Creator auto-attends.
         self.repo.attend(event.id, creator_id)
         community_name = self.repo.community_name(community_id)
+
+        # Best-effort: notify community members + audit the host.
+        try:
+            from modules.notifications.services.notification_service import NotificationService
+            from modules.audit.services.audit_service import AuditService
+            from modules.community.repositories.member_repository import MemberRepository
+            notif_service = NotificationService()
+            if community_id:
+                members, _ = MemberRepository().find_by_community(community_id, status='active', limit=500)
+                for m in members:
+                    if m.user_id == creator_id:
+                        continue
+                    notif_service.create_for_user(
+                        user_id=m.user_id,
+                        title=f"New event: {event.title}",
+                        body=f"{community_name or 'A community'} is hosting on {event.starts_at.strftime('%d %b at %H:%M')}.",
+                        category='events',
+                        source=community_name or 'CCPay',
+                        action_href='/dashboard/events',
+                    )
+            AuditService().record(
+                user_id=creator_id,
+                action='Event created',
+                details=f"Created event '{event.title}'",
+                category='admin',
+                severity='info',
+                actor='You',
+                target=community_name or 'Public',
+            )
+        except Exception as exc:
+            logger.warning('post-event notify/audit failed: %s', exc)
+
         return {'event': event.to_dict(current_user_id=creator_id, community_name=community_name)}, 201
 
     def list_for_user(
