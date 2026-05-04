@@ -56,6 +56,7 @@ const NotificationContext = React.createContext<NotificationContextValue | null>
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const [unreadByCategory, setUnreadByCategory] = React.useState<CategoryCounts>(EMPTY_COUNTS);
   const [osPermission, setOSPermission] = React.useState<OSPermission>('default');
   const listenersRef = React.useRef<Set<Listener>>(new Set());
 
@@ -82,10 +83,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const refresh = React.useCallback(async () => {
+    // Single round-trip that gives us total + category buckets.
     try {
-      const res = await ApiService.notifications.unreadCount();
-      const count = res.data?.data?.unread_count ?? 0;
-      setUnreadCount(count);
+      const res = await ApiService.notifications.unreadByCategory();
+      const buckets = res.data?.data?.unread_by_category;
+      const total = res.data?.data?.total ?? 0;
+      setUnreadCount(total);
+      if (buckets) {
+        setUnreadByCategory({
+          money: buckets.money ?? 0,
+          bills: buckets.bills ?? 0,
+          communities: buckets.communities ?? 0,
+          events: buckets.events ?? 0,
+          security: buckets.security ?? 0,
+          system: buckets.system ?? 0,
+        });
+      }
     } catch {
       // ignore — handled elsewhere
     }
@@ -101,13 +114,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     []
   );
 
-  const markRead = React.useCallback((id: number) => {
+  const markRead = React.useCallback((id: number, category?: NotifCategory) => {
     ApiService.notifications.markRead(id).catch(() => {});
     setUnreadCount((c) => Math.max(0, c - 1));
+    if (category) {
+      setUnreadByCategory((prev) => ({
+        ...prev,
+        [category]: Math.max(0, prev[category] - 1),
+      }));
+    }
   }, []);
 
   const markAllRead = React.useCallback(async () => {
     setUnreadCount(0);
+    setUnreadByCategory(EMPTY_COUNTS);
     try {
       await ApiService.notifications.markAllRead();
     } catch {
@@ -135,6 +155,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       unread_count: number;
     }) => {
       setUnreadCount(payload.unread_count);
+      // Per-category counter — only bump if the new notification is unread.
+      if (!payload.notification.is_read) {
+        const cat = payload.notification.category as NotifCategory;
+        if (cat in EMPTY_COUNTS) {
+          setUnreadByCategory((prev) => ({ ...prev, [cat]: prev[cat] + 1 }));
+        }
+      }
       for (const cb of listenersRef.current) {
         try {
           cb(payload.notification);
@@ -189,6 +216,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const value = React.useMemo<NotificationContextValue>(
     () => ({
       unreadCount,
+      unreadByCategory,
       onNotification,
       refresh,
       markRead,
@@ -196,7 +224,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       osPermission,
       requestOSPermission,
     }),
-    [unreadCount, onNotification, refresh, markRead, markAllRead, osPermission, requestOSPermission]
+    [
+      unreadCount,
+      unreadByCategory,
+      onNotification,
+      refresh,
+      markRead,
+      markAllRead,
+      osPermission,
+      requestOSPermission,
+    ]
   );
 
   return (
@@ -211,6 +248,7 @@ export function useNotifications(): NotificationContextValue {
     // provider isn't mounted (e.g. on signin pages). Return a no-op shape.
     return {
       unreadCount: 0,
+      unreadByCategory: { ...EMPTY_COUNTS },
       onNotification: () => () => {},
       refresh: async () => {},
       markRead: () => {},
