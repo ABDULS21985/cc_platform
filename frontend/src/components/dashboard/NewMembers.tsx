@@ -185,7 +185,7 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
           </ul>
         ) : (
           <ul role="list" className="space-y-3">
-            {MEMBERS.map((m) => {
+            {members.map((m) => {
               const isInvited = invited.has(m.id);
               return (
                 <li

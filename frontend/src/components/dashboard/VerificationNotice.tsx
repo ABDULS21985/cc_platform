@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { motion, AnimatePresence } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface VerificationData {
   bvn_verified?: boolean;
@@ -32,6 +33,8 @@ export default function VerificationNotice() {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+    // Seed from localStorage so the banner doesn't flash on initial mount;
+    // we'll refresh from the API right after.
     try {
       const stored = window.localStorage.getItem('verification_data');
       if (stored) setVerification(JSON.parse(stored));
@@ -40,6 +43,57 @@ export default function VerificationNotice() {
     }
     const closed = window.sessionStorage.getItem(STORAGE_KEY) === '1';
     setDismissed(closed);
+
+    // Authoritative refresh: pull current status from the backend so the
+    // banner reflects verifications completed in another tab/device.
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.verification.getStatus();
+        if (cancelled) return;
+        const data = res.data?.data;
+        if (!data) return;
+        // The endpoint returns a single combined record; `verified=true`
+        // means the user has at least one successful verification (BVN
+        // or NIN). For a richer signal we keep any localStorage-sourced
+        // per-type flags and overlay the API truth on top.
+        const verificationType = (data.verification_type ?? '').toLowerCase();
+        setVerification((prev) => {
+          const merged: VerificationData = {
+            ...(prev ?? {}),
+          };
+          if (data.verified && verificationType === 'bvn') {
+            merged.bvn_verified = true;
+          } else if (data.verified && verificationType === 'nin') {
+            merged.nin_verified = true;
+          } else if (data.verified) {
+            // Type unknown but verified — assume both for the banner UX.
+            merged.bvn_verified = true;
+            merged.nin_verified = true;
+          }
+          return merged;
+        });
+        // Persist for next mount so we don't re-fetch.
+        try {
+          window.localStorage.setItem(
+            'verification_data',
+            JSON.stringify({
+              bvn_verified:
+                data.verified && verificationType === 'bvn' ? true : undefined,
+              nin_verified:
+                data.verified && verificationType === 'nin' ? true : undefined,
+            }),
+          );
+        } catch {
+          /* storage may be full or unavailable */
+        }
+      } catch {
+        // Network error or 401 — keep the localStorage-sourced view.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (!verification || dismissed) return null;
