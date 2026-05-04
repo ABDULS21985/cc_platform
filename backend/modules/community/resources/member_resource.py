@@ -209,6 +209,33 @@ class MemberRoleResource(MethodView):
             return format_internal_error(str(e))
 
 
+@member_blp.route('/<int:community_id>/members/<int:user_id>/suspend')
+class SuspendMemberResource(MethodView):
+    """Suspend a community member (admin/owner only). Suspended members cannot post or pay bills."""
+
+    @token_required
+    @member_blp.response(200, MemberResponseSchema, description='Member suspended')
+    @member_blp.alt_response(401, schema=CommunityErrorSchema, description='Unauthorized')
+    @member_blp.alt_response(404, schema=CommunityErrorSchema, description='Member not found')
+    def post(self, community_id, user_id, current_user=None):
+        try:
+            if not membership_service.is_admin_or_owner(community_id, current_user.id):
+                return format_unauthorized('Only admins/owners can suspend members')
+            if membership_service.is_owner(community_id, user_id):
+                return format_forbidden('Cannot suspend community owner')
+            member, error = membership_service.suspend_member(community_id, user_id)
+            if error:
+                return format_error(error='suspend_failed', message=error, status_code=400)
+            return format_data(
+                data=member.to_dict(),
+                message='Member suspended successfully',
+                status_code=200,
+            )
+        except Exception as e:
+            logger.error(f"Error suspending member: {e}", exc_info=True)
+            return format_internal_error(str(e))
+
+
 @member_blp.route('/<int:community_id>/members/<int:user_id>')
 class RemoveMemberResource(MethodView):
     """Remove member endpoint"""
