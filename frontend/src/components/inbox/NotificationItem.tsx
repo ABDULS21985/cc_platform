@@ -247,7 +247,12 @@ export function NotificationRow({
         >
           {item.actionHref && (
             <Button asChild size="sm" variant="outline">
-              <Link href={item.actionHref}>
+              <Link
+                href={item.actionHref}
+                onClick={() => {
+                  if (!item.isRead) onMarkRead(item.id);
+                }}
+              >
                 {item.actionLabel ?? 'Open'}
               </Link>
             </Button>

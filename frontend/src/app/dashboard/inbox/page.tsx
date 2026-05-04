@@ -297,7 +297,11 @@ export default function InboxPage() {
   const [sort, setSort] = useState<'newest' | 'oldest' | 'unread'>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const { onNotification } = useNotifications();
+  const {
+    onNotification,
+    markRead: ctxMarkRead,
+    markAllRead: ctxMarkAllRead,
+  } = useNotifications();
 
   useEffect(() => {
     let cancelled = false;
@@ -434,13 +438,17 @@ export default function InboxPage() {
     filtered.length > 0 && visibleSelectedCount === filtered.length;
 
   const markRead = (ids: string[]) => {
+    // Find which IDs are actually transitioning unread → read so we only
+    // decrement the global counter for true changes, not re-clicks.
+    const newlyRead = items.filter((it) => ids.includes(it.id) && !it.isRead);
     setItems((prev) =>
       prev.map((it) => (ids.includes(it.id) ? { ...it, isRead: true } : it))
     );
     if (usingMock) return;
-    for (const id of ids) {
-      if (isServerId(id)) {
-        ApiService.notifications.markRead(serverIdNum(id)).catch(() => {});
+    for (const it of newlyRead) {
+      if (isServerId(it.id)) {
+        // Context wraps the API call AND decrements the bell badge count.
+        ctxMarkRead(serverIdNum(it.id));
       }
     }
   };
@@ -459,7 +467,8 @@ export default function InboxPage() {
     const unreadIds = items.filter((it) => !it.isRead).map((it) => it.id);
     setItems((prev) => prev.map((it) => ({ ...it, isRead: true })));
     if (!usingMock) {
-      ApiService.notifications.markAllRead().catch(() => {});
+      // Context syncs the API + zeros the bell badge.
+      void ctxMarkAllRead();
     }
     toast.success(`Marked ${unreadIds.length} as read`);
   };

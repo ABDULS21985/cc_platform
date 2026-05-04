@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
-import Link from 'next/link';
+import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { MobileNav } from '@/components/layout/MobileNav';
@@ -26,25 +26,27 @@ function NotificationBell() {
   const hasUnread = unreadCount > 0;
   const display = unreadCount > 99 ? '99+' : String(unreadCount);
   return (
-    <Link
-      href="/dashboard/inbox"
-      aria-label={
-        hasUnread
-          ? `Notifications · ${unreadCount} unread`
-          : 'Notifications'
-      }
-      className="relative grid size-10 place-items-center rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-input hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Bell className="size-4" aria-hidden="true" />
-      {hasUnread && (
-        <span
-          aria-hidden="true"
-          className="absolute right-1 top-1 grid min-h-3.5 min-w-3.5 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-background"
-        >
-          {display}
-        </span>
-      )}
-    </Link>
+    <NotificationDropdown>
+      <button
+        type="button"
+        aria-label={
+          hasUnread
+            ? `Notifications · ${unreadCount} unread`
+            : 'Notifications'
+        }
+        className="relative grid size-10 place-items-center rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-input hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:border-input data-[state=open]:bg-muted/60 data-[state=open]:text-foreground"
+      >
+        <Bell className="size-4" aria-hidden="true" />
+        {hasUnread && (
+          <span
+            aria-hidden="true"
+            className="absolute right-1 top-1 grid min-h-3.5 min-w-3.5 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-background"
+          >
+            {display}
+          </span>
+        )}
+      </button>
+    </NotificationDropdown>
   );
 }
 
