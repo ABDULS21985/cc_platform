@@ -195,6 +195,7 @@ def create_app():
                 InstitutionMember,
             )
             from modules.notifications.models import Notification
+            from modules.bookmarks.models import Bookmark
             logger.info("✓ All models imported for migration detection")
         except ImportError as e:
             logger.error(f"✗ Failed to import models: {str(e)}")

@@ -56,6 +56,8 @@ def register_api_blueprints(api):
         ("modules.admin.resources.transactions_resource", "admin_transactions_blp"),
         # Notifications — in-app user notifications
         ("modules.notifications.resources.notification_resource", "notification_blp"),
+        # Bookmarks — user-saved items (posts, events, communities, bills, transactions)
+        ("modules.bookmarks.resources.bookmark_resource", "bookmark_blp"),
         # Dev tools — seed endpoints gated on FLASK_ENV=development
         ("modules.dev_tools.resources.seed_resource", "dev_seed_blp"),
     ]
