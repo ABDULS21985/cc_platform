@@ -93,7 +93,8 @@ export function NotificationDropdown({ children }: Props) {
 
   const handleItemClick = (n: NotificationApi) => {
     if (!n.is_read) {
-      markRead(n.id);
+      markRead(n.id, n.category as
+        | 'money' | 'bills' | 'communities' | 'events' | 'security' | 'system');
       setItems((prev) =>
         prev.map((it) => (it.id === n.id ? { ...it, is_read: true } : it))
       );
