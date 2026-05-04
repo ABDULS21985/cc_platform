@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { ApiService, type CommunityData } from '@/services/api';
 
 interface Member {
   id: number;
@@ -48,7 +49,96 @@ const MEMBERS: Member[] = [
   },
 ];
 
-export default function NewMembers({ loading = false }: { loading?: boolean }) {
+interface ApiMember {
+  user_id?: number;
+  joined_at?: string;
+  community_id?: number;
+  user?: {
+    id?: number;
+    firstname?: string;
+    lastname?: string;
+    full_name?: string;
+    profile_photo?: string | null;
+    bio?: string | null;
+  };
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export default function NewMembers({ loading: _loadingProp = false }: { loading?: boolean }) {
+  const [members, setMembers] = React.useState<Member[]>(MEMBERS);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const joinedRes = await ApiService.communities.joined({ limit: 20 });
+        const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
+        if (joined.length === 0) {
+          if (!cancelled) setMembers(MEMBERS); // fall back to seed
+          return;
+        }
+        const lists = await Promise.all(
+          joined.map(async (c) => {
+            try {
+              const res = await ApiService.communities.getMembers(c.id, { limit: 50 });
+              const items = (res.data?.data?.members ?? []) as unknown as ApiMember[];
+              return items.map((m) => ({ ...m, _community: c.name }));
+            } catch {
+              return [];
+            }
+          })
+        );
+        const flat = lists.flat() as Array<ApiMember & { _community: string }>;
+        // Dedupe by user_id, keep first appearance, sort by most-recently joined.
+        const seen = new Set<number>();
+        const ordered = flat
+          .sort(
+            (a, b) =>
+              new Date(b.joined_at ?? 0).getTime() -
+              new Date(a.joined_at ?? 0).getTime()
+          )
+          .filter((m) => {
+            const uid = m.user_id ?? m.user?.id;
+            if (!uid || seen.has(uid)) return false;
+            seen.add(uid);
+            return true;
+          });
+
+        const mapped: Member[] = ordered.slice(0, 4).map((m, i) => {
+          const u = m.user ?? {};
+          const name =
+            u.full_name ||
+            [u.firstname, u.lastname].filter(Boolean).join(' ') ||
+            'Member';
+          return {
+            id: (m.user_id ?? u.id ?? i) as number,
+            name,
+            role: u.bio?.slice(0, 24) || 'Member',
+            community: m._community,
+            avatar: u.profile_photo ?? undefined,
+            fallback: initials(name),
+          };
+        });
+        if (!cancelled && mapped.length > 0) setMembers(mapped);
+      } catch {
+        // keep seed
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  void _loadingProp; // prop kept for backwards compat with existing callers
   // Track invited state per-member so the row updates after click.
   const [invited, setInvited] = React.useState<Set<number>>(new Set());
 

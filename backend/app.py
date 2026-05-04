@@ -71,12 +71,22 @@ def create_app():
         app = Flask(__name__)
         allowed_origins = _parse_allowed_origins()
         allow_all = len(allowed_origins) == 1 and allowed_origins[0] == "*"
+        # Browsers reject `Access-Control-Allow-Origin: *` when credentials are enabled.
+        # Default to localhost dev origins when ALLOWED_ORIGINS isn't set so the
+        # frontend's `withCredentials: true` requests pass preflight.
+        if allow_all:
+            allowed_origins = [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+            ]
         CORS(
             app,
             resources={r"/*": {"origins": allowed_origins}},
-            supports_credentials=not allow_all,
+            supports_credentials=True,
+            expose_headers=["Content-Type", "X-Request-ID"],
+            allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-CSRF-Token"],
         )
-        logger.info("✓ Flask app created and CORS configured")
+        logger.info(f"✓ Flask app created and CORS configured for origins={allowed_origins}")
         
         # ========== LAYER 2: Load Configuration ==========
         from config import Config

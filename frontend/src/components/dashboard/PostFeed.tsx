@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence } from '@/components/ui/motion';
+import { ApiService, type CommunityData } from '@/services/api';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 import { cn } from '@/lib/utils';
 
 interface PostComment {
@@ -33,6 +35,62 @@ interface Post {
   hasImages: boolean;
   images: string[];
   commentsList: PostComment[];
+}
+
+function relativeTime(iso: string): string {
+  const t = new Date(iso).getTime();
+  const mins = Math.round((Date.now() - t) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+interface ApiPost {
+  id: number;
+  community_id: number;
+  body?: string | null;
+  media_urls?: string[];
+  comments_count?: number;
+  reactions_count?: number;
+  created_at?: string;
+  author?: {
+    id?: number;
+    firstname?: string;
+    lastname?: string;
+    full_name?: string;
+    profile_photo?: string | null;
+  };
+}
+
+function mapApiPost(p: ApiPost, communityName: string): Post {
+  const authorName =
+    p.author?.full_name ||
+    [p.author?.firstname, p.author?.lastname].filter(Boolean).join(' ') ||
+    'Member';
+  const initial = (authorName.match(/\b\w/g) ?? ['M', 'B']).slice(0, 2).join('').toUpperCase();
+  return {
+    id: p.id,
+    author: {
+      name: `@${(p.author?.firstname ?? authorName).toLowerCase().replace(/\s+/g, '')}`,
+      avatar: p.author?.profile_photo ?? '/images/image.png',
+      fallback: initial,
+    },
+    group: communityName,
+    content: p.body ?? '',
+    timeAgo: relativeTime(p.created_at ?? new Date().toISOString()),
+    likes: p.reactions_count ?? 0,
+    comments: p.comments_count ?? 0,
+    hasImages: (p.media_urls ?? []).length > 0,
+    images: p.media_urls ?? [],
+    commentsList: [],
+  };
 }
 
 const INITIAL_POSTS: Post[] = [
@@ -362,10 +420,57 @@ export function PostFeedSkeleton() {
 }
 
 export default function PostFeed() {
-  const [posts, setPosts] = React.useState<Post[]>(INITIAL_POSTS);
+  const [posts, setPosts] = React.useState<Post[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [likedPosts, setLikedPosts] = React.useState<Set<number>>(new Set());
   const [openComments, setOpenComments] = React.useState<Set<number>>(new Set());
   const [commentInputs, setCommentInputs] = React.useState<Record<number, string>>({});
+
+  // Aggregate posts across the user's joined communities. Backend has no
+  // unified feed endpoint yet, so we fan out and flatten.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const joinedRes = await ApiService.communities.joined({ limit: 50 });
+        const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
+        if (joined.length === 0) {
+          if (!cancelled) {
+            // No communities yet — show the seed posts so the dashboard feels alive.
+            setPosts(INITIAL_POSTS);
+          }
+          return;
+        }
+        const lists = await Promise.all(
+          joined.map(async (c) => {
+            try {
+              const res = await ApiService.communities.getPosts(c.id, { limit: 10 });
+              const items = (res.data?.data?.posts ?? []) as unknown as ApiPost[];
+              return items.map((p) => mapApiPost(p, c.name));
+            } catch {
+              return [] as Post[];
+            }
+          })
+        );
+        const merged = lists.flat().sort((a, b) => {
+          // Sort by relative time string is unstable; fall back to id desc as a proxy.
+          return b.id - a.id;
+        });
+        if (!cancelled) setPosts(merged.length > 0 ? merged : INITIAL_POSTS);
+      } catch (err) {
+        if (!cancelled) {
+          toastAxiosError(err, 'Failed to load community feed.');
+          setPosts(INITIAL_POSTS);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggleLike = (id: number) => {
     setLikedPosts((prev) => {
