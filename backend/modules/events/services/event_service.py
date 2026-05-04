@@ -123,10 +123,28 @@ class EventService:
         event = self.repo.find_by_id(event_id)
         if not event:
             return {'error': 'Event not found', 'code': 'NOT_FOUND'}, 404
-        if event.capacity and event.attendee_count() >= event.capacity and not event.is_user_attending(user_id):
+        was_attending = event.is_user_attending(user_id)
+        if event.capacity and event.attendee_count() >= event.capacity and not was_attending:
             return {'error': 'Event is at capacity', 'code': 'AT_CAPACITY'}, 409
         self.repo.attend(event_id, user_id)
         community_name = self.repo.community_name(event.community_id)
+
+        # Audit only on first RSVP, not silent re-confirmation.
+        if not was_attending:
+            try:
+                from modules.audit.services.audit_service import AuditService
+                AuditService().record(
+                    user_id=user_id,
+                    action='Event RSVP',
+                    details=f"You're attending '{event.title}'",
+                    category='admin',
+                    severity='info',
+                    actor='You',
+                    target=community_name or 'Public',
+                )
+            except Exception as exc:
+                logger.warning('post-rsvp audit failed: %s', exc)
+
         return {'event': event.to_dict(current_user_id=user_id, community_name=community_name)}, 200
 
     def cancel_attendance(self, event_id: int, user_id: int) -> Tuple[Dict[str, Any], int]:

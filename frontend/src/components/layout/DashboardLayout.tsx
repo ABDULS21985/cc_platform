@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
+import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
+import Link from 'next/link';
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { MobileNav } from '@/components/layout/MobileNav';
@@ -17,6 +19,33 @@ import useUserData from '@/hooks/useUserData';
 interface DashboardLayoutProps {
   children: React.ReactNode;
   pageTitle: string;
+}
+
+function NotificationBell() {
+  const { unreadCount } = useNotifications();
+  const hasUnread = unreadCount > 0;
+  const display = unreadCount > 99 ? '99+' : String(unreadCount);
+  return (
+    <Link
+      href="/dashboard/inbox"
+      aria-label={
+        hasUnread
+          ? `Notifications · ${unreadCount} unread`
+          : 'Notifications'
+      }
+      className="relative grid size-10 place-items-center rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-input hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Bell className="size-4" aria-hidden="true" />
+      {hasUnread && (
+        <span
+          aria-hidden="true"
+          className="absolute right-1 top-1 grid min-h-3.5 min-w-3.5 place-items-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground ring-2 ring-background"
+        >
+          {display}
+        </span>
+      )}
+    </Link>
+  );
 }
 
 function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
@@ -103,19 +132,7 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
 
               <ThemeSwitcher compact />
 
-              <button
-                type="button"
-                aria-label="Notifications · 3 unread"
-                className="relative grid size-10 place-items-center rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-input hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Bell className="size-4" aria-hidden="true" />
-                <span
-                  aria-hidden="true"
-                  className="absolute right-1.5 top-1.5 grid size-3.5 place-items-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground ring-2 ring-background"
-                >
-                  3
-                </span>
-              </button>
+              <NotificationBell />
             </div>
           </div>
         </header>
@@ -180,11 +197,13 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   return (
     <Protected>
-      <Suspense fallback={<DashboardLayoutFallback pageTitle={pageTitle} />}>
-        <DashboardLayoutContent pageTitle={pageTitle}>
-          {children}
-        </DashboardLayoutContent>
-      </Suspense>
+      <NotificationProvider>
+        <Suspense fallback={<DashboardLayoutFallback pageTitle={pageTitle} />}>
+          <DashboardLayoutContent pageTitle={pageTitle}>
+            {children}
+          </DashboardLayoutContent>
+        </Suspense>
+      </NotificationProvider>
     </Protected>
   );
 }

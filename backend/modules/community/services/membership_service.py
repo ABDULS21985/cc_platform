@@ -133,9 +133,28 @@ class MembershipService:
             # Soft delete
             self.member_repo.remove_member(community_id, user_id)
             self.community_repo.decrement_member_count(community_id)
-            
+
             db.session.commit()
             logger.info(f"Removed user {user_id} from community {community_id}")
+
+            # Best-effort: audit the leaver. We skip the "you left" notification
+            # since the user just took the action themselves.
+            try:
+                from modules.audit.services.audit_service import AuditService
+                community = self.community_repo.find_by_id(community_id)
+                community_name = community.name if community else 'Community'
+                AuditService().record(
+                    user_id=user_id,
+                    action='Left community',
+                    details=f"You left {community_name}",
+                    category='admin',
+                    severity='info',
+                    actor='You',
+                    target=community_name,
+                )
+            except Exception as exc:
+                logger.warning('post-leave audit failed: %s', exc)
+
             return True, None
             
         except Exception as e:
@@ -163,9 +182,37 @@ class MembershipService:
             old_role = member.role
             member.role = new_role
             db.session.flush()
-            
+
             db.session.commit()
             logger.info(f"Updated user {user_id} role in community {community_id}: {old_role} -> {new_role}")
+
+            # Best-effort: notify the affected member + audit the change.
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                community = self.community_repo.find_by_id(community_id)
+                community_name = community.name if community else 'Community'
+                if old_role != new_role:
+                    NotificationService().create_for_user(
+                        user_id=user_id,
+                        title=f"Role updated in {community_name}",
+                        body=f"You're now {new_role} (was {old_role}).",
+                        category='communities',
+                        source=community_name,
+                        action_href=f'/dashboard/community/{community_id}',
+                    )
+                AuditService().record(
+                    user_id=user_id,
+                    action='Member role changed',
+                    details=f"{old_role} → {new_role} in {community_name}",
+                    category='admin',
+                    severity='warning' if new_role in ('admin', 'owner') else 'info',
+                    actor='Community admin',
+                    target=community_name,
+                )
+            except Exception as exc:
+                logger.warning('post-role-change notify/audit failed: %s', exc)
+
             return member, None
             
         except Exception as e:

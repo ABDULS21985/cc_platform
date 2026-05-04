@@ -27,7 +27,7 @@ class NotificationService:
     ):
         if category not in CATEGORIES:
             category = 'system'
-        return self.repo.create(
+        notif = self.repo.create(
             user_id=user_id,
             category=category,
             title=title,
@@ -39,6 +39,21 @@ class NotificationService:
             amount_direction=amount_direction,
             initials=initials,
         )
+        # Best-effort: push the new notification to the user's Socket.IO room.
+        # Sockets are subscribed via the `join_notifications` event after auth.
+        try:
+            from extension.extensions import get_socketio
+            sio = get_socketio()
+            if sio is not None:
+                unread = self.repo.count_unread(user_id)
+                sio.emit(
+                    'notification_created',
+                    {'notification': notif.to_dict(), 'unread_count': unread},
+                    room=f'notifications_{user_id}',
+                )
+        except Exception as exc:
+            logger.debug('socket emit for notification failed: %s', exc)
+        return notif
 
     def list(
         self,

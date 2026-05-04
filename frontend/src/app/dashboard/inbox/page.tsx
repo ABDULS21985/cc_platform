@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { ApiService, type NotificationApi } from '@/services/api';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   Select,
   SelectContent,
@@ -296,6 +297,8 @@ export default function InboxPage() {
   const [sort, setSort] = useState<'newest' | 'oldest' | 'unread'>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  const { onNotification } = useNotifications();
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -321,6 +324,19 @@ export default function InboxPage() {
       cancelled = true;
     };
   }, []);
+
+  // Live: prepend new server-pushed notifications when they arrive.
+  useEffect(() => {
+    return onNotification((n) => {
+      setItems((prev) => {
+        const incoming = mapApiNotification(n);
+        if (prev.some((it) => it.id === incoming.id)) return prev;
+        // If we were on mock fallback before, switch to a real list.
+        return [incoming, ...prev.filter((it) => !it.id.startsWith('n'))];
+      });
+      setUsingMock(false);
+    });
+  }, [onNotification]);
 
   // Stats for the hero
   const stats = useMemo(() => {

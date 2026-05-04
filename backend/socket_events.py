@@ -469,3 +469,60 @@ def register_socket_events(socketio):
             )
         )
     )
+
+    # Notifications: subscribe a connected JWT-authenticated client to its
+    # own per-user notifications room. Backend code emits to this room from
+    # `NotificationService.create_for_user` so the inbox lights up live.
+    def handle_join_notifications():
+        """Join the per-user notifications room.
+        ---
+        tags: [Realtime]
+        summary: Join notifications room
+        description: Subscribe to real-time notification events for the current user
+        security:
+          - Bearer: []
+        responses:
+          notifications_connected:
+            description: Confirmation of successful subscription
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: connected
+                user_id:
+                  type: integer
+                  example: 123
+        """
+        user_id = get_jwt_identity()
+        join_room(f"notifications_{user_id}")
+        emit("notifications_connected", {"status": "connected", "user_id": user_id})
+
+    socketio.on("join_notifications")(
+        jwt_required()(
+            documented_handler(
+                handle_join_notifications,
+                swag_spec={
+                    "tags": ["Realtime"],
+                    "summary": "Join notifications room",
+                    "description": "Subscribe to real-time notification events for the current user",
+                    "security": [{"Bearer": []}],
+                    "responses": {
+                        "notifications_connected": {
+                            "description": "Confirmation of successful subscription",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "status": {
+                                        "type": "string",
+                                        "example": "connected",
+                                    },
+                                    "user_id": {"type": "integer", "example": 123},
+                                },
+                            },
+                        }
+                    },
+                },
+            )
+        )
+    )
