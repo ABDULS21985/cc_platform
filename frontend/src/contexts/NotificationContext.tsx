@@ -7,6 +7,8 @@ import { getSocket } from '@/lib/socket';
 
 type Listener = (n: NotificationApi) => void;
 
+type OSPermission = 'default' | 'granted' | 'denied' | 'unsupported';
+
 interface NotificationContextValue {
   unreadCount: number;
   /** Subscribe to live notifications. Returns an unsubscribe function. */
@@ -17,13 +19,46 @@ interface NotificationContextValue {
   markRead: (id: number) => void;
   /** Mark all read (locally + on the server). */
   markAllRead: () => Promise<void>;
+  /** Current OS-level Notification permission state. */
+  osPermission: OSPermission;
+  /** Prompt the user for OS notification permission (one-shot). */
+  requestOSPermission: () => Promise<OSPermission>;
+}
+
+function detectOSPermission(): OSPermission {
+  if (typeof window === 'undefined') return 'unsupported';
+  if (typeof window.Notification === 'undefined') return 'unsupported';
+  return window.Notification.permission as OSPermission;
 }
 
 const NotificationContext = React.createContext<NotificationContextValue | null>(null);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [unreadCount, setUnreadCount] = React.useState(0);
+  const [osPermission, setOSPermission] = React.useState<OSPermission>('default');
   const listenersRef = React.useRef<Set<Listener>>(new Set());
+
+  React.useEffect(() => {
+    setOSPermission(detectOSPermission());
+  }, []);
+
+  const requestOSPermission = React.useCallback(async (): Promise<OSPermission> => {
+    if (typeof window === 'undefined' || typeof window.Notification === 'undefined') {
+      return 'unsupported';
+    }
+    if (window.Notification.permission === 'granted') {
+      setOSPermission('granted');
+      return 'granted';
+    }
+    try {
+      const result = await window.Notification.requestPermission();
+      setOSPermission(result as OSPermission);
+      return result as OSPermission;
+    } catch {
+      setOSPermission('denied');
+      return 'denied';
+    }
+  }, []);
 
   const refresh = React.useCallback(async () => {
     try {

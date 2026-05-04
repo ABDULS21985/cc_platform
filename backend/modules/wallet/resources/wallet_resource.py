@@ -340,7 +340,40 @@ class WithdrawResource(MethodView):
                     f"Withdrawal initiated for user {current_user.id}: ₦{amount} to {bank_code}/{account_number}. "
                     f"New balance: ₦{updated_wallet.balance}"
                 )
-                
+
+                # Best-effort: notify the user + audit. Failures here must
+                # not roll back the withdrawal.
+                try:
+                    from modules.notifications.services.notification_service import NotificationService
+                    from modules.audit.services.audit_service import AuditService
+                    NotificationService().create_for_user(
+                        user_id=current_user.id,
+                        title="Withdrawal initiated",
+                        body=(
+                            f"₦{amount:,.2f} is on its way to {account_name or account_number}. "
+                            f"Funds typically arrive within 24 hours."
+                        ),
+                        category='money',
+                        source='Wallet',
+                        amount_value=f"{amount:,.2f}",
+                        amount_direction='out',
+                        action_href='/dashboard/activity',
+                    )
+                    AuditService().record(
+                        user_id=current_user.id,
+                        action='Withdrawal initiated',
+                        details=(
+                            f"Withdrew ₦{amount:,.2f} to {account_number} "
+                            f"({bank_code}); fee ₦{fee:,.2f}"
+                        ),
+                        category='money',
+                        severity='info',
+                        actor='You',
+                        target=account_name or account_number,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning('post-withdraw notify/audit failed: %s', exc)
+
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"Withdrawal transaction failed: {str(e)}", exc_info=True)

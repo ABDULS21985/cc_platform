@@ -60,6 +60,45 @@ class LoginService:
         
         # Verify password
         if not self.password_service.verify_password(password, user.password_hash):
+            # Best-effort: drop a security audit + warning notification so
+            # users see failed attempts on their own account. Silent on
+            # ACCOUNT_INACTIVE / EMAIL_NOT_VERIFIED branches below since
+            # those aren't password-failure indicators.
+            try:
+                from flask import request
+                from modules.audit.services.audit_service import AuditService
+                from modules.notifications.services.notification_service import NotificationService
+                ip = (
+                    request.headers.get('X-Forwarded-For')
+                    or request.remote_addr
+                    or ''
+                ).split(',')[0].strip() if request else None
+                device = request.headers.get('User-Agent') if request else None
+                AuditService().record(
+                    user_id=user.id,
+                    action='Failed sign-in attempt',
+                    details='Wrong password supplied for this account',
+                    category='security',
+                    severity='warning',
+                    actor='Unknown',
+                    ip=ip,
+                    device=device,
+                )
+                NotificationService().create_for_user(
+                    user_id=user.id,
+                    title='Failed sign-in attempt',
+                    body=(
+                        f"Someone tried to sign in to your account from "
+                        f"{ip or 'an unknown IP'}. If this wasn't you, "
+                        f"change your password."
+                    ),
+                    category='security',
+                    source='Security',
+                    action_href='/dashboard/settings/change-password',
+                    action_label='Change password',
+                )
+            except Exception:
+                pass
             return {
                 "error": "Invalid email or password",
                 "code": "INVALID_CREDENTIALS"
