@@ -1104,6 +1104,8 @@ export interface NotificationPreferencesApi {
   /** Always true server-side; surfaced as locked in the UI. */
   security: true;
   system: boolean;
+  digest_frequency: 'off' | 'daily' | 'weekly';
+  last_digest_at: string | null;
   updated_at: string | null;
 }
 

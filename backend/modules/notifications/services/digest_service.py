@@ -17,8 +17,6 @@ from datetime import datetime, timedelta
 from html import escape
 from typing import List
 
-from sqlalchemy import or_
-
 from modules.auth_v2.extensions import db
 from modules.auth_v2.models.user import User
 from modules.auth_v2.services.email_service import EmailService

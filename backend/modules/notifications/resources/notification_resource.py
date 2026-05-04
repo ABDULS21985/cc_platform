@@ -8,7 +8,6 @@ from flask_smorest import Blueprint
 from modules.auth_v2.utils.decorators import token_required
 from modules.core.response_formatter import (
     format_data,
-    format_error,
     format_internal_error,
     format_not_found,
 )

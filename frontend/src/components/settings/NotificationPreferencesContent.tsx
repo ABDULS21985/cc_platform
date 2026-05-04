@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { ApiService, type NotificationPreferencesApi } from '@/services/api';
+import { cn } from '@/lib/utils';
 
 interface ChannelPref {
   id: 'email' | 'sms' | 'push' | 'in_app';
@@ -131,10 +132,20 @@ const DEFAULT_PREFS: Record<CategoryKey, boolean> = {
   system: true,
 };
 
+type DigestFrequency = 'off' | 'daily' | 'weekly';
+
+const DIGEST_OPTIONS: Array<{ id: DigestFrequency; label: string; description: string }> = [
+  { id: 'off', label: 'Off', description: 'Only realtime in-app alerts.' },
+  { id: 'daily', label: 'Daily', description: 'A summary email each morning of unread items.' },
+  { id: 'weekly', label: 'Weekly', description: 'A round-up every Monday morning.' },
+];
+
 export function NotificationPreferencesContent() {
   const [prefs, setPrefs] = useState<Record<CategoryKey, boolean>>(DEFAULT_PREFS);
+  const [digest, setDigest] = useState<DigestFrequency>('off');
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<CategoryKey | null>(null);
+  const [savingDigest, setSavingDigest] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,6 +162,7 @@ export function NotificationPreferencesContent() {
             security: remote.security,
             system: remote.system,
           });
+          if (remote.digest_frequency) setDigest(remote.digest_frequency);
         }
       } catch {
         // keep defaults
@@ -162,6 +174,28 @@ export function NotificationPreferencesContent() {
       cancelled = true;
     };
   }, []);
+
+  const updateDigest = async (next: DigestFrequency) => {
+    if (next === digest) return;
+    const prev = digest;
+    setDigest(next);
+    setSavingDigest(true);
+    try {
+      await ApiService.notifications.updatePreferences({
+        digest_frequency: next,
+      } as Partial<Omit<NotificationPreferencesApi, 'user_id' | 'updated_at' | 'security'>>);
+      toast.success(
+        next === 'off'
+          ? 'Email digest turned off'
+          : `Email digest set to ${next}`,
+      );
+    } catch {
+      setDigest(prev);
+      toast.error('Could not update digest preference');
+    } finally {
+      setSavingDigest(false);
+    }
+  };
 
   const toggleCategory = async (id: CategoryKey, value: boolean) => {
     if (id === 'security') return;
@@ -235,6 +269,56 @@ export function NotificationPreferencesContent() {
                 />
               </div>
             ))}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Email digest */}
+      <section aria-labelledby="digest-heading" className="space-y-3">
+        <header>
+          <h2
+            id="digest-heading"
+            className="text-sm font-semibold uppercase tracking-widest text-muted-foreground"
+          >
+            Email digest
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Get a summary email of unread notifications on a cadence.
+          </p>
+        </header>
+        <Card variant="default" density="compact">
+          <CardContent
+            className="grid gap-2 px-5 py-4 sm:grid-cols-3"
+            role="radiogroup"
+            aria-label="Email digest cadence"
+          >
+            {DIGEST_OPTIONS.map((opt) => {
+              const isActive = digest === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  onClick={() => updateDigest(opt.id)}
+                  disabled={savingDigest}
+                  className={cn(
+                    'rounded-2xl border px-4 py-3 text-left transition-all',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isActive
+                      ? 'border-primary bg-brand-soft/40'
+                      : 'border-border bg-card hover:border-input hover:bg-muted/40',
+                  )}
+                >
+                  <p className="text-sm font-semibold tracking-tight text-foreground">
+                    {opt.label}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {opt.description}
+                  </p>
+                </button>
+              );
+            })}
           </CardContent>
         </Card>
       </section>
