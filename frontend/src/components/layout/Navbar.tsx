@@ -1,151 +1,161 @@
 'use client';
 
-import { useState } from 'react';
+import * as React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ChevronDown, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import {
+  motion,
+  useScroll,
+  useTransform,
+} from 'framer-motion';
 import { Button } from '../ui/button';
+import { ThemeSwitcher } from './ThemeSwitcher';
+import { cn } from '@/lib/utils';
+
+interface NavLink {
+  label: string;
+  href: string;
+}
+
+const NAV_LINKS: NavLink[] = [
+  { label: 'Built for', href: '#built-for' },
+  { label: 'Features', href: '#features' },
+  { label: 'Pricing', href: '#pricing' },
+  { label: 'FAQ', href: '#faq' },
+];
 
 export default function Navbar() {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [scrolled, setScrolled] = React.useState(false);
+  const { scrollYProgress } = useScroll();
+  const progressScaleX = useTransform(scrollYProgress, [0, 1], [0, 1]);
+
+  React.useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 16);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
-    <nav className="px-4 sm:px-6 lg:px-8 py-4 animate-fade-in-down">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center animate-fade-in-left">
-            <Link href="/">
-              <Image
-                src="/images/main-logo.svg"
-                alt="Community Core"
-                width={120}
-                height={32}
-                className="h-8 w-auto hover-scale smooth-transition cursor-pointer"
-              />
-            </Link>
-          </div>
+    <>
+      <header
+        className={cn(
+          'sticky top-0 z-40 w-full transition-all duration-200',
+          scrolled
+            ? 'border-b border-border/80 bg-background/85 backdrop-blur-xl'
+            : 'border-b border-transparent bg-transparent'
+        )}
+      >
+        <nav
+          aria-label="Primary"
+          className={cn(
+            'mx-auto flex w-full max-w-7xl items-center justify-between px-4 transition-[height] duration-200 sm:px-6 lg:px-8',
+            scrolled ? 'h-14' : 'h-16'
+          )}
+        >
+          <Link href="/" className="flex items-center gap-2" aria-label="CCPay home">
+            <Image
+              src="/images/main-logo.svg"
+              alt=""
+              width={36}
+              height={36}
+              className="h-8 w-8"
+              aria-hidden="true"
+            />
+            <span className="text-base font-semibold tracking-tight">CCPay</span>
+          </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8 animate-fade-in delay-200">
-            <Link
-              href="/"
-              className="text-[#1e1e1e] hover:text-[#0E9DA5] font-[600] smooth-transition relative group"
-            >
-              Home
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#0E9DA5] group-hover:w-full smooth-transition"></span>
-            </Link>
-            <Link
-              href="#"
-              className="text-[#1e1e1e] hover:text-[#0E9DA5] font-[600] smooth-transition relative group"
-            >
-              About us
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#0E9DA5] group-hover:w-full smooth-transition"></span>
-            </Link>
-            <div className="flex items-center space-x-1 group cursor-pointer">
-              <a
-                href="#"
-                className="text-[#1e1e1e] hover:text-[#0E9DA5] font-[600] smooth-transition relative"
-              >
-                Features
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#0E9DA5] group-hover:w-full smooth-transition"></span>
-              </a>
-              <ChevronDown className="w-4 h-4 text-[#1e1e1e] group-hover:text-[#0E9DA5] group-hover:rotate-180 smooth-transition" />
-            </div>
-            <div className="flex items-center space-x-1 group cursor-pointer">
-              <a
-                href="#"
-                className="text-[#1e1e1e] hover:text-[#0E9DA5] font-[600] smooth-transition relative"
-              >
-                FAQ
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#0E9DA5] group-hover:w-full smooth-transition"></span>
-              </a>
-              <ChevronDown className="w-4 h-4 text-[#1e1e1e] group-hover:text-[#0E9DA5] group-hover:rotate-180 smooth-transition" />
-            </div>
-          </div>
+          <ul className="hidden items-center gap-1 md:flex">
+            {NAV_LINKS.map((l) => (
+              <li key={l.href}>
+                <Link
+                  href={l.href}
+                  className="relative inline-flex items-center rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
 
-          {/* Desktop Action Buttons */}
-          <div className="hidden md:flex items-center space-x-4 animate-fade-in-right delay-300">
+          <div className="hidden items-center gap-2 md:flex">
+            <ThemeSwitcher compact />
             <Link
-              href="/get-started"
-              className="text-[#000000] hover:text-[#0E9DA5] font-[600] smooth-transition hover-scale"
+              href="/signin"
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              Sign up
+              Sign in
             </Link>
             <Link href="/get-started">
-              <Button className="btn-primary shadow-soft hover-glow">
-                Download app
-              </Button>
+              <Button size="default">Get started</Button>
             </Link>
           </div>
 
-          {/* Mobile Menu Button */}
           <button
-            className="md:hidden btn-icon animate-fade-in-right"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            type="button"
+            onClick={() => setIsMobileMenuOpen((v) => !v)}
+            aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="mobile-nav"
+            className="grid size-10 place-items-center rounded-full text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
           >
             {isMobileMenuOpen ? (
-              <X className="w-6 h-6 text-[#000000] animate-scale-in" />
+              <X className="size-5" aria-hidden="true" />
             ) : (
-              <Menu className="w-6 h-6 text-[#000000] animate-scale-in" />
+              <Menu className="size-5" aria-hidden="true" />
             )}
           </button>
-        </div>
+        </nav>
 
-        {/* Mobile Menu */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden mt-4 py-4 border-t border-gray-200 animate-fade-in-down">
-            <div className="flex flex-col space-y-4">
+        {/* Scroll progress indicator */}
+        <motion.div
+          aria-hidden="true"
+          style={{ scaleX: progressScaleX }}
+          className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-gradient-to-r from-brand to-brand-bright"
+        />
+      </header>
+
+      {/* Mobile drawer */}
+      {isMobileMenuOpen && (
+        <div
+          id="mobile-nav"
+          className="fixed inset-x-0 top-14 z-30 origin-top border-b border-border bg-background/95 backdrop-blur-xl md:hidden"
+        >
+          <div className="mx-auto flex max-w-7xl flex-col gap-1 px-4 py-4 sm:px-6">
+            {NAV_LINKS.map((l) => (
               <Link
-                href="/"
-                className="text-[#000000] hover:text-[#0E9DA5] smooth-transition hover-scale inline-block animate-fade-in-left delay-100"
+                key={l.href}
+                href={l.href}
                 onClick={() => setIsMobileMenuOpen(false)}
+                className="rounded-xl px-3 py-2.5 text-base font-medium text-foreground transition-colors hover:bg-accent"
               >
-                Home
+                {l.label}
+              </Link>
+            ))}
+            <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+              <ThemeSwitcher compact />
+              <Link
+                href="/signin"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-center text-sm font-semibold text-foreground"
+              >
+                Sign in
               </Link>
               <Link
-                href="#"
-                className="text-[#000000] hover:text-[#0E9DA5] smooth-transition hover-scale inline-block animate-fade-in-left delay-200"
+                href="/get-started"
                 onClick={() => setIsMobileMenuOpen(false)}
+                className="flex-1"
               >
-                About us
+                <Button size="default" block>
+                  Get started
+                </Button>
               </Link>
-              <div className="flex items-center space-x-1 animate-fade-in-left delay-300">
-                <a
-                  href="#"
-                  className="text-[#000000] hover:text-[#0E9DA5] smooth-transition"
-                >
-                  Features
-                </a>
-                <ChevronDown className="w-4 h-4 text-[#000000]" />
-              </div>
-              <div className="flex items-center space-x-1 animate-fade-in-left delay-400">
-                <a
-                  href="#"
-                  className="text-[#000000] hover:text-[#0E9DA5] smooth-transition"
-                >
-                  FAQ
-                </a>
-                <ChevronDown className="w-4 h-4 text-[#000000]" />
-              </div>
-              <div className="pt-4 space-y-2 animate-fade-in-up delay-500">
-                <Link
-                  href="/get-started"
-                  className="w-full text-left text-[#000000] hover:text-[#0E9DA5] font-[600] smooth-transition hover-scale inline-block"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Sign up
-                </Link>
-                <Link href="/get-started" onClick={() => setIsMobileMenuOpen(false)} className="block w-full">
-                  <Button className="btn-primary w-full shadow-soft hover-glow">
-                    Download app
-                  </Button>
-                </Link>
-              </div>
             </div>
           </div>
-        )}
-      </div>
-    </nav>
+        </div>
+      )}
+    </>
   );
 }
