@@ -253,7 +253,14 @@ def create_app():
             logger.info("✓ Transaction polling service started")
         except Exception as e:
             logger.warning(f"⚠ Could not start polling service: {e}")
-        
+
+        # Email digest sweeper — opt-in per user via NotificationPreference.digest_frequency.
+        try:
+            from modules.notifications.services import start_digest_scheduler
+            start_digest_scheduler(app)
+        except Exception as e:
+            logger.warning(f"⚠ Could not start digest scheduler: {e}")
+
         # ========== LAYER 9: Return Configured App ==========
         logger.info("Application initialized successfully")
         return app

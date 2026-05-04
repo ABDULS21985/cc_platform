@@ -130,7 +130,7 @@ class NotificationRepository:
         db.session.commit()
         return True
 
-    def update_preferences(self, user_id: int, **flags: bool) -> NotificationPreference:
+    def update_preferences(self, user_id: int, **flags) -> NotificationPreference:
         pref = self.get_or_create_preferences(user_id)
         # Map external category names to model column names.
         column_map = {
@@ -141,6 +141,10 @@ class NotificationRepository:
             'system': 'system_enabled',
         }
         for category, value in flags.items():
+            if category == 'digest_frequency' and isinstance(value, str):
+                if value in ('off', 'daily', 'weekly'):
+                    pref.digest_frequency = value
+                continue
             col = column_map.get(category)
             if col and isinstance(value, bool):
                 setattr(pref, col, value)
