@@ -1,13 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-
-// Force dynamic rendering for this page
-export const dynamic = 'force-dynamic';
-import { useRouter } from 'next/navigation';
+import * as React from 'react';
+import { useMemo, useState } from 'react';
+import {
+  Calendar as CalendarIcon,
+  Compass,
+  Filter,
+  Search,
+  Sparkles,
+  Ticket,
+  Users,
+} from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -15,440 +19,627 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Clock, MapPin, Users, Search } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { motion, AnimatePresence } from '@/components/ui/motion';
+import { EventsHero } from '@/components/events/EventsHero';
+import { EventCard, type EventItem } from '@/components/events/EventCard';
+import { EventsRightRail } from '@/components/events/EventsRightRail';
 import { CreateEventDialog } from '@/components/community/CreateEventDialog';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
-interface Event {
-  id: string;
-  title: string;
-  host: string;
-  isPrivate: boolean;
-  date: string;
-  time: string;
-  location: string;
-  attendees: number;
-  imagePlaceholder: string;
+export const dynamic = 'force-dynamic';
+
+type TabValue = 'upcoming' | 'live' | 'hosting' | 'past';
+
+interface TabMeta {
+  value: TabValue;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
 }
 
-interface OngoingEvent {
-  id: string;
-  host: string;
-  title: string;
-  attendees: number;
-  hostAvatar: string;
-  attendeeAvatars: string[];
+const TABS: TabMeta[] = [
+  {
+    value: 'upcoming',
+    label: 'Upcoming',
+    icon: CalendarIcon,
+    description: 'Events in the next few weeks across your circles.',
+  },
+  {
+    value: 'live',
+    label: 'Live now',
+    icon: Sparkles,
+    description: 'Streaming or running right now — jump in.',
+  },
+  {
+    value: 'hosting',
+    label: 'Hosting',
+    icon: Users,
+    description: 'Events you organize across your circles.',
+  },
+  {
+    value: 'past',
+    label: 'Past',
+    icon: Ticket,
+    description: 'Recordings, recaps, and receipts.',
+  },
+];
+
+// Realistic mock until the events API surface lands.
+const today = new Date();
+const iso = (offsetDays: number, hour = 18, minute = 0) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() + offsetDays);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+};
+
+const MOCK_EVENTS: EventItem[] = [
+  {
+    id: '1',
+    title: 'Lagos Half Marathon — Race day',
+    community: 'Lekki Runners',
+    communityInitial: 'L',
+    isPrivate: false,
+    startsAt: iso(-1, 6, 0), // started 30 min ago
+    duration: '4 hr',
+    location: 'Lekki Phase 1',
+    isOnline: false,
+    attendees: 184,
+    capacity: 300,
+    ticketPrice: '12,500',
+    status: 'live',
+    isAttending: true,
+    isHosting: false,
+    category: 'Sports',
+  },
+  {
+    id: '2',
+    title: 'Crypto academy · Week 4 — Live class',
+    community: 'Cryptos NG',
+    communityInitial: 'C',
+    isPrivate: true,
+    startsAt: iso(0, 18, 0),
+    duration: '90 min',
+    location: 'Online · Zoom',
+    isOnline: true,
+    attendees: 124,
+    capacity: 150,
+    ticketPrice: null,
+    status: 'live',
+    isAttending: false,
+    isHosting: false,
+    category: 'Education',
+  },
+  {
+    id: '3',
+    title: 'AGM · Q2 financial review',
+    community: 'Lekki Block 3 HOA',
+    communityInitial: 'L',
+    isPrivate: true,
+    startsAt: iso(0, 20, 0),
+    duration: '2 hr',
+    location: 'Block 3 Clubhouse',
+    isOnline: false,
+    attendees: 38,
+    capacity: 60,
+    ticketPrice: null,
+    status: 'upcoming',
+    isAttending: true,
+    isHosting: true,
+    category: 'Estate',
+  },
+  {
+    id: '4',
+    title: 'Designers networking mixer',
+    community: 'UI/UX Africa',
+    communityInitial: 'U',
+    isPrivate: false,
+    startsAt: iso(2, 17, 30),
+    duration: '3 hr',
+    location: 'Yaba, Lagos',
+    isOnline: false,
+    attendees: 72,
+    capacity: 120,
+    ticketPrice: '5,000',
+    status: 'upcoming',
+    isAttending: false,
+    isHosting: false,
+    category: 'Design',
+  },
+  {
+    id: '5',
+    title: 'Tech meetup 2026',
+    community: 'Lagos Devs',
+    communityInitial: 'L',
+    isPrivate: false,
+    startsAt: iso(7, 10, 0),
+    duration: '6 hr',
+    location: 'Co-Creation Hub',
+    isOnline: false,
+    attendees: 218,
+    capacity: 250,
+    ticketPrice: '0',
+    status: 'upcoming',
+    isAttending: true,
+    isHosting: false,
+    category: 'Tech',
+  },
+  {
+    id: '6',
+    title: 'Faith finance Q&A',
+    community: 'Grace Assembly',
+    communityInitial: 'G',
+    isPrivate: false,
+    startsAt: iso(9, 19, 0),
+    duration: '60 min',
+    location: 'Online · YouTube Live',
+    isOnline: true,
+    attendees: 540,
+    capacity: 1000,
+    ticketPrice: null,
+    status: 'upcoming',
+    isAttending: false,
+    isHosting: false,
+    category: 'Faith',
+  },
+  {
+    id: '7',
+    title: 'Co-op rotation #14 · Payout',
+    community: 'Trinity Co-op',
+    communityInitial: 'T',
+    isPrivate: true,
+    startsAt: iso(14, 12, 0),
+    duration: '30 min',
+    location: 'Online',
+    isOnline: true,
+    attendees: 24,
+    capacity: 24,
+    ticketPrice: null,
+    status: 'upcoming',
+    isAttending: true,
+    isHosting: true,
+    category: 'Co-op',
+  },
+  // Past events
+  {
+    id: '8',
+    title: 'Fundraiser concert · Kids in tech',
+    community: 'Lagos Devs',
+    communityInitial: 'L',
+    isPrivate: false,
+    startsAt: iso(-7, 18, 0),
+    duration: '4 hr',
+    location: 'Hard Rock Café, VI',
+    isOnline: false,
+    attendees: 312,
+    capacity: 350,
+    ticketPrice: '7,500',
+    status: 'past',
+    isAttending: true,
+    isHosting: false,
+    category: 'Music',
+  },
+];
+
+function dateBucket(iso: string): 'today' | 'tomorrow' | 'this-week' | 'later' {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (date: Date) => {
+    const c = new Date(date);
+    c.setHours(0, 0, 0, 0);
+    return c;
+  };
+  const dayDiff = Math.round(
+    (startOfDay(d).getTime() - startOfDay(now).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (dayDiff <= 0) return 'today';
+  if (dayDiff === 1) return 'tomorrow';
+  if (dayDiff <= 7) return 'this-week';
+  return 'later';
 }
+
+const BUCKET_LABEL: Record<ReturnType<typeof dateBucket>, string> = {
+  today: 'Today',
+  tomorrow: 'Tomorrow',
+  'this-week': 'This week',
+  later: 'Later',
+};
+
+const BUCKET_ORDER: Array<ReturnType<typeof dateBucket>> = [
+  'today',
+  'tomorrow',
+  'this-week',
+  'later',
+];
 
 export default function EventsPage() {
-  const router = useRouter();
-  const [selectedFilter, setSelectedFilter] = useState('');
-  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [events, setEvents] = useState<EventItem[]>(MOCK_EVENTS);
+  const [activeTab, setActiveTab] = useState<TabValue>('upcoming');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<'soonest' | 'popular' | 'newest'>('soonest');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [rightRailOpen, setRightRailOpen] = useState(false);
 
-  const filterOptions = [
-    { value: 'recent', label: 'Recent' },
-    { value: 'popular', label: 'Popular' },
-    { value: 'newest', label: 'Newest' },
-    { value: 'trending', label: 'Trending' },
-  ];
+  const stats = useMemo(
+    () => ({
+      thisMonth: events.length,
+      attending: events.filter((e) => e.isAttending && e.status !== 'past').length,
+      hosting: events.filter((e) => e.isHosting && e.status !== 'past').length,
+    }),
+    [events]
+  );
 
-  const events: Event[] = [
-    {
-      id: '1',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: true,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-    },
-    {
-      id: '2',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: false,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-    },
-    {
-      id: '3',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: true,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-    },
-    {
-      id: '4',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: false,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-    },
-    {
-      id: '5',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: true,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-    },
-  ];
+  const counts = useMemo<Record<TabValue, number>>(
+    () => ({
+      upcoming: events.filter((e) => e.status === 'upcoming').length,
+      live: events.filter((e) => e.status === 'live').length,
+      hosting: events.filter((e) => e.isHosting).length,
+      past: events.filter((e) => e.status === 'past').length,
+    }),
+    [events]
+  );
 
-  const ongoingEvents: OngoingEvent[] = [
-    {
-      id: '1',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '2',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '3',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '4',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '5',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-  ];
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return events
+      .filter((e) => {
+        switch (activeTab) {
+          case 'upcoming':
+            return e.status === 'upcoming';
+          case 'live':
+            return e.status === 'live';
+          case 'hosting':
+            return e.isHosting;
+          case 'past':
+            return e.status === 'past';
+          default:
+            return true;
+        }
+      })
+      .filter((e) => {
+        if (!q) return true;
+        return (
+          e.title.toLowerCase().includes(q) ||
+          e.community.toLowerCase().includes(q) ||
+          (e.category?.toLowerCase().includes(q) ?? false)
+        );
+      })
+      .sort((a, b) => {
+        if (sort === 'soonest') {
+          return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+        }
+        if (sort === 'popular') {
+          return b.attendees - a.attendees;
+        }
+        return new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime();
+      });
+  }, [events, activeTab, search, sort]);
 
-  const handleCreateEventOpen = () => {
-    setIsCreateEventOpen(true);
+  const grouped = useMemo(() => {
+    const map = new Map<ReturnType<typeof dateBucket>, EventItem[]>();
+    for (const e of filtered) {
+      const b = dateBucket(e.startsAt);
+      const list = map.get(b) ?? [];
+      list.push(e);
+      map.set(b, list);
+    }
+    // Preserve sort order within each bucket; respect bucket display order.
+    return BUCKET_ORDER.filter((b) => map.has(b)).map((b) => ({
+      bucket: b,
+      label: BUCKET_LABEL[b],
+      items: map.get(b) ?? [],
+    }));
+  }, [filtered]);
+
+  const toggleAttend = (id: string) => {
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === id
+          ? {
+              ...e,
+              isAttending: !e.isAttending,
+              attendees: e.isAttending ? e.attendees - 1 : e.attendees + 1,
+            }
+          : e
+      )
+    );
+    const event = events.find((e) => e.id === id);
+    toast.success(
+      event?.isAttending ? 'Removed from your events' : 'Added to your events'
+    );
   };
-
-  const handleCreateEventClose = () => {
-    setIsCreateEventOpen(false);
-  };
-
-  const handleCreateEventSubmit = (eventData: any) => {
-    // Handle event creation logic here
-    console.log('Creating event:', eventData);
-    // You can add API call here to create the event
-  };
-
-  const handleEventClick = (eventId: string) => {
-    router.push(`/dashboard/events/${eventId}`);
-  };
-
-  const ongoingEventsWithAttendees: OngoingEvent[] = [
-    {
-      id: '1',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '2',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-    {
-      id: '3',
-      host: '@cryptoacademy',
-      title: 'Networking for Designers',
-      attendees: 20,
-      hostAvatar: '/images/avatar1.png',
-      attendeeAvatars: [
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-        '/images/avatar4.png',
-      ],
-    },
-  ];
 
   return (
     <DashboardLayout pageTitle="Events">
-      <div className="flex gap-6">
-        <div className="flex-1 space-y-6">
-          <div className="flex items-center justify-between bg-white p-4 rounded-xl">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search"
-                  className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0E9DA5] focus:border-transparent w-64"
+      <div className="space-y-6">
+        <EventsHero stats={stats} onCreate={() => setCreateOpen(true)} />
+
+        {/* Mobile right-rail trigger */}
+        <div className="flex justify-end lg:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setRightRailOpen(true)}
+            leadingIcon={<Sparkles className="size-4" />}
+          >
+            Live &amp; suggested
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-6 lg:flex-row">
+          {/* Main column */}
+          <div className="min-w-0 flex-1 space-y-5">
+            {/* Tabs */}
+            <div
+              role="tablist"
+              aria-label="Event sections"
+              className="-mx-1 overflow-x-auto px-1"
+            >
+              <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card p-1 shadow-xs">
+                {TABS.map((t) => {
+                  const isActive = activeTab === t.value;
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls={`events-panel-${t.value}`}
+                      id={`events-tab-${t.value}`}
+                      onClick={() => setActiveTab(t.value)}
+                      className={cn(
+                        'relative inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold transition-colors',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        isActive
+                          ? 'text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="events-tab-pill"
+                          className="absolute inset-0 -z-10 rounded-full bg-primary shadow-sm"
+                          transition={{
+                            type: 'spring',
+                            stiffness: 400,
+                            damping: 32,
+                          }}
+                        />
+                      )}
+                      <Icon className="size-4" aria-hidden="true" />
+                      {t.label}
+                      <Badge
+                        variant={isActive ? 'outline' : 'soft'}
+                        size="sm"
+                        className={cn(
+                          'tabular-nums',
+                          isActive &&
+                            'border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground'
+                        )}
+                      >
+                        {counts[t.value]}
+                      </Badge>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="-mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Sparkles className="size-3" aria-hidden="true" />
+              {TABS.find((t) => t.value === activeTab)?.description}
+            </p>
+
+            {/* Search + sort */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs sm:flex-row sm:items-center sm:p-4">
+              <div className="relative flex-1">
+                <Search
+                  className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search events by title, community, or category…"
+                  className="h-11 rounded-xl pl-11"
+                  aria-label="Search events"
                 />
               </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-                <SelectTrigger className="w-40 h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-                  <SelectValue placeholder="Recent" />
+              <Select
+                value={sort}
+                onValueChange={(v) =>
+                  setSort(v as typeof sort)
+                }
+              >
+                <SelectTrigger
+                  className="h-11 w-full rounded-xl px-3 sm:w-48"
+                  aria-label="Sort events"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Filter
+                      className="size-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <SelectValue placeholder="Sort" />
+                  </span>
                 </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-lg">
-                  {filterOptions.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="cursor-pointer hover:bg-gray-50"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                <SelectContent>
+                  <SelectItem value="soonest">Soonest first</SelectItem>
+                  <SelectItem value="popular">Most popular</SelectItem>
+                  <SelectItem value="newest">Newest</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                onClick={handleCreateEventOpen}
-                className="bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white px-4 py-2 rounded-full"
-              >
-                Create event
-              </Button>
             </div>
-          </div>
 
-          <div className="space-y-6 bg-white p-4 rounded-xl">
-            {events.map((event) => (
-              <div
-                key={event.id}
-                onClick={() => handleEventClick(event.id)}
-                className="bg-white rounded-lg overflow-hidden border border-[#f2f2f3] p-1 cursor-pointer hover:shadow-md transition-shadow"
-              >
-                <div className="flex">
-                  <div className="w-1/3 p-3">
-                    <div className="relative w-full h-32 bg-black rounded overflow-hidden">
-                      <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold text-center leading-tight p-2">
-                        {event.imagePlaceholder
-                          .split('\n')
-                          .map((line, index) => (
-                            <div key={index}>{line}</div>
-                          ))}
-                      </div>
-
-                      {event.id === '1' && (
-                        <div className="absolute bottom-2 left-2 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-xs font-bold">
-                            B
-                          </span>
+            {/* List */}
+            <div
+              role="tabpanel"
+              id={`events-panel-${activeTab}`}
+              aria-labelledby={`events-tab-${activeTab}`}
+            >
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`${activeTab}-${search}-${sort}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  className="space-y-7"
+                >
+                  {filtered.length === 0 ? (
+                    <EmptyState
+                      icon={<CalendarIcon className="size-5" aria-hidden="true" />}
+                      title={
+                        search
+                          ? 'No matches'
+                          : activeTab === 'live'
+                            ? 'Nothing live right now'
+                            : activeTab === 'hosting'
+                              ? 'You aren’t hosting any events'
+                              : activeTab === 'past'
+                                ? 'No past events yet'
+                                : 'No upcoming events'
+                      }
+                      description={
+                        search
+                          ? 'Try a different search or change tabs.'
+                          : activeTab === 'hosting'
+                            ? 'Spin up an event in any community where you’re an admin.'
+                            : activeTab === 'past'
+                              ? 'Once you attend or host an event, it’ll show here.'
+                              : 'Check back soon — your circles add events all the time.'
+                      }
+                      action={
+                        activeTab !== 'past' ? (
+                          <Button
+                            onClick={() => setCreateOpen(true)}
+                            leadingIcon={<CalendarIcon className="size-4" />}
+                          >
+                            Create an event
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  ) : (
+                    grouped.map((group) => (
+                      <section
+                        key={group.bucket}
+                        aria-labelledby={`bucket-${group.bucket}`}
+                        className="space-y-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <h2
+                            id={`bucket-${group.bucket}`}
+                            className="text-xs font-bold uppercase tracking-widest text-muted-foreground"
+                          >
+                            {group.label}
+                          </h2>
+                          <span
+                            aria-hidden="true"
+                            className="h-px flex-1 bg-border"
+                          />
+                          <Badge variant="soft" size="sm" className="tabular-nums">
+                            {group.items.length}
+                          </Badge>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="w-full p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm text-[#525252]">
-                        <span className="text-sm font-[500] text-[#000000]">
-                          {event.host}
-                        </span>{' '}
-                        is hosting
-                      </span>
-                      {event.isPrivate ? (
-                        <span className="bg-[#fbefe8] text-[#ff984f] text-xs px-2 py-1 rounded-full">
-                          Private
-                        </span>
-                      ) : (
-                        <span className="bg-green-100 text-green-600 text-xs px-2 py-1 rounded-full">
-                          Public
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-md sm:text-md font-bold text-[#000000] mb-4">
-                      {event.title}
-                    </h3>
-
-                    <div className="flex items-center gap-3 text-sm text-[#959595] flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        <span>{event.date}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        <span>{event.time}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4" />
-                        <span>{event.location}</span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        <span>{event.attendees} attendees</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="w-80 space-y-6">
-          <div className="bg-white rounded-lg p-4 border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Ongoing events</h3>
-              <a href="#" className="text-sm text-[#0E9DA5] hover:underline">
-                See all
-              </a>
+                        <ul className="space-y-3" role="list">
+                          {group.items.map((event, i) => (
+                            <motion.li
+                              key={event.id}
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{
+                                delay: 0.04 * i,
+                                duration: 0.3,
+                                ease: [0.16, 1, 0.3, 1],
+                              }}
+                            >
+                              <EventCard
+                                event={event}
+                                onToggleAttend={toggleAttend}
+                              />
+                            </motion.li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
-            <div className="space-y-3">
-              {ongoingEvents.map((event) => (
-                <div key={event.id} className="flex items-center gap-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={event.hostAvatar} />
-                    <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
-                      CA
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-600 truncate">
-                      {event.host} is hosting
-                    </p>
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {event.title}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    className="bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white text-xs px-3 py-1 rounded-full"
+
+            {/* Bottom CTA */}
+            <Card variant="outline" density="compact" className="border-dashed">
+              <CardContent className="flex flex-col items-start gap-3 px-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
+                    aria-hidden="true"
                   >
-                    Join
-                  </Button>
+                    <Compass className="size-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold tracking-tight text-foreground">
+                      Looking for more?
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Discover events from communities you&apos;re not a member of yet.
+                    </p>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => (window.location.href = '/dashboard/explore')}
+                >
+                  Explore events
+                </Button>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Second Ongoing Events Section */}
-          <div className="bg-white rounded-lg p-4 border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Ongoing events</h3>
-              <a href="#" className="text-sm text-[#0E9DA5] hover:underline">
-                See all
-              </a>
+          {/* Desktop right rail */}
+          <aside
+            className="hidden w-80 flex-shrink-0 lg:block"
+            aria-label="Live now and suggested events"
+          >
+            <div className="sticky top-6">
+              <EventsRightRail />
             </div>
-            <div className="space-y-3">
-              {ongoingEventsWithAttendees.map((event) => (
-                <div key={event.id} className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={event.hostAvatar} />
-                      <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
-                        CA
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-600 truncate">
-                        Hosted by {event.host}
-                      </p>
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {event.title}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white text-xs px-3 py-1 rounded-full"
-                    >
-                      Join
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-2 ml-11">
-                    <div className="flex -space-x-2">
-                      {event.attendeeAvatars.map((avatar, index) => (
-                        <Avatar
-                          key={index}
-                          className="w-5 h-5 border-2 border-white"
-                        >
-                          <AvatarImage src={avatar} />
-                          <AvatarFallback className="bg-gray-300 text-gray-600 text-xs">
-                            {String.fromCharCode(65 + index)}
-                          </AvatarFallback>
-                        </Avatar>
-                      ))}
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {event.attendees}+ Attendees
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </aside>
         </div>
-      </div>
 
-      {/* Create Event Dialog */}
-      <CreateEventDialog
-        isOpen={isCreateEventOpen}
-        onClose={handleCreateEventClose}
-        onSubmit={handleCreateEventSubmit}
-      />
+        {/* Mobile right rail */}
+        <Sheet open={rightRailOpen} onOpenChange={setRightRailOpen}>
+          <SheetContent
+            side="right"
+            title="Live & suggested"
+            description="What's happening right now and what to attend next"
+          >
+            <EventsRightRail />
+          </SheetContent>
+        </Sheet>
+
+        <CreateEventDialog
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={(data: unknown) => {
+            console.log('Creating event:', data);
+            setCreateOpen(false);
+            toast.success('Event scheduled');
+          }}
+        />
+      </div>
     </DashboardLayout>
   );
 }

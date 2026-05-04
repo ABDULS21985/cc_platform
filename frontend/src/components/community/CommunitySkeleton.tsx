@@ -1,31 +1,34 @@
+import { Skeleton } from '@/components/ui/skeleton';
+
+/**
+ * Loading placeholder that matches the geometry of a real CommunityCard so
+ * there's no layout shift when data hydrates.
+ */
 export function CommunitySkeleton() {
   return (
-    <div className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm animate-pulse h-full flex flex-col">
-      {/* Cover Image Skeleton */}
-      <div className="h-44 bg-gradient-to-br from-gray-100 via-gray-150 to-gray-100 relative flex-shrink-0">
-        {/* Shimmer effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-        {/* Simulated badges */}
-        <div className="absolute top-3 left-3 h-6 w-20 bg-gray-200/70 rounded-full" />
-        <div className="absolute top-3 right-3 h-6 w-14 bg-gray-200/70 rounded-full" />
-        {/* Simulated avatar position */}
-        <div className="absolute -bottom-5 left-4 w-12 h-12 bg-gray-200 rounded-xl border-2 border-white shadow-sm" />
+    <div
+      role="status"
+      aria-label="Loading community"
+      className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xs"
+    >
+      {/* Cover */}
+      <div className="relative h-40 shrink-0 bg-muted">
+        <Skeleton className="absolute inset-0 rounded-none" />
+        <Skeleton className="absolute left-3 top-3 h-5 w-20 rounded-full" />
+        <Skeleton className="absolute right-3 top-3 h-5 w-14 rounded-full" />
+        <Skeleton className="absolute -bottom-5 left-4 size-12 rounded-xl ring-2 ring-card" />
       </div>
 
-      {/* Card Body Skeleton */}
-      <div className="pt-8 pb-5 px-5 flex flex-col flex-1 gap-3">
-        {/* Title */}
-        <div className="h-5 bg-gray-100 rounded-lg w-3/4" />
-        {/* Description lines */}
+      {/* Body */}
+      <div className="flex flex-1 flex-col gap-3 px-5 pb-5 pt-7">
+        <Skeleton className="h-4 w-3/4 rounded-md" />
         <div className="space-y-2">
-          <div className="h-3 bg-gray-50 rounded-lg w-full" />
-          <div className="h-3 bg-gray-50 rounded-lg w-4/5" />
+          <Skeleton className="h-3 w-full rounded-md" />
+          <Skeleton className="h-3 w-4/5 rounded-md" />
         </div>
-
-        {/* Action Row */}
-        <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-50">
-          <div className="h-4 w-24 bg-gray-50 rounded-lg" />
-          <div className="h-8 w-20 bg-gray-100 rounded-xl" />
+        <div className="mt-auto flex items-center justify-between border-t border-border pt-3">
+          <Skeleton className="h-3 w-24 rounded-md" />
+          <Skeleton className="h-7 w-20 rounded-full" />
         </div>
       </div>
     </div>
