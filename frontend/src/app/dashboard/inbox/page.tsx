@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   Bell,
@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ApiService, type NotificationApi } from '@/services/api';
 import {
   Select,
   SelectContent,
@@ -259,12 +260,67 @@ const BUCKET_LABEL: Record<Bucket, string> = {
 
 const BUCKET_ORDER: Bucket[] = ['today', 'yesterday', 'this-week', 'earlier'];
 
+const SRV_PREFIX = 'srv-';
+const isServerId = (id: string) => id.startsWith(SRV_PREFIX);
+const serverIdNum = (id: string): number => Number(id.slice(SRV_PREFIX.length));
+
+function mapApiNotification(n: NotificationApi): NotificationItem {
+  const validCategories: NotificationItem['category'][] = [
+    'money', 'bills', 'communities', 'events', 'security', 'system',
+  ];
+  const category: NotificationItem['category'] = validCategories.includes(
+    n.category as NotificationItem['category'],
+  )
+    ? (n.category as NotificationItem['category'])
+    : 'system';
+  return {
+    id: `${SRV_PREFIX}${n.id}`,
+    category,
+    title: n.title,
+    body: n.body,
+    source: n.source,
+    timestamp: n.timestamp || n.created_at,
+    isRead: n.is_read,
+    actionHref: n.action_href ?? undefined,
+    actionLabel: n.action_label ?? undefined,
+    amount: n.amount ?? undefined,
+    initials: n.initials ?? undefined,
+  };
+}
+
 export default function InboxPage() {
-  const [items, setItems] = useState<NotificationItem[]>(MOCK);
+  const [items, setItems] = useState<NotificationItem[]>([]);
+  const [usingMock, setUsingMock] = useState(false);
   const [tab, setTab] = useState<TabValue>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest' | 'unread'>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.notifications.list({ limit: 100 });
+        const list = res.data?.data?.notifications ?? [];
+        if (cancelled) return;
+        if (list.length === 0) {
+          setItems(MOCK);
+          setUsingMock(true);
+        } else {
+          setItems(list.map(mapApiNotification));
+          setUsingMock(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setItems(MOCK);
+          setUsingMock(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Stats for the hero
   const stats = useMemo(() => {
@@ -365,15 +421,31 @@ export default function InboxPage() {
     setItems((prev) =>
       prev.map((it) => (ids.includes(it.id) ? { ...it, isRead: true } : it))
     );
+    if (usingMock) return;
+    for (const id of ids) {
+      if (isServerId(id)) {
+        ApiService.notifications.markRead(serverIdNum(id)).catch(() => {});
+      }
+    }
   };
   const removeMany = (ids: string[]) => {
     setItems((prev) => prev.filter((it) => !ids.includes(it.id)));
+    if (usingMock) return;
+    for (const id of ids) {
+      if (isServerId(id)) {
+        ApiService.notifications.delete(serverIdNum(id)).catch(() => {});
+      }
+    }
   };
 
   const handleMarkAllRead = () => {
     if (stats.unread === 0) return;
-    markRead(items.filter((it) => !it.isRead).map((it) => it.id));
-    toast.success(`Marked ${stats.unread} as read`);
+    const unreadIds = items.filter((it) => !it.isRead).map((it) => it.id);
+    setItems((prev) => prev.map((it) => ({ ...it, isRead: true })));
+    if (!usingMock) {
+      ApiService.notifications.markAllRead().catch(() => {});
+    }
+    toast.success(`Marked ${unreadIds.length} as read`);
   };
 
   const handleBulkMarkRead = () => {
