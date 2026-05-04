@@ -19,6 +19,7 @@ import { ApiService } from '@/services/api';
 import toast from 'react-hot-toast';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
+import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -313,9 +314,10 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
 
               {/* Action Icons */}
               <div className="flex items-center space-x-2">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <ThemeSwitcher compact />
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="relative w-10 h-10 rounded-xl bg-gray-50/80 border border-gray-100 text-gray-500 hover:text-[#0E9DA5] hover:bg-white smooth-transition shadow-sm"
                 >
                   <Bell className="w-4 h-4" />
