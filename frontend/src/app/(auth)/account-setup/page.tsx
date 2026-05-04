@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, Check, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,10 @@ import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
+import {
+  PasswordStrength,
+  passwordScore,
+} from '@/components/auth/PasswordStrength';
 import { cn } from '@/lib/utils';
 
 type FieldKey =
@@ -81,81 +85,6 @@ function Field({ id, label, required, error, hint, children }: FieldProps) {
   );
 }
 
-interface PasswordCheck {
-  test: (v: string) => boolean;
-  label: string;
-}
-
-const PASSWORD_CHECKS: PasswordCheck[] = [
-  { test: (v) => v.length >= 8, label: 'At least 8 characters' },
-  { test: (v) => /[A-Z]/.test(v), label: 'One uppercase letter' },
-  { test: (v) => /\d/.test(v), label: 'One number' },
-  { test: (v) => /[^A-Za-z0-9]/.test(v), label: 'One symbol' },
-];
-
-function passwordScore(value: string): number {
-  return PASSWORD_CHECKS.reduce((acc, c) => acc + (c.test(value) ? 1 : 0), 0);
-}
-
-function PasswordStrength({ value }: { value: string }) {
-  const score = passwordScore(value);
-  const visible = value.length > 0;
-
-  const strength =
-    score <= 1
-      ? { label: 'Too weak', tone: 'bg-destructive', text: 'text-destructive' }
-      : score === 2
-        ? { label: 'Fair', tone: 'bg-warning', text: 'text-warning' }
-        : score === 3
-          ? { label: 'Good', tone: 'bg-info', text: 'text-info' }
-          : { label: 'Strong', tone: 'bg-success', text: 'text-success' };
-
-  return (
-    <div className={cn('mt-2 space-y-2', !visible && 'opacity-50')} aria-live="polite">
-      <div className="flex gap-1.5">
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            className={cn(
-              'h-1 flex-1 rounded-full bg-muted transition-colors',
-              i < score && strength.tone
-            )}
-          />
-        ))}
-      </div>
-      <ul className="grid grid-cols-2 gap-1 text-[11px]">
-        {PASSWORD_CHECKS.map((c) => {
-          const passed = c.test(value);
-          return (
-            <li
-              key={c.label}
-              className={cn(
-                'flex items-center gap-1.5 transition-colors',
-                passed ? 'text-success' : 'text-muted-foreground'
-              )}
-            >
-              <span
-                className={cn(
-                  'grid size-4 place-items-center rounded-full transition-colors',
-                  passed ? 'bg-success/15' : 'bg-muted'
-                )}
-                aria-hidden="true"
-              >
-                <Check className="size-2.5" />
-              </span>
-              {c.label}
-            </li>
-          );
-        })}
-      </ul>
-      {visible && (
-        <p className={cn('text-[11px] font-semibold', strength.text)}>
-          {strength.label}
-        </p>
-      )}
-    </div>
-  );
-}
 
 export default function AccountSetupForm() {
   const [formData, setFormData] = useState({

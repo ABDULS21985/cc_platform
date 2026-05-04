@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 interface AuthLayoutProps {
   /** Title rendered in the form column. */
   title: string;
-  /** Lead paragraph under the title. */
-  subtitle?: string;
+  /** Lead paragraph under the title. Accepts inline JSX (e.g. for highlighted email addresses). */
+  subtitle?: React.ReactNode;
   /** Marketing copy on the hero panel (desktop only). */
   heroTitle?: React.ReactNode;
   heroDescription?: React.ReactNode;
