@@ -5,7 +5,7 @@ import { SelectedBillModal } from "./SelectedBillModal";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
 import { ApiService, BillData } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import useCurrency from "@/hooks/useCurrency";
 import CreateBillDialog from "../dialogs/CreateBillDialog";
 import { ChevronRight, Loader2 } from "lucide-react";

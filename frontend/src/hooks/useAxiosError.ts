@@ -1,5 +1,5 @@
 import { AxiosError } from "axios";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 
 export const toastAxiosError = (error: any, customError?: string) => {
   if (error instanceof AxiosError) {

@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Copy, Check, Link as LinkIcon, Loader2 } from "lucide-react";
 import { ApiService } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 interface InviteDialogProps {

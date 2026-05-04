@@ -3,7 +3,7 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Providers } from '@/components/Providers';
-import { Toaster } from 'react-hot-toast';
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: 'Community Core - Connect and Grow',

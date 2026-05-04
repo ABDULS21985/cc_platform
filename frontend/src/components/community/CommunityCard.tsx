@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 import { useState } from "react";
 import { ApiService } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 // Curated Unsplash cover images for variety until real thumbnails are available

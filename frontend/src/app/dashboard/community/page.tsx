@@ -12,7 +12,7 @@ import { CommunitySkeleton } from "@/components/community/CommunitySkeleton";
 import useUserData from "@/hooks/useUserData";
 import { toastAxiosError } from "@/hooks/useAxiosError";
 import { Button } from "@/components/ui/button";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 
 // Force dynamic rendering for this page
 export const dynamic = "force-dynamic";

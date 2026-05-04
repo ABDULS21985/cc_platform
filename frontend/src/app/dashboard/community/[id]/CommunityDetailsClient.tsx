@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ApiService, CommunityData, type MemberData } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import useUserData from "@/hooks/useUserData";
 import WalletTab from "@/components/community/WalletTab";
 import { toastAxiosError } from "@/hooks/useAxiosError";

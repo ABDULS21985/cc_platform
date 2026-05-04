@@ -8,7 +8,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useInView } from "@/hooks/useInView";
 import { ApiService, VerifyOTPPyload } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 function OTPVerificationContent() {

@@ -6,7 +6,7 @@ import { ApiService } from "@/services/api";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 
 export default function Protected({ children }: { children: React.ReactNode }) {
   const router = useRouter();

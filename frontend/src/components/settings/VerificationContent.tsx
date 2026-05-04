@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 

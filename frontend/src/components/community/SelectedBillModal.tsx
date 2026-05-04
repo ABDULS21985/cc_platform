@@ -6,7 +6,7 @@ import { ApiService, BillData, PayBillPayload } from "@/services/api";
 import useCurrency from "@/hooks/useCurrency";
 import { Button } from "../ui/button";
 import { useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 interface SelectedBillProps {

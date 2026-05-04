@@ -1,6 +1,6 @@
 import { ApiService, CreateOrganizationPayload } from "@/services/api";
 import { useState } from "react";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";

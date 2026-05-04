@@ -45,7 +45,7 @@ import {
   DialogTitle as AlertDialogTitle,
   DialogDescription as AlertDialogDescription,
 } from '@/components/ui/dialog';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 
 interface PostsTabProps {
   communityName: string;

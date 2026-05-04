@@ -3,7 +3,7 @@ import Image from "next/image";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiService } from "@/services/api";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 function VerifyingContent() {

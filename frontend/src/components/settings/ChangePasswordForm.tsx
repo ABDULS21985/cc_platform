@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Lock, ShieldCheck, KeyRound, Loader2 } from 'lucide-react';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 
 export function ChangePasswordForm() {

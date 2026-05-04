@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { useInView } from '@/hooks/useInView';
 import { ApiService, SignupPayload } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 
 export default function AccountSetupForm() {

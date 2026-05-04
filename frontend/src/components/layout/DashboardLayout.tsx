@@ -16,7 +16,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { SIDEBAR_LINKS } from '@/constants/sidebar-links';
 import { HelpCenterIcon, LogoutIcon, ArrowRightIcon } from '@/lib/svg-icons';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';

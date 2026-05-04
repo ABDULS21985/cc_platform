@@ -761,3 +761,35 @@
     background: rgba(255, 255, 255, 0.3);
   }
 }
+
+/* Honor OS-level reduced-motion preference for the legacy CSS keyframe utilities.
+   framer-motion is handled separately via <MotionConfig reducedMotion="user">. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-fade-in-left,
+  .animate-fade-in-right,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-scale-in,
+  .animate-pulse-scale,
+  .animate-bounce,
+  .shimmer-effect {
+    animation: none !important;
+  }
+
+  .hover-lift:hover,
+  .hover-scale:hover {
+    transform: none !important;
+  }
+}

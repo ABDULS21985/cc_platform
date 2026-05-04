@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Calendar, Loader2 } from 'lucide-react';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 
 export default function EnterBVN() {

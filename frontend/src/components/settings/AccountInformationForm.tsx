@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 
 export function AccountInformationForm() {

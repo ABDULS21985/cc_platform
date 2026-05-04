@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiService } from "@/services/api";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+import { toast } from 'sonner';
 import { Loader2, LogOut } from "lucide-react";
 
 interface LogoutDialogProps {

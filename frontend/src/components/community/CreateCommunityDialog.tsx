@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { toast } from 'react-hot-toast';
+import { toast } from 'sonner';
 import { Loader2, DollarSign, Plus, Users, Lock, Globe, Building2, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {

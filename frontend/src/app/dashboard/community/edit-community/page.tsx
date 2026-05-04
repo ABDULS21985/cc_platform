@@ -12,7 +12,7 @@ import { ArrowLeft, Loader2, DollarSign } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Image from 'next/image';
 import { ApiService } from '@/services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 
 function EditCommunityContent({ communityId }: { communityId: string | null }) {
