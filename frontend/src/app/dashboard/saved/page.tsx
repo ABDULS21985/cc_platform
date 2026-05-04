@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ApiService, type BookmarkApi } from '@/services/api';
 import {
   ArrowRight,
   Bookmark,
@@ -206,11 +207,56 @@ function relativeSaved(iso: string): string {
   return `${Math.round(days / 30)}mo ago`;
 }
 
+const SRV_PREFIX = 'srv-';
+const isServerId = (id: string) => id.startsWith(SRV_PREFIX);
+const serverIdNum = (id: string) => Number(id.slice(SRV_PREFIX.length));
+
+function mapApiBookmark(b: BookmarkApi): SavedItem {
+  return {
+    id: `${SRV_PREFIX}${b.id}`,
+    kind: b.kind,
+    title: b.title,
+    description: b.description,
+    source: b.source,
+    href: b.href || '#',
+    savedAt: b.savedAt || b.created_at,
+    amount: b.amount ?? undefined,
+    community: b.community ?? undefined,
+  };
+}
+
 export default function SavedPage() {
-  const [items, setItems] = useState<SavedItem[]>(MOCK);
+  const [items, setItems] = useState<SavedItem[]>([]);
+  const [usingMock, setUsingMock] = useState(false);
   const [tab, setTab] = useState<TabValue>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.bookmarks.list({ limit: 100 });
+        const list = res.data?.data?.bookmarks ?? [];
+        if (cancelled) return;
+        if (list.length === 0) {
+          setItems(MOCK);
+          setUsingMock(true);
+        } else {
+          setItems(list.map(mapApiBookmark));
+          setUsingMock(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setItems(MOCK);
+          setUsingMock(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const counts = useMemo<Record<TabValue, number>>(
     () => ({
@@ -247,14 +293,23 @@ export default function SavedPage() {
   const remove = (id: string) => {
     const item = items.find((i) => i.id === id);
     setItems((prev) => prev.filter((i) => i.id !== id));
+    if (!usingMock && isServerId(id)) {
+      ApiService.bookmarks.delete(serverIdNum(id)).catch(() => {});
+    }
     toast.success(`Removed "${item?.title}"`);
   };
 
   const clearAll = () => {
     if (filtered.length === 0) return;
-    setItems((prev) =>
-      prev.filter((i) => !filtered.find((f) => f.id === i.id))
-    );
+    const filteredIds = new Set(filtered.map((f) => f.id));
+    setItems((prev) => prev.filter((i) => !filteredIds.has(i.id)));
+    if (!usingMock) {
+      for (const id of filteredIds) {
+        if (isServerId(id)) {
+          ApiService.bookmarks.delete(serverIdNum(id)).catch(() => {});
+        }
+      }
+    }
     toast.success(`Removed ${filtered.length} bookmarks`);
   };
 

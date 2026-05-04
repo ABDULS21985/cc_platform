@@ -890,7 +890,55 @@ export const ApiService = {
         `/v2/notifications/${id}`,
       ),
   },
+
+  // =========================================================================
+  // Bookmarks (saved items)
+  // =========================================================================
+  bookmarks: {
+    list: (params?: { limit?: number; offset?: number; kind?: string }) =>
+      axiosInstance.get<ApiResponse<{
+        bookmarks: BookmarkApi[];
+        pagination: { total: number; limit: number; offset: number };
+      }>>("/v2/bookmarks/", { params }),
+
+    create: (data: {
+      kind: "post" | "event" | "community" | "bill" | "transaction";
+      target_ref: string;
+      title: string;
+      description?: string;
+      source?: string;
+      href?: string;
+      amount?: string | null;
+      community_id?: number | null;
+      community_name?: string | null;
+    }) =>
+      axiosInstance.post<ApiResponse<{ bookmark: BookmarkApi; already_saved: boolean }>>(
+        "/v2/bookmarks/",
+        data,
+      ),
+
+    delete: (id: number) =>
+      axiosInstance.delete<ApiResponse<{ deleted: boolean }>>(
+        `/v2/bookmarks/${id}`,
+      ),
+  },
 };
+
+export interface BookmarkApi {
+  id: number;
+  user_id: number;
+  kind: "post" | "event" | "community" | "bill" | "transaction";
+  target_ref: string;
+  title: string;
+  description: string;
+  source: string;
+  href: string;
+  amount: string | null;
+  community: { id: string; name: string } | null;
+  savedAt: string;
+  created_at: string;
+  updated_at: string | null;
+}
 
 export interface NotificationApi {
   id: number;
