@@ -9,13 +9,14 @@ import {
   Clock,
   Receipt,
   ShieldCheck,
-  UserPlus,
   X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion, AnimatePresence, FadeIn } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 type PendingTone = 'destructive' | 'warning' | 'info';
 
@@ -28,37 +29,8 @@ interface PendingItem {
   cta: { label: string; href: string };
 }
 
-/**
- * Realistic placeholder items until the backend exposes a unified
- * `/v2/me/pending` endpoint. Each item is independently dismissible
- * for the session — dismissed IDs persist in sessionStorage.
- */
-const ITEMS: PendingItem[] = [
-  {
-    id: 'bill-overdue-april-dues',
-    icon: Receipt,
-    title: 'Estate dues — April',
-    meta: 'Due 2 days ago · ₦18,500',
-    tone: 'destructive',
-    cta: { label: 'Pay now', href: '/dashboard/community' },
-  },
-  {
-    id: 'kyc-bvn-pending',
-    icon: ShieldCheck,
-    title: 'Verify your BVN to unlock transfers above ₦200k',
-    meta: 'Takes about 60 seconds',
-    tone: 'warning',
-    cta: { label: 'Verify', href: '/bvn-verification' },
-  },
-  {
-    id: 'member-request-runners',
-    icon: UserPlus,
-    title: '3 new join requests for Lekki Runners',
-    meta: 'Awaiting your approval as admin',
-    tone: 'info',
-    cta: { label: 'Review', href: '/dashboard/community' },
-  },
-];
+const NGN = (n: number) =>
+  n.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const TONE_STYLES: Record<
   PendingTone,
@@ -93,6 +65,8 @@ const STORAGE_KEY = 'pending-dismissed';
 
 export function PendingActions() {
   const [dismissed, setDismissed] = React.useState<Set<string>>(() => new Set());
+  const [items, setItems] = React.useState<PendingItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -102,6 +76,80 @@ export function PendingActions() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // Build the pending list from real signals: overdue bills across joined
+  // communities + identity verification status. We don't have a unified
+  // /v2/me/pending endpoint — derived client-side from existing data.
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: PendingItem[] = [];
+      const [verificationRes, joinedRes] = await Promise.allSettled([
+        ApiService.verification.getStatus(),
+        ApiService.communities.joined({ limit: 50 }),
+      ]);
+
+      // 1. Identity verification — if not verified, show the action.
+      if (verificationRes.status === 'fulfilled') {
+        const v = verificationRes.value.data?.data;
+        if (v && !v.verified) {
+          next.push({
+            id: 'kyc-not-verified',
+            icon: ShieldCheck,
+            title: 'Verify your identity to unlock the wallet',
+            meta: 'Takes about 60 seconds',
+            tone: 'warning',
+            cta: { label: 'Verify', href: '/dashboard/settings?tab=verification' },
+          });
+        }
+      }
+
+      // 2. Overdue bills across all joined communities.
+      if (joinedRes.status === 'fulfilled') {
+        const joined = joinedRes.value.data?.data?.communities ?? [];
+        const billLists = await Promise.allSettled(
+          joined.map(async (c) => ({
+            community: c,
+            res: await ApiService.communities.getBills(c.id, { limit: 50 }),
+          })),
+        );
+        const now = Date.now();
+        for (const r of billLists) {
+          if (r.status !== 'fulfilled') continue;
+          const community = r.value.community;
+          const bills = ((r.value.res.data?.data as { bills?: unknown[] })?.bills ?? []) as Array<
+            Record<string, unknown>
+          >;
+          for (const bill of bills) {
+            const status = String(bill.status ?? '').toLowerCase();
+            if (status === 'paid' || status === 'completed' || status === 'cancelled') continue;
+            const due = String(bill.due_date ?? '');
+            if (!due) continue;
+            const dueMs = new Date(due).getTime();
+            if (Number.isNaN(dueMs) || dueMs >= now) continue;
+
+            const daysAgo = Math.max(1, Math.floor((now - dueMs) / 86_400_000));
+            next.push({
+              id: `bill-${bill.id}`,
+              icon: Receipt,
+              title: `${bill.title} · ${community.name}`,
+              meta: `Due ${daysAgo} day${daysAgo === 1 ? '' : 's'} ago · ₦${NGN(Number(bill.amount ?? 0))}`,
+              tone: 'destructive',
+              cta: { label: 'Pay now', href: '/dashboard/bills' },
+            });
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setItems(next.slice(0, 5));
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const persist = React.useCallback((set: Set<string>) => {
@@ -122,10 +170,19 @@ export function PendingActions() {
     });
   };
 
-  const visible = ITEMS.filter((it) => !dismissed.has(it.id));
+  const visible = items.filter((it) => !dismissed.has(it.id));
 
-  // When everything is cleared, show a calm "all caught up" state once.
-  const allClear = visible.length === 0 && ITEMS.length > 0;
+  // Show the "all caught up" state when:
+  //   - we've finished loading, AND
+  //   - there are no pending items (either zero from API or all dismissed).
+  const allClear = !loading && visible.length === 0;
+  // When loading and we have no items yet, render a small skeleton row.
+  const showSkeletons = loading && visible.length === 0;
+  if (!loading && items.length === 0 && dismissed.size === 0) {
+    // Truly nothing pending and nothing was dismissed — hide the whole
+    // section to avoid showing an empty banner on a brand-new account.
+    return null;
+  }
 
   return (
     <FadeIn>
@@ -146,9 +203,11 @@ export function PendingActions() {
                 Needs your attention
               </h2>
               <p className="text-xs text-muted-foreground">
-                {allClear
-                  ? "You're all caught up"
-                  : `${visible.length} item${visible.length === 1 ? '' : 's'} pending`}
+                {showSkeletons
+                  ? 'Checking your account…'
+                  : allClear
+                    ? "You're all caught up"
+                    : `${visible.length} item${visible.length === 1 ? '' : 's'} pending`}
               </p>
             </div>
           </div>

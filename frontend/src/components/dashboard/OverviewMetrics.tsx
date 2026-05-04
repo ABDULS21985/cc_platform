@@ -43,20 +43,78 @@ export function OverviewMetrics() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await ApiService.wallet.getSummary();
-        const wallet = res.data?.data?.wallet;
-        if (cancelled) return;
-        if (wallet) {
-          setData({
-            balance: wallet.balance,
-            currency: wallet.currency,
-          });
+      // Kick off the three sources in parallel — wallet summary, recent
+      // transactions for the weekly window, joined communities (then
+      // their bills) for the bills-due tally.
+      const [walletRes, txRes, joinedRes] = await Promise.allSettled([
+        ApiService.wallet.getSummary(),
+        ApiService.wallet.getTransactions({ limit: 200 }),
+        ApiService.communities.joined({ limit: 50 }),
+      ]);
+      if (cancelled) return;
+
+      // Wallet balance
+      let balance: string | number = 0;
+      let currency = 'NGN';
+      if (walletRes.status === 'fulfilled') {
+        const w = walletRes.value.data?.data?.wallet;
+        if (w) {
+          balance = w.balance;
+          currency = w.currency ?? 'NGN';
         }
-      } catch {
-        // silent — show fallback values via the loading→empty path
-      } finally {
-        if (!cancelled) setLoading(false);
+      }
+
+      // Weekly in/out from the last 7 days of transactions
+      let weeklyIn = 0;
+      let weeklyOut = 0;
+      if (txRes.status === 'fulfilled') {
+        const items = ((txRes.value.data?.data as { transactions?: unknown[] })?.transactions ?? []) as Array<
+          Record<string, unknown>
+        >;
+        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        for (const t of items) {
+          const ts = String(t.completed_at ?? t.created_at ?? '');
+          if (!ts || new Date(ts).getTime() < cutoff) continue;
+          const status = String(t.status ?? '').toLowerCase();
+          if (status && status !== 'successful' && status !== 'completed') continue;
+          const signed = Number(t.signed_amount ?? 0);
+          if (signed > 0) weeklyIn += signed;
+          else if (signed < 0) weeklyOut += -signed;
+        }
+      }
+
+      // Bills due across joined communities
+      let billsDueCount = 0;
+      let billsDueAmount = 0;
+      if (joinedRes.status === 'fulfilled') {
+        const joined = joinedRes.value.data?.data?.communities ?? [];
+        const billLists = await Promise.allSettled(
+          joined.map((c) => ApiService.communities.getBills(c.id, { limit: 100 })),
+        );
+        for (const b of billLists) {
+          if (b.status !== 'fulfilled') continue;
+          const items = ((b.value.data?.data as { bills?: unknown[] })?.bills ?? []) as Array<
+            Record<string, unknown>
+          >;
+          for (const bill of items) {
+            const status = String(bill.status ?? '').toLowerCase();
+            if (status === 'paid' || status === 'completed' || status === 'cancelled') continue;
+            billsDueCount += 1;
+            billsDueAmount += Number(bill.amount ?? 0);
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setData({
+          balance,
+          currency,
+          bills_due_count: billsDueCount,
+          bills_due_amount: billsDueAmount,
+          weekly_in: weeklyIn,
+          weekly_out: weeklyOut,
+        });
+        setLoading(false);
       }
     })();
     return () => {
@@ -65,13 +123,10 @@ export function OverviewMetrics() {
   }, []);
 
   const balanceNumber = Number(data?.balance ?? 0);
-
-  // Plausible defaults for the secondary metrics (real API surface for these
-  // is not yet wired; replace once endpoints land).
-  const billsDueCount = data?.bills_due_count ?? 3;
-  const billsDueAmount = Number(data?.bills_due_amount ?? 18_500);
-  const weeklyIn = Number(data?.weekly_in ?? 184_200);
-  const weeklyOut = Number(data?.weekly_out ?? 96_400);
+  const billsDueCount = data?.bills_due_count ?? 0;
+  const billsDueAmount = Number(data?.bills_due_amount ?? 0);
+  const weeklyIn = Number(data?.weekly_in ?? 0);
+  const weeklyOut = Number(data?.weekly_out ?? 0);
   const weeklyDelta = weeklyIn - weeklyOut;
   const weeklyPositive = weeklyDelta >= 0;
 
