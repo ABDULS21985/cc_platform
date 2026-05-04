@@ -34,6 +34,7 @@ import { ApiService, CommunityData, type MemberData } from "@/services/api";
 import { toast } from 'sonner';
 import useUserData from "@/hooks/useUserData";
 import WalletTab from "@/components/community/WalletTab";
+import { MuteCommunityButton } from "@/components/community/MuteCommunityButton";
 import { toastAxiosError } from "@/hooks/useAxiosError";
 
 interface CommunityDetailsClientProps {
@@ -303,6 +304,10 @@ export default function CommunityDetailsClient({
                         <Pencil className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </Button>
                     )}
+                    <MuteCommunityButton
+                      communityId={communityId}
+                      visible={isMember || isOwner}
+                    />
                   </div>
                   
                   {isMember || isOwner ? (
