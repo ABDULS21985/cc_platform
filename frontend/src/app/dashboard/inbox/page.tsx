@@ -447,8 +447,9 @@ export default function InboxPage() {
     if (usingMock) return;
     for (const it of newlyRead) {
       if (isServerId(it.id)) {
-        // Context wraps the API call AND decrements the bell badge count.
-        ctxMarkRead(serverIdNum(it.id));
+        // Context wraps the API call AND decrements the bell badge count
+        // for the specific category, keeping sidebar badges in sync.
+        ctxMarkRead(serverIdNum(it.id), it.category);
       }
     }
   };

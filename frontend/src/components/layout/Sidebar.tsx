@@ -31,6 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,19 @@ interface NavItem {
   badgeTone?: BadgeTone;
   /** When true, the link is shown but not yet wired to a real route. */
   comingSoon?: boolean;
+  /**
+   * If set, the badge shows the live unread count for this notification
+   * category from `useNotifications()`. The literal `total` shows the
+   * sum of all unread (used for Inbox).
+   */
+  unreadCategory?:
+    | 'money'
+    | 'bills'
+    | 'communities'
+    | 'events'
+    | 'security'
+    | 'system'
+    | 'total';
 }
 
 interface NavSection {
@@ -73,8 +87,8 @@ const SECTIONS: NavSection[] = [
   {
     heading: 'Money',
     items: [
-      { href: '/dashboard/wallet', label: 'Wallet', icon: <WalletIcon />, badge: '3', badgeTone: 'count' },
-      { href: '/dashboard/bills', label: 'Bills', icon: <Receipt className="size-5" />, badge: '2', badgeTone: 'count' },
+      { href: '/dashboard/wallet', label: 'Wallet', icon: <WalletIcon />, unreadCategory: 'money' },
+      { href: '/dashboard/bills', label: 'Bills', icon: <Receipt className="size-5" />, unreadCategory: 'bills' },
       { href: '/dashboard/activity', label: 'Activity', icon: <Activity className="size-5" /> },
       { href: '/dashboard/recurring', label: 'Recurring', icon: <Repeat className="size-5" /> },
     ],
@@ -82,7 +96,7 @@ const SECTIONS: NavSection[] = [
   {
     heading: 'Workspace',
     items: [
-      { href: '/dashboard/inbox', label: 'Inbox', icon: <Inbox className="size-5" />, badge: '12', badgeTone: 'count' },
+      { href: '/dashboard/inbox', label: 'Inbox', icon: <Inbox className="size-5" />, unreadCategory: 'total' },
       { href: '/dashboard/saved', label: 'Saved', icon: <Bookmark className="size-5" /> },
     ],
   },
@@ -137,6 +151,19 @@ export function Sidebar({ isOpen, onToggle, onCloseMobile, user, onLogout }: Sid
   const activeTab = searchParams?.get('tab') ?? 'account-info';
   const [settingsOpen, setSettingsOpen] = React.useState(
     pathname.startsWith('/dashboard/settings')
+  );
+  const { unreadCount, unreadByCategory } = useNotifications();
+  const liveBadgeFor = React.useCallback(
+    (item: NavItem): string | null => {
+      if (!item.unreadCategory) return null;
+      const n =
+        item.unreadCategory === 'total'
+          ? unreadCount
+          : unreadByCategory[item.unreadCategory] ?? 0;
+      if (n <= 0) return null;
+      return n > 99 ? '99+' : String(n);
+    },
+    [unreadCount, unreadByCategory]
   );
 
   React.useEffect(() => {
@@ -379,13 +406,19 @@ export function Sidebar({ isOpen, onToggle, onCloseMobile, user, onLogout }: Sid
                       </AnimatePresence>
                     );
 
+                    const liveBadge = liveBadgeFor(item);
+                    const badgeText = liveBadge ?? item.badge;
+                    const badgeTone: BadgeTone | undefined = liveBadge
+                      ? 'count'
+                      : item.badgeTone;
+
                     const badgeNode =
-                      item.badge && isOpen ? (
+                      badgeText && isOpen ? (
                         <Badge
                           variant={
                             active
                               ? 'outline'
-                              : badgeVariantFor(item.badgeTone)
+                              : badgeVariantFor(badgeTone)
                           }
                           size="sm"
                           className={cn(
@@ -394,15 +427,15 @@ export function Sidebar({ isOpen, onToggle, onCloseMobile, user, onLogout }: Sid
                               'border-sidebar-primary-foreground/30 bg-sidebar-primary-foreground/15 text-sidebar-primary-foreground'
                           )}
                         >
-                          {item.badge}
+                          {badgeText}
                         </Badge>
                       ) : null;
 
                     const collapsedDot =
-                      item.badge && !isOpen ? (
+                      badgeText && !isOpen ? (
                         <span
-                          aria-label={`${item.badge}${
-                            item.badgeTone === 'soon' ? '' : ' pending'
+                          aria-label={`${badgeText}${
+                            badgeTone === 'soon' ? '' : ' pending'
                           }`}
                           className={cn(
                             'absolute right-1.5 top-1.5 inline-flex size-2 rounded-full ring-2 ring-sidebar',
