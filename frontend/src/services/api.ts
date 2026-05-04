@@ -889,6 +889,19 @@ export const ApiService = {
       axiosInstance.delete<ApiResponse<{ deleted: boolean }>>(
         `/v2/notifications/${id}`,
       ),
+
+    getPreferences: () =>
+      axiosInstance.get<ApiResponse<{ preferences: NotificationPreferencesApi }>>(
+        "/v2/notifications/preferences",
+      ),
+
+    updatePreferences: (
+      flags: Partial<Omit<NotificationPreferencesApi, "user_id" | "updated_at" | "security">>,
+    ) =>
+      axiosInstance.put<ApiResponse<{ preferences: NotificationPreferencesApi }>>(
+        "/v2/notifications/preferences",
+        flags,
+      ),
   },
 
   // =========================================================================
@@ -1058,6 +1071,18 @@ export interface BookmarkApi {
   community: { id: string; name: string } | null;
   savedAt: string;
   created_at: string;
+  updated_at: string | null;
+}
+
+export interface NotificationPreferencesApi {
+  user_id: number;
+  money: boolean;
+  bills: boolean;
+  communities: boolean;
+  events: boolean;
+  /** Always true server-side; surfaced as locked in the UI. */
+  security: true;
+  system: boolean;
   updated_at: string | null;
 }
 

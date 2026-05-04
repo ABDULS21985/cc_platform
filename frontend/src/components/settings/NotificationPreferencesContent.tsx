@@ -1,17 +1,26 @@
 'use client';
 
 import * as React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ArrowDownLeft,
   Bell,
+  Calendar,
+  Lock,
   Mail,
   MessageSquare,
+  Receipt,
+  ShieldCheck,
   Smartphone,
+  Sparkles,
+  Users,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { ApiService, type NotificationPreferencesApi } from '@/services/api';
 
 interface ChannelPref {
   id: 'email' | 'sms' | 'push' | 'in_app';
@@ -19,40 +28,57 @@ interface ChannelPref {
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
+  enabled: boolean;
+  /** Channels other than `in_app` are not yet wired to the backend. */
+  comingSoon?: boolean;
 }
 
 const CHANNELS: ChannelPref[] = [
+  {
+    id: 'in_app',
+    label: 'In-app',
+    description: 'Notifications in your dashboard inbox and bell.',
+    icon: Bell,
+    enabled: true,
+  },
   {
     id: 'email',
     label: 'Email',
     description: 'Receipts, alerts, and digest emails.',
     icon: Mail,
+    enabled: false,
+    comingSoon: true,
+    badge: 'Coming soon',
   },
   {
     id: 'sms',
     label: 'SMS',
     description: 'Transaction confirmations and security codes.',
     icon: MessageSquare,
+    enabled: false,
+    comingSoon: true,
+    badge: 'Coming soon',
   },
   {
     id: 'push',
     label: 'Mobile push',
     description: 'Real-time alerts on your phone.',
     icon: Smartphone,
-    badge: 'Beta',
-  },
-  {
-    id: 'in_app',
-    label: 'In-app',
-    description: 'Notifications in your dashboard inbox.',
-    icon: Bell,
+    enabled: false,
+    comingSoon: true,
+    badge: 'Coming soon',
   },
 ];
 
+type CategoryKey = 'money' | 'bills' | 'communities' | 'events' | 'security' | 'system';
+
 interface CategoryPref {
-  id: string;
+  id: CategoryKey;
   label: string;
   description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /** Locked-on (cannot be muted). */
+  locked?: boolean;
 }
 
 const CATEGORIES: CategoryPref[] = [
@@ -60,45 +86,102 @@ const CATEGORIES: CategoryPref[] = [
     id: 'money',
     label: 'Money movements',
     description: 'Transfers, deposits, withdrawals, and reversals.',
+    icon: ArrowDownLeft,
   },
   {
     id: 'bills',
     label: 'Bills & dues',
     description: 'New bills, reminders, and overdue alerts.',
+    icon: Receipt,
   },
   {
-    id: 'community',
+    id: 'communities',
     label: 'Community activity',
-    description: 'New posts, member joins, and event updates.',
+    description: 'Joins, role changes, and posts in your circles.',
+    icon: Users,
+  },
+  {
+    id: 'events',
+    label: 'Events',
+    description: 'New events, reminders, and host updates.',
+    icon: Calendar,
   },
   {
     id: 'security',
     label: 'Security',
-    description: 'Login attempts, password changes, and MFA events.',
+    description:
+      'Sign-ins, password changes, and account alerts. Always on for safety.',
+    icon: ShieldCheck,
+    locked: true,
+  },
+  {
+    id: 'system',
+    label: 'Product updates',
+    description: 'New features and platform announcements.',
+    icon: Sparkles,
   },
 ];
 
+const DEFAULT_PREFS: Record<CategoryKey, boolean> = {
+  money: true,
+  bills: true,
+  communities: true,
+  events: true,
+  security: true,
+  system: true,
+};
+
 export function NotificationPreferencesContent() {
-  const [channels, setChannels] = useState<Record<string, boolean>>({
-    email: true,
-    sms: true,
-    push: false,
-    in_app: true,
-  });
-  const [categories, setCategories] = useState<Record<string, boolean>>({
-    money: true,
-    bills: true,
-    community: true,
-    security: true,
-  });
+  const [prefs, setPrefs] = useState<Record<CategoryKey, boolean>>(DEFAULT_PREFS);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<CategoryKey | null>(null);
 
-  const toggleChannel = (id: string, value: boolean) => {
-    setChannels((prev) => ({ ...prev, [id]: value }));
-    toast.success(`${id.toUpperCase()} notifications ${value ? 'enabled' : 'disabled'}`);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.notifications.getPreferences();
+        const remote = res.data?.data?.preferences;
+        if (!cancelled && remote) {
+          setPrefs({
+            money: remote.money,
+            bills: remote.bills,
+            communities: remote.communities,
+            events: remote.events,
+            security: remote.security,
+            system: remote.system,
+          });
+        }
+      } catch {
+        // keep defaults
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const toggleCategory = (id: string, value: boolean) => {
-    setCategories((prev) => ({ ...prev, [id]: value }));
+  const toggleCategory = async (id: CategoryKey, value: boolean) => {
+    if (id === 'security') return;
+    const prev = prefs[id];
+    setPrefs((p) => ({ ...p, [id]: value }));
+    setSavingId(id);
+    try {
+      await ApiService.notifications.updatePreferences({ [id]: value } as Partial<
+        Omit<NotificationPreferencesApi, 'user_id' | 'updated_at' | 'security'>
+      >);
+      toast.success(
+        `${value ? 'Enabled' : 'Muted'} ${CATEGORIES.find((c) => c.id === id)?.label}`,
+      );
+    } catch {
+      // Revert on failure.
+      setPrefs((p) => ({ ...p, [id]: prev }));
+      toast.error('Could not update preference');
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
@@ -113,7 +196,8 @@ export function NotificationPreferencesContent() {
             Channels
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Choose where you receive notifications.
+            Where notifications can reach you. In-app is on by default; other
+            channels arrive in a future release.
           </p>
         </header>
         <Card variant="default" density="compact">
@@ -136,7 +220,7 @@ export function NotificationPreferencesContent() {
                         {c.label}
                       </p>
                       {c.badge && (
-                        <Badge variant="infoSoft" size="sm">
+                        <Badge variant={c.comingSoon ? 'soft' : 'infoSoft'} size="sm">
                           {c.badge}
                         </Badge>
                       )}
@@ -145,9 +229,9 @@ export function NotificationPreferencesContent() {
                   </div>
                 </div>
                 <Switch
-                  checked={channels[c.id]}
-                  onCheckedChange={(v) => toggleChannel(c.id, v)}
-                  aria-label={`Toggle ${c.label} notifications`}
+                  checked={c.enabled}
+                  disabled={c.comingSoon}
+                  aria-label={`${c.label} channel`}
                 />
               </div>
             ))}
@@ -165,27 +249,69 @@ export function NotificationPreferencesContent() {
             Categories
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Choose which kinds of notifications you receive.
+            Mute the kinds of notifications you'd rather not hear about.
           </p>
         </header>
         <Card variant="default" density="compact">
           <CardContent className="divide-y divide-border px-0">
-            {CATEGORIES.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between gap-4 px-5 py-4 first:rounded-t-2xl last:rounded-b-2xl"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{c.label}</p>
-                  <p className="text-xs text-muted-foreground">{c.description}</p>
-                </div>
-                <Switch
-                  checked={categories[c.id]}
-                  onCheckedChange={(v) => toggleCategory(c.id, v)}
-                  aria-label={`Toggle ${c.label} category`}
-                />
-              </div>
-            ))}
+            {loading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-4 px-5 py-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="size-9 rounded-xl" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-3 w-32" />
+                        <Skeleton className="h-2.5 w-56" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-9 rounded-full" />
+                  </div>
+                ))
+              : CATEGORIES.map((c) => {
+                  const Icon = c.icon;
+                  const isLocked = !!c.locked;
+                  const isSaving = savingId === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between gap-4 px-5 py-4 first:rounded-t-2xl last:rounded-b-2xl"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted/60 text-muted-foreground"
+                          aria-hidden="true"
+                        >
+                          <Icon className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-foreground">
+                              {c.label}
+                            </p>
+                            {isLocked && (
+                              <Badge variant="soft" size="sm" className="gap-1">
+                                <Lock className="size-3" aria-hidden="true" />
+                                Always on
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {c.description}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={prefs[c.id]}
+                        onCheckedChange={(v) => toggleCategory(c.id, v)}
+                        disabled={isLocked || isSaving}
+                        aria-label={`Toggle ${c.label} notifications`}
+                      />
+                    </div>
+                  );
+                })}
           </CardContent>
         </Card>
       </section>

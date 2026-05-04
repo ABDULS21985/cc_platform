@@ -1,6 +1,7 @@
 """Notification REST resource."""
 import logging
 
+from flask import jsonify, make_response
 from flask.views import MethodView
 from flask_smorest import Blueprint
 
@@ -69,6 +70,20 @@ class NotificationCollectionResource(MethodView):
                 action_href=data.get('action_href'),
                 action_label=data.get('action_label'),
             )
+            if notif is None:
+                # Category is muted by user preferences. Bypass the smorest
+                # response filter (which is locked to NotificationResponseSchema)
+                # so the explanation body actually reaches the client.
+                return make_response(
+                    jsonify(
+                        {
+                            'success': True,
+                            'message': 'Notification suppressed by user preferences',
+                            'data': {'skipped': True, 'reason': 'category_muted'},
+                        }
+                    ),
+                    200,
+                )
             return format_data(
                 data=notif.to_dict(), message='Notification created', status_code=201
             )
