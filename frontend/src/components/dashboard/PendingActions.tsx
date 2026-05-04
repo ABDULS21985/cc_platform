@@ -219,7 +219,23 @@ export function PendingActions() {
           )}
         </header>
 
-        {allClear ? (
+        {showSkeletons ? (
+          <ul className="space-y-2.5">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <li
+                key={i}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5"
+              >
+                <Skeleton className="size-9 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-2/3" />
+                  <Skeleton className="h-2.5 w-1/3" />
+                </div>
+                <Skeleton className="h-7 w-20 rounded-md" />
+              </li>
+            ))}
+          </ul>
+        ) : allClear ? (
           <div className="flex items-center gap-3 rounded-xl border border-success/30 bg-success/5 p-4">
             <span className="grid size-9 place-items-center rounded-full bg-success/15 text-success">
               <CheckCircle2 className="size-4" aria-hidden="true" />
