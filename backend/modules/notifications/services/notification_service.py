@@ -27,6 +27,21 @@ class NotificationService:
     ):
         if category not in CATEGORIES:
             category = 'system'
+
+        # Respect per-user category mutes. Security notifications always go
+        # through; everything else honors the user's preference. Failures
+        # here should fall back to delivering (better noisy than missed).
+        try:
+            pref = self.repo.get_or_create_preferences(user_id)
+            if not pref.is_enabled(category):
+                logger.debug(
+                    'skip notification for user %s — category %s muted',
+                    user_id, category,
+                )
+                return None
+        except Exception as exc:
+            logger.warning('preference check failed for user %s: %s', user_id, exc)
+
         notif = self.repo.create(
             user_id=user_id,
             category=category,
@@ -92,3 +107,13 @@ class NotificationService:
         if not ok:
             return {'error': 'Notification not found', 'code': 'NOT_FOUND'}, 404
         return {'deleted': True}, 200
+
+    def get_preferences(self, user_id: int) -> Tuple[Dict[str, Any], int]:
+        pref = self.repo.get_or_create_preferences(user_id)
+        return {'preferences': pref.to_dict()}, 200
+
+    def update_preferences(
+        self, user_id: int, flags: Dict[str, bool]
+    ) -> Tuple[Dict[str, Any], int]:
+        pref = self.repo.update_preferences(user_id, **flags)
+        return {'preferences': pref.to_dict()}, 200

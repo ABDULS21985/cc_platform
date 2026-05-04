@@ -6,6 +6,7 @@ from sqlalchemy import desc
 
 from modules.auth_v2.extensions import db
 from modules.notifications.models.notification import Notification
+from modules.notifications.models.preference import NotificationPreference
 
 
 class NotificationRepository:
@@ -69,3 +70,28 @@ class NotificationRepository:
         db.session.delete(notif)
         db.session.commit()
         return True
+
+    def get_or_create_preferences(self, user_id: int) -> NotificationPreference:
+        pref = NotificationPreference.query.filter_by(user_id=user_id).first()
+        if pref is None:
+            pref = NotificationPreference(user_id=user_id)
+            db.session.add(pref)
+            db.session.commit()
+        return pref
+
+    def update_preferences(self, user_id: int, **flags: bool) -> NotificationPreference:
+        pref = self.get_or_create_preferences(user_id)
+        # Map external category names to model column names.
+        column_map = {
+            'money': 'money_enabled',
+            'bills': 'bills_enabled',
+            'communities': 'communities_enabled',
+            'events': 'events_enabled',
+            'system': 'system_enabled',
+        }
+        for category, value in flags.items():
+            col = column_map.get(category)
+            if col and isinstance(value, bool):
+                setattr(pref, col, value)
+        db.session.commit()
+        return pref

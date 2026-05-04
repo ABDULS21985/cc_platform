@@ -60,3 +60,12 @@ class NotificationErrorSchema(Schema):
     message = fields.String()
     error = fields.String()
     code = fields.String()
+
+
+class NotificationPreferencesSchema(Schema):
+    """All fields optional — only ones provided are updated."""
+    money = fields.Boolean(load_default=None, allow_none=True)
+    bills = fields.Boolean(load_default=None, allow_none=True)
+    communities = fields.Boolean(load_default=None, allow_none=True)
+    events = fields.Boolean(load_default=None, allow_none=True)
+    system = fields.Boolean(load_default=None, allow_none=True)
