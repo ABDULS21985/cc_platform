@@ -1,100 +1,152 @@
 'use client';
 
-import { User, ShieldCheck, Bell, Trash2, ChevronRight, Fingerprint, History, Users } from 'lucide-react';
+import {
+  User,
+  ShieldCheck,
+  Bell,
+  Trash2,
+  ChevronRight,
+  Fingerprint,
+  History,
+  Users,
+} from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 interface SettingsSidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
-export function SettingsSidebar({
-  activeTab,
-  onTabChange,
-}: SettingsSidebarProps) {
-  const menuGroups = [
-    {
-      title: 'Account Settings',
-      items: [
-        { id: 'account-info', label: 'Personal Information', description: 'Update your profile and bio', icon: User },
-        { id: 'verification', label: 'Identity Verification', description: 'KYC, BVN, and NIN status', icon: Fingerprint },
-        { id: 'notification', label: 'Notifications', description: 'Preferences for alerts', icon: Bell },
-      ]
-    },
-    {
-      title: 'Security',
-      items: [
-        { id: 'change-password', label: 'Password', description: 'Change your login credentials', icon: ShieldCheck },
-        { id: 'login-history', label: 'Login History', description: 'Recent account activity', icon: History },
-        { id: 'role-access', label: 'Admin Management', description: 'Manage permissions', icon: Users },
-      ]
-    }
-  ];
+interface SettingsItem {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
 
+interface SettingsGroup {
+  title: string;
+  items: SettingsItem[];
+}
+
+const GROUPS: SettingsGroup[] = [
+  {
+    title: 'Account',
+    items: [
+      { id: 'account-info', label: 'Personal information', description: 'Profile and bio', icon: User },
+      { id: 'verification', label: 'Identity verification', description: 'KYC, BVN, and NIN status', icon: Fingerprint },
+      { id: 'notification', label: 'Notifications', description: 'Alert preferences', icon: Bell },
+    ],
+  },
+  {
+    title: 'Security',
+    items: [
+      { id: 'change-password', label: 'Password', description: 'Change your credentials', icon: ShieldCheck },
+      { id: 'login-history', label: 'Login history', description: 'Recent account activity', icon: History },
+      { id: 'role-access', label: 'Admin management', description: 'Manage permissions', icon: Users },
+    ],
+  },
+];
+
+export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps) {
   return (
-    <div className="w-80 flex flex-col gap-6">
-      {menuGroups.map((group, groupIdx) => (
-        <div key={groupIdx} className="bg-white/80 backdrop-blur-xl rounded-3xl p-4 border border-white/20 shadow-soft">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-3 mb-4">{group.title}</h2>
-          <div className="space-y-1">
+    <nav aria-label="Settings sections" className="flex w-full flex-col gap-4 lg:w-80">
+      {GROUPS.map((group) => (
+        <Card key={group.title} variant="default" density="compact" className="px-2 py-3">
+          <h2 className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {group.title}
+          </h2>
+          <ul className="space-y-1" role="list">
             {group.items.map((item) => {
               const isActive = activeTab === item.id;
               const Icon = item.icon;
               return (
-                <button
-                  key={item.id}
-                  onClick={() => onTabChange(item.id)}
-                  className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${
-                    isActive
-                      ? 'bg-teal-50 text-[#0E9DA5] shadow-sm'
-                      : 'text-gray-500 hover:bg-gray-50/50 hover:text-gray-900'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl transition-colors ${
-                      isActive ? 'bg-white shadow-sm' : 'bg-gray-50 group-hover:bg-white'
-                    }`}>
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#0E9DA5]' : 'text-gray-400 group-hover:text-gray-600'}`} />
-                    </div>
-                    <div className="text-left">
-                      <div className="text-sm font-extrabold tracking-tight leading-none mb-1">{item.label}</div>
-                      <div className={`text-[10px] font-medium leading-none ${isActive ? 'text-teal-600/70' : 'text-gray-400'}`}>
-                        {item.description}
-                      </div>
-                    </div>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'text-[#0E9DA5] translate-x-1' : 'text-gray-300 group-hover:text-gray-400'}`} />
-                </button>
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => onTabChange(item.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'group flex w-full items-center justify-between rounded-xl p-2.5 text-left transition-colors',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                      isActive
+                        ? 'bg-brand-soft text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                    )}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          'grid size-9 place-items-center rounded-lg transition-colors',
+                          isActive
+                            ? 'bg-card text-primary shadow-xs'
+                            : 'bg-muted text-muted-foreground group-hover:bg-card group-hover:text-foreground'
+                        )}
+                      >
+                        <Icon className="size-4" aria-hidden="true" />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold leading-tight tracking-tight">
+                          {item.label}
+                        </span>
+                        <span className="mt-0.5 block text-xs leading-tight">
+                          {item.description}
+                        </span>
+                      </span>
+                    </span>
+                    <ChevronRight
+                      className={cn(
+                        'size-4 shrink-0 transition-transform',
+                        isActive ? 'translate-x-0.5 text-primary' : 'text-muted-foreground/60'
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </li>
               );
             })}
-          </div>
-        </div>
+          </ul>
+        </Card>
       ))}
 
-      {/* Danger Zone */}
-      <div className="bg-red-50/30 backdrop-blur-xl rounded-3xl p-4 border border-red-100/50 shadow-soft">
-        <h2 className="text-xs font-bold text-red-400 uppercase tracking-widest px-3 mb-4">Danger Zone</h2>
+      {/* Danger zone */}
+      <Card
+        variant="outline"
+        density="compact"
+        className="border-destructive/30 bg-destructive/5 px-2 py-3"
+      >
+        <h2 className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-widest text-destructive/80">
+          Danger zone
+        </h2>
         <button
+          type="button"
           onClick={() => onTabChange('deactivate')}
-          className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all group ${
+          aria-current={activeTab === 'deactivate' ? 'page' : undefined}
+          className={cn(
+            'group flex w-full items-center justify-between rounded-xl p-2.5 text-left transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive focus-visible:ring-offset-2 focus-visible:ring-offset-background',
             activeTab === 'deactivate'
-              ? 'bg-red-50 text-red-600'
-              : 'text-red-400 hover:bg-red-50/50 hover:text-red-600'
-          }`}
+              ? 'bg-destructive/10 text-destructive'
+              : 'text-destructive/70 hover:bg-destructive/10 hover:text-destructive'
+          )}
         >
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl bg-red-50 group-hover:bg-red-100/50 transition-colors`}>
-              <Trash2 className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-extrabold tracking-tight leading-none mb-1">Deactivate Account</div>
-              <div className="text-[10px] font-medium leading-none opacity-70">
+          <span className="flex items-center gap-3">
+            <span className="grid size-9 place-items-center rounded-lg bg-destructive/10 text-destructive transition-colors group-hover:bg-destructive/15">
+              <Trash2 className="size-4" aria-hidden="true" />
+            </span>
+            <span>
+              <span className="block text-sm font-semibold leading-tight tracking-tight">
+                Deactivate account
+              </span>
+              <span className="mt-0.5 block text-xs leading-tight opacity-80">
                 Permanently delete data
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4" />
+              </span>
+            </span>
+          </span>
+          <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
         </button>
-      </div>
-    </div>
+      </Card>
+    </nav>
   );
 }
