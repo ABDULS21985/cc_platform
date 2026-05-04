@@ -1,12 +1,24 @@
 import os
 import logging
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env only when not in production. This avoids accidental .env use on Cloud.
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
 if FLASK_ENV != "production":
-    load_dotenv()
+    # Project layout (after the monorepo move) is:
+    #   /cc_platform/backend/.env   ← local backend overrides
+    #   /cc_platform/.ENV           ← shared canonical secrets (Neon DB, ENCRYPTION_KEY, ...)
+    # Load BOTH, with backend/.env winning for any conflict — that lets a dev
+    # override a single secret locally without forking the canonical file.
+    backend_root = Path(__file__).resolve().parent
+    project_root = backend_root.parent
+    # Order matters: dotenv won't override existing env vars, so load the more-
+    # general file (project root) first, then the more-specific (backend/.env).
+    for env_path in (project_root / ".ENV", project_root / ".env", backend_root / ".env"):
+        if env_path.exists():
+            load_dotenv(env_path, override=False)
 
 
 def _bool(value, default=False):

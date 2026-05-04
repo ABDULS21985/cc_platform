@@ -49,7 +49,7 @@ interface UserShape {
   phone_number?: string;
   bio?: string;
   user_type?: string;
-  profile_image?: string | null;
+  profile_photo?: string | null;
   created_at?: string;
   email_verified?: boolean;
 }
@@ -180,7 +180,7 @@ export function AccountInformationForm() {
           <div className="relative shrink-0">
             <Avatar className="size-24 rounded-3xl border-4 border-card shadow-xl ring-1 ring-border">
               <AvatarImage
-                src={userData?.profile_image || undefined}
+                src={userData?.profile_photo || undefined}
                 className="object-cover"
                 alt=""
               />

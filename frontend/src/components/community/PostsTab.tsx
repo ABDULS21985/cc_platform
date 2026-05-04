@@ -124,7 +124,7 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
       <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white/20 shadow-soft transition-all hover:shadow-lg">
         <div className="flex items-start gap-4">
           <Avatar className="h-12 w-12 border-2 border-white shadow-soft rounded-2xl overflow-hidden">
-            <AvatarImage src={userData?.profile_image || "/images/image.png"} className="object-cover" />
+            <AvatarImage src={userData?.profile_photo || "/images/image.png"} className="object-cover" />
             <AvatarFallback className="bg-teal-50 text-[#0E9DA5] font-bold">
               {userData?.firstname?.charAt(0) || "U"}
             </AvatarFallback>

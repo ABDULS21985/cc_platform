@@ -35,7 +35,7 @@ export function MembersTab({ members, isOwner, onRemoveMember, onChangeRole }: M
           <div key={member.id} className="py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Avatar className="w-10 h-10 border border-gray-100">
-                <AvatarImage src={member.user?.profile_image || ''} />
+                <AvatarImage src={member.user?.profile_photo || ''} />
                 <AvatarFallback>{(member.user?.firstname || member.user?.full_name || 'U').charAt(0)}</AvatarFallback>
               </Avatar>
               <div>

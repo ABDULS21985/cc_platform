@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity as ActivityIcon,
   Download,
@@ -9,6 +9,9 @@ import {
   Layers,
   Search,
 } from 'lucide-react';
+import { ApiService } from '@/services/api';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import {
   Select,
@@ -42,7 +45,85 @@ const hoursAgo = (h: number) => minutesAgo(h * 60);
 const daysAgo = (d: number) => hoursAgo(d * 24);
 const fmt = (n: number) => n.toLocaleString('en-NG');
 
-// ~25 mock transactions across types and dates.
+/**
+ * Map a backend WalletTransaction (from /api/v2/wallet/transactions) to the
+ * page's ActivityItem shape. Backend canonical fields:
+ *   { id, reference, bell_mfb_reference, type, amount (string), signed_amount,
+ *     fee, stamp_duty, net_amount, balance_before, balance_after, description,
+ *     source_account_name, source_bank_name, destination_account_name,
+ *     status, community_id, bill_id, transaction_type, meta, completed_at,
+ *     created_at }
+ */
+function mapApiTransaction(
+  t: Record<string, unknown>
+): ActivityItem {
+  const amount = Number(t.amount as string) || 0;
+  const signedAmount = Number(t.signed_amount as string) || amount;
+  const direction: 'in' | 'out' = signedAmount >= 0 ? 'in' : 'out';
+
+  const rawType = String(t.type ?? '').toLowerCase();
+  const transactionType = String(t.transaction_type ?? '').toLowerCase();
+  const isCredit = direction === 'in';
+  const isFee = (Number(t.fee as string) || 0) > 0 && amount === 0;
+  const isRefund = transactionType.includes('refund');
+
+  // Map onto the rich ActivityType union used by the row component.
+  let mappedType: ActivityItem['type'];
+  if (isRefund) mappedType = 'refund';
+  else if (isFee) mappedType = 'fee';
+  else if (rawType === 'deposit' || transactionType === 'deposit')
+    mappedType = 'deposit';
+  else if (rawType === 'withdrawal' || transactionType === 'withdrawal')
+    mappedType = 'withdrawal';
+  else if (t.bill_id) mappedType = isCredit ? 'bill-received' : 'bill-payment';
+  else if (transactionType.includes('card')) mappedType = 'card-charge';
+  else mappedType = isCredit ? 'transfer-in' : 'transfer-out';
+
+  const status: ActivityItem['status'] =
+    String(t.status) === 'successful' || String(t.status) === 'success' || String(t.status) === 'completed'
+      ? 'success'
+      : String(t.status) === 'pending' || String(t.status) === 'processing'
+        ? 'pending'
+        : 'failed';
+
+  const counterpartyName = isCredit
+    ? (t.source_account_name as string | null) || null
+    : (t.destination_account_name as string | null) || null;
+
+  return {
+    id: String(t.id ?? t.reference ?? Math.random()),
+    type: mappedType,
+    title: (t.description as string) || (isCredit ? 'Money in' : 'Money out'),
+    description:
+      [t.source_account_name, t.source_bank_name].filter(Boolean).join(' · ') ||
+      (t.destination_account_name as string) ||
+      '',
+    amount: Math.abs(amount),
+    amountFormatted: fmt(Math.abs(amount)),
+    direction,
+    status,
+    timestamp:
+      (t.completed_at as string) ||
+      (t.created_at as string) ||
+      new Date().toISOString(),
+    community: t.community_id
+      ? { id: String(t.community_id), name: 'Community' }
+      : undefined,
+    counterparty: counterpartyName
+      ? {
+          name: counterpartyName,
+          bank: (t.source_bank_name as string) || undefined,
+        }
+      : undefined,
+    fee: Number(t.fee as string) || 0,
+    reference: (t.reference as string) || undefined,
+  };
+}
+
+// Realistic mock transactions used as a fallback when the wallet endpoint
+// returns 404 (e.g. test users who haven't completed BVN/NIN verification, so
+// they have no Bell MFB virtual account yet). Once a wallet exists, real data
+// replaces this entirely.
 const MOCK_ACTIVITY: ActivityItem[] = [
   {
     id: 't1',
@@ -404,19 +485,60 @@ export default function ActivityPage() {
     status: 'all',
     community: 'all',
   });
+  const [items, setItems] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  // True when the user has no provisioned wallet yet (404 from the backend) —
+  // renders an actionable empty state pointing them at verification.
+  const [walletMissing, setWalletMissing] = useState(false);
+
+  // Fetch transactions on mount. Period filtering is client-side because the
+  // backend endpoint doesn't support date ranges yet.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await ApiService.wallet.getTransactions({ limit: 100 });
+        if (cancelled) return;
+        const list = (res.data?.data?.transactions ?? []) as unknown as Array<
+          Record<string, unknown>
+        >;
+        setItems(list.map(mapApiTransaction));
+        setWalletMissing(false);
+      } catch (err) {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response
+          ?.status;
+        if (status === 404) {
+          // Wallet not provisioned — fall back to mock so the page still
+          // demonstrates the layout. A clear banner tells the user why.
+          setWalletMissing(true);
+          setItems(MOCK_ACTIVITY);
+        } else {
+          toastAxiosError(err, 'Failed to load activity.');
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const communities = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const t of MOCK_ACTIVITY) {
+    for (const t of items) {
       if (t.community) seen.set(t.community.id, t.community.name);
     }
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
-  }, []);
+  }, [items]);
 
   const filtered = useMemo(() => {
     const cutoff = periodToCutoff(period);
     const q = filters.search.trim().toLowerCase();
-    return MOCK_ACTIVITY.filter((t) => {
+    return items.filter((t) => {
       if (cutoff > 0 && new Date(t.timestamp).getTime() < cutoff) return false;
       if (filters.type === 'in' && t.direction !== 'in') return false;
       if (filters.type === 'out' && t.direction !== 'out') return false;
@@ -615,17 +737,44 @@ export default function ActivityPage() {
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-6"
               >
-                {filtered.length === 0 ? (
+                {loading ? (
+                  <ul className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-3 rounded-xl border border-border p-3"
+                      >
+                        <Skeleton className="size-10 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-3.5 w-2/3 rounded-md" />
+                          <Skeleton className="h-3 w-1/2 rounded-md" />
+                        </div>
+                        <Skeleton className="h-4 w-20 rounded-md" />
+                      </li>
+                    ))}
+                  </ul>
+                ) : filtered.length === 0 ? (
                   <EmptyState
                     icon={<ActivityIcon className="size-5" aria-hidden="true" />}
-                    title="No activity"
+                    title={walletMissing ? 'Wallet not set up yet' : 'No activity'}
                     description={
-                      filters.search ||
-                      filters.type !== 'all' ||
-                      filters.status !== 'all' ||
-                      filters.community !== 'all'
-                        ? 'Try a different filter combination, or expand the period.'
-                        : 'Once you fund or send money, it lands here.'
+                      walletMissing
+                        ? 'Verify your BVN to get a Bell MFB wallet — once you do, transfers and deposits land here.'
+                        : filters.search ||
+                            filters.type !== 'all' ||
+                            filters.status !== 'all' ||
+                            filters.community !== 'all'
+                          ? 'Try a different filter combination, or expand the period.'
+                          : 'Once you fund or send money, it lands here.'
+                    }
+                    action={
+                      walletMissing ? (
+                        <Button asChild>
+                          <a href="/dashboard/settings?tab=verification">
+                            Verify identity
+                          </a>
+                        </Button>
+                      ) : undefined
                     }
                   />
                 ) : (
@@ -679,7 +828,7 @@ export default function ActivityPage() {
 
         {/* Footer microcopy */}
         <p className="text-center text-[11px] text-muted-foreground">
-          Showing {filtered.length} of {MOCK_ACTIVITY.length} transactions ·{' '}
+          Showing {filtered.length} of {items.length} transactions ·{' '}
           <button
             type="button"
             onClick={() => {

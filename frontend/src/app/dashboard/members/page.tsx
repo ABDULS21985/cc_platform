@@ -1,7 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiService, type CommunityData } from '@/services/api';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 import {
   Crown,
   Filter,
@@ -305,12 +308,151 @@ function isInYourCircles(item: MemberItem): boolean {
   );
 }
 
+interface ApiMember {
+  id?: number;
+  user_id?: number;
+  community_id?: number;
+  role?: string;
+  status?: string;
+  joined_at?: string;
+  user?: {
+    id?: number;
+    email?: string;
+    firstname?: string;
+    lastname?: string;
+    full_name?: string;
+    profile_photo?: string | null;
+    bio?: string | null;
+  };
+}
+
+const TONE_PALETTE = [
+  'bg-brand text-primary-foreground',
+  'bg-info/30 text-info',
+  'bg-warning/30 text-warning',
+  'bg-success/30 text-success',
+  'bg-brand-bright/30 text-primary',
+];
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Aggregate members across all communities the user has joined. Backend has
+ * no /me/people endpoint yet, so we walk joined() → getMembers(id) per
+ * community and dedupe by user_id, building a community list per person.
+ */
+async function fetchAggregatedMembers(): Promise<MemberItem[]> {
+  const joinedRes = await ApiService.communities.joined({ limit: 100 });
+  const joined = joinedRes.data?.data?.communities ?? [];
+  if (joined.length === 0) return [];
+
+  // Fan out — one members fetch per community, in parallel.
+  const memberLists = await Promise.all(
+    joined.map(async (c: CommunityData) => {
+      try {
+        const res = await ApiService.communities.getMembers(c.id, { limit: 200 });
+        const items = (res.data?.data?.members ?? []) as unknown as ApiMember[];
+        return items.map((m) => ({ ...m, _community: c }));
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  type Enriched = ApiMember & { _community: CommunityData };
+  const flat = memberLists.flat() as Enriched[];
+
+  // Dedupe by user_id, building communities[] per person.
+  const byUser = new Map<number, MemberItem>();
+  for (const row of flat) {
+    const uid = row.user_id ?? row.user?.id;
+    if (!uid) continue;
+    const u = row.user ?? {};
+    const fullName =
+      u.full_name ||
+      [u.firstname, u.lastname].filter(Boolean).join(' ') ||
+      u.email ||
+      'Member';
+    const role = (row.role === 'owner'
+      ? 'owner'
+      : row.role === 'admin'
+        ? 'admin'
+        : 'member') as MemberItem['communities'][number]['role'];
+    const communityRef = {
+      id: String(row._community.id),
+      name: row._community.name,
+      initials: initialsFor(row._community.name),
+      role,
+    };
+    const existing = byUser.get(uid);
+    if (existing) {
+      existing.communities.push(communityRef);
+    } else {
+      byUser.set(uid, {
+        id: String(uid),
+        name: fullName,
+        initials: initialsFor(fullName),
+        avatar: u.profile_photo ?? undefined,
+        username: (u.firstname || u.email?.split('@')[0] || `user${uid}`).toLowerCase(),
+        bio: u.bio ?? undefined,
+        location: undefined,
+        communities: [communityRef],
+        // Online + activity signals aren't on the API yet — render as offline.
+        isOnline: false,
+        lastSeenAt: undefined,
+        joinedAt: row.joined_at ?? new Date().toISOString(),
+        postsCount: undefined,
+        isFavorite: false,
+        avatarTone: TONE_PALETTE[uid % TONE_PALETTE.length],
+      });
+    }
+  }
+  return [...byUser.values()];
+}
+
 export default function MembersPage() {
-  const [members, setMembers] = useState<MemberItem[]>(MOCK_MEMBERS);
+  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingMock, setUsingMock] = useState(false);
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [search, setSearch] = useState('');
   const [communityFilter, setCommunityFilter] = useState<string>('all');
   const [sort, setSort] = useState<'recent' | 'name' | 'most-active'>('recent');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const real = await fetchAggregatedMembers();
+        if (cancelled) return;
+        if (real.length === 0) {
+          // No joined communities yet — show mock so the layout demonstrates,
+          // and surface a small notice.
+          setMembers(MOCK_MEMBERS);
+          setUsingMock(true);
+        } else {
+          setMembers(real);
+          setUsingMock(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        toastAxiosError(err, 'Failed to load members.');
+        setMembers(MOCK_MEMBERS);
+        setUsingMock(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(
     () => ({

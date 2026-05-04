@@ -67,7 +67,7 @@ export function CreatePostDialog({
     | {
         full_name?: string;
         firstname?: string;
-        profile_image?: string | null;
+        profile_photo?: string | null;
       }
     | null;
 
@@ -163,7 +163,7 @@ export function CreatePostDialog({
           <div className="flex items-center gap-3">
             <Avatar className="size-10">
               <AvatarImage
-                src={userData?.profile_image || '/images/image.png'}
+                src={userData?.profile_photo || '/images/image.png'}
                 alt=""
               />
               <AvatarFallback className="bg-brand-soft text-accent-foreground font-bold">

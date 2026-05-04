@@ -1,7 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ApiService, type CommunityData } from '@/services/api';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 import {
   AlertCircle,
   CalendarPlus,
@@ -240,12 +243,138 @@ function bucketOf(b: BillItem): Bucket {
   return 'later';
 }
 
+interface ApiBill {
+  id: number;
+  community_id: number;
+  creator_id: number;
+  title: string;
+  description?: string | null;
+  amount: number;
+  type?: string;
+  status: string;
+  is_recurring?: boolean;
+  recurrence_type?: string | null;
+  due_date: string;
+  collected_amount?: number;
+  paid_member_count?: number;
+  expected_member_count?: number;
+  progress_percentage?: number;
+  created_at?: string;
+}
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return 'C';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function mapApiStatusToBillStatus(s: string, dueAt: string): BillItem['status'] {
+  const norm = (s || '').toLowerCase();
+  if (norm === 'paid' || norm === 'completed' || norm === 'settled') return 'paid';
+  if (norm === 'cancelled' || norm === 'canceled') return 'cancelled';
+  // Backend uses status='active' for open bills; we infer overdue from dueAt.
+  if (new Date(dueAt).getTime() < Date.now()) return 'overdue';
+  return 'pending';
+}
+
+/**
+ * Aggregate bills across all the user's joined communities. The backend has
+ * no /me/bills endpoint yet, so we walk joined() → getBills(id) per community
+ * and flatten with community context attached.
+ */
+async function fetchAggregatedBills(currentUserId?: number): Promise<BillItem[]> {
+  const joinedRes = await ApiService.communities.joined({ limit: 100 });
+  const joined = joinedRes.data?.data?.communities ?? [];
+  if (joined.length === 0) return [];
+
+  const billLists = await Promise.all(
+    joined.map(async (c: CommunityData) => {
+      try {
+        const res = await ApiService.communities.getBills(c.id, { limit: 200 });
+        const items = (res.data?.data?.bills ?? []) as unknown as ApiBill[];
+        return items.map((b) => ({ bill: b, community: c }));
+      } catch {
+        return [];
+      }
+    })
+  );
+
+  return billLists.flat().map(({ bill, community }) => {
+    const status = mapApiStatusToBillStatus(bill.status, bill.due_date);
+    const paid = bill.paid_member_count ?? 0;
+    const total = bill.expected_member_count ?? 1;
+    return {
+      id: String(bill.id),
+      title: bill.title,
+      description: bill.description ?? undefined,
+      community: {
+        id: String(community.id),
+        name: community.name,
+        initials: initialsFor(community.name),
+      },
+      amount: bill.amount,
+      amountFormatted: bill.amount.toLocaleString('en-NG'),
+      dueAt: bill.due_date,
+      status,
+      createdBy: {
+        name:
+          bill.creator_id === currentUserId
+            ? 'You'
+            : `User #${bill.creator_id}`,
+        isYou: bill.creator_id === currentUserId,
+      },
+      members: { paid, total },
+      category:
+        (bill.type === 'free_will' ? 'Free-will' : 'Fixed') +
+        (bill.is_recurring ? ' · Recurring' : ''),
+      isRecurring: !!bill.is_recurring,
+    } satisfies BillItem;
+  });
+}
+
 export default function BillsPage() {
-  const [bills, setBills] = useState<BillItem[]>(MOCK_BILLS);
+  const [bills, setBills] = useState<BillItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingMock, setUsingMock] = useState(false);
   const [activeTab, setActiveTab] = useState<TabValue>('outstanding');
   const [search, setSearch] = useState('');
   const [communityFilter, setCommunityFilter] = useState<string>('all');
   const [sort, setSort] = useState<'soonest' | 'amount' | 'oldest'>('soonest');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        // Read user_id from localStorage (set at login) for "isYou" attribution.
+        const raw =
+          typeof window !== 'undefined'
+            ? window.localStorage.getItem('user_data')
+            : null;
+        const me = raw ? (JSON.parse(raw) as { id?: number }) : null;
+        const real = await fetchAggregatedBills(me?.id);
+        if (cancelled) return;
+        if (real.length === 0) {
+          setBills(MOCK_BILLS);
+          setUsingMock(true);
+        } else {
+          setBills(real);
+          setUsingMock(false);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        toastAxiosError(err, 'Failed to load bills.');
+        setBills(MOCK_BILLS);
+        setUsingMock(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const outstanding = bills.filter(

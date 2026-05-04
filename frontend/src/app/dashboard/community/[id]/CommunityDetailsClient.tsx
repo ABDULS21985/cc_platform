@@ -440,7 +440,7 @@ export default function CommunityDetailsClient({
                   : members.slice(0, 5).map((m) => (
                       <div key={m.id} className="flex items-center gap-3 group cursor-pointer hover:bg-gray-50 p-2 rounded-2xl transition-colors">
                         <Avatar className="w-10 h-10 border-2 border-white shadow-soft rounded-2xl overflow-hidden">
-                          <AvatarImage src={m.user?.profile_image} className="object-cover" />
+                          <AvatarImage src={m.user?.profile_photo} className="object-cover" />
                           <AvatarFallback className="bg-gray-100 text-gray-600 font-bold">
                             {(m.user?.firstname || m.user?.full_name || "U").charAt(0)}
                           </AvatarFallback>

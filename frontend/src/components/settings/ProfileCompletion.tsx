@@ -34,7 +34,7 @@ interface UserShape {
   phone_number?: string | null;
   bvn_verified?: boolean;
   nin_verified?: boolean;
-  profile_image?: string | null;
+  profile_photo?: string | null;
   bio?: string | null;
 }
 
@@ -81,7 +81,7 @@ export function ProfileCompletion({ onJumpTo }: ProfileCompletionProps) {
       id: 'avatar',
       label: 'Profile photo',
       icon: ImageIcon,
-      done: !!user?.profile_image,
+      done: !!user?.profile_photo,
       tab: 'account-info',
     },
     {

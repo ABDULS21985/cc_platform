@@ -54,6 +54,8 @@ def register_api_blueprints(api):
         ("modules.admin.resources.users_resource", "admin_users_blp"),
         ("modules.admin.resources.communities_resource", "admin_communities_blp"),
         ("modules.admin.resources.transactions_resource", "admin_transactions_blp"),
+        # Dev tools — seed endpoints gated on FLASK_ENV=development
+        ("modules.dev_tools.resources.seed_resource", "dev_seed_blp"),
     ]
     
     for module_path, blueprint_name in api_blueprints:
