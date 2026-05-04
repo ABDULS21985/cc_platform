@@ -1,7 +1,6 @@
 """Notification REST resource."""
 import logging
 
-from flask import jsonify, make_response
 from flask.views import MethodView
 from flask_smorest import Blueprint
 
@@ -17,7 +16,6 @@ from modules.notifications.schemas.notification_schema import (
     NotificationListQuerySchema,
     NotificationListResponseSchema,
     NotificationPreferencesSchema,
-    NotificationResponseSchema,
 )
 from modules.notifications.services.notification_service import NotificationService
 
@@ -55,10 +53,15 @@ class NotificationCollectionResource(MethodView):
 
     @token_required
     @notification_blp.arguments(NotificationCreateSchema)
-    @notification_blp.response(201, NotificationResponseSchema)
+    @notification_blp.response(201, NotificationListResponseSchema)
     @notification_blp.alt_response(401, schema=NotificationErrorSchema)
     def post(self, data, current_user=None):
-        """Create a notification for the current user (test/seed helper)."""
+        """Create a notification for the current user (test/seed helper).
+
+        Returns the standard `{success, message, data}` envelope. When the
+        user has muted the category the response is `{skipped: true,
+        reason: 'category_muted'}` with status 200.
+        """
         try:
             notif = notification_service.create_for_user(
                 user_id=current_user.id,
@@ -70,18 +73,10 @@ class NotificationCollectionResource(MethodView):
                 action_label=data.get('action_label'),
             )
             if notif is None:
-                # Category is muted by user preferences. Bypass the smorest
-                # response filter (which is locked to NotificationResponseSchema)
-                # so the explanation body actually reaches the client.
-                return make_response(
-                    jsonify(
-                        {
-                            'success': True,
-                            'message': 'Notification suppressed by user preferences',
-                            'data': {'skipped': True, 'reason': 'category_muted'},
-                        }
-                    ),
-                    200,
+                return format_data(
+                    data={'skipped': True, 'reason': 'category_muted'},
+                    message='Notification suppressed by user preferences',
+                    status_code=200,
                 )
             return format_data(
                 data=notif.to_dict(), message='Notification created', status_code=201
