@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Calendar,
   CheckCircle2,
@@ -30,11 +30,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { motion, AnimatePresence } from '@/components/ui/motion';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ApiService, type CommunityData } from '@/services/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,6 +205,86 @@ const TABS: Array<{
   },
 ];
 
+interface ApiBill {
+  id: number;
+  community_id: number;
+  creator_id: number;
+  title: string;
+  description?: string | null;
+  amount: number;
+  status: string;
+  is_recurring?: boolean;
+  recurrence_type?: string | null;
+  due_date: string;
+  paid_member_count?: number;
+  created_at?: string;
+}
+
+const FREQUENCY_FROM_API: Record<string, Frequency> = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+  yearly: 'yearly',
+  daily: 'weekly',
+};
+
+function mapApiToRecurring(b: ApiBill, communityName: string, currentUserId?: number): RecurringRule {
+  const freq: Frequency = FREQUENCY_FROM_API[(b.recurrence_type ?? 'monthly').toLowerCase()] ?? 'monthly';
+  const status: RecurringStatus =
+    b.status === 'cancelled' || b.status === 'canceled'
+      ? 'cancelled'
+      : b.status === 'paused'
+        ? 'paused'
+        : 'active';
+  return {
+    id: `bill-${b.id}`,
+    title: b.title,
+    description: b.description ?? undefined,
+    amount: b.amount,
+    amountFormatted: fmt(b.amount),
+    frequency: freq,
+    nextRunAt: b.due_date,
+    source: 'CCPay wallet',
+    recipient: { name: communityName },
+    community: { id: String(b.community_id), name: communityName },
+    status,
+    ranCount: b.paid_member_count ?? 0,
+    isHosting: !!currentUserId && b.creator_id === currentUserId,
+  };
+}
+
+async function fetchAggregatedRecurring(currentUserId?: number): Promise<RecurringRule[]> {
+  const joinedRes = await ApiService.communities.joined({ limit: 100 });
+  const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
+  if (joined.length === 0) return [];
+
+  const lists = await Promise.all(
+    joined.map(async (c) => {
+      try {
+        const res = await ApiService.communities.getBills(c.id, { limit: 200 });
+        const items = (res.data?.data?.bills ?? []) as unknown as ApiBill[];
+        return items
+          .filter((b) => b.is_recurring)
+          .map((b) => mapApiToRecurring(b, c.name, currentUserId));
+      } catch {
+        return [];
+      }
+    })
+  );
+  return lists.flat();
+}
+
+function readCurrentUserId(): number | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = localStorage.getItem('user_data');
+    if (!raw) return undefined;
+    const u = JSON.parse(raw);
+    return typeof u?.id === 'number' ? u.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function nextRunLabel(iso: string, status: RecurringStatus): string {
   if (status === 'cancelled') return 'Cancelled';
   if (status === 'paused') return 'Paused';
@@ -219,10 +301,40 @@ function nextRunLabel(iso: string, status: RecurringStatus): string {
 }
 
 export default function RecurringPage() {
-  const [rules, setRules] = useState<RecurringRule[]>(MOCK);
+  const [rules, setRules] = useState<RecurringRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingMock, setUsingMock] = useState(false);
   const [tab, setTab] = useState<TabValue>('active');
   const [search, setSearch] = useState('');
   const [frequency, setFrequency] = useState<'all' | Frequency>('all');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const real = await fetchAggregatedRecurring(readCurrentUserId());
+        if (cancelled) return;
+        if (real.length === 0) {
+          setRules(MOCK);
+          setUsingMock(true);
+        } else {
+          setRules(real);
+          setUsingMock(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setRules(MOCK);
+          setUsingMock(true);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const active = rules.filter((r) => r.status === 'active');
@@ -482,6 +594,13 @@ export default function RecurringPage() {
           {TABS.find((t) => t.value === tab)?.description}
         </p>
 
+        {usingMock && !loading && (
+          <p className="rounded-xl border border-dashed border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
+            <Sparkles className="mr-1 inline-block size-3" aria-hidden="true" />
+            Showing sample standing instructions. Once you join a community with recurring bills, your rules show up here.
+          </p>
+        )}
+
         {/* Filters */}
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs sm:flex-row sm:items-center sm:p-4">
           <div className="relative flex-1">
@@ -530,7 +649,28 @@ export default function RecurringPage() {
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="space-y-3"
           >
-            {filtered.length === 0 ? (
+            {loading ? (
+              <ul className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <li key={i}>
+                    <Card variant="default">
+                      <CardContent className="flex items-start gap-3 px-5 sm:px-6">
+                        <Skeleton className="size-11 rounded-xl" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-2/5" />
+                          <Skeleton className="h-3 w-3/5" />
+                          <Skeleton className="h-3 w-1/3" />
+                        </div>
+                        <div className="space-y-2">
+                          <Skeleton className="h-5 w-20" />
+                          <Skeleton className="h-7 w-24" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            ) : filtered.length === 0 ? (
               <EmptyState
                 icon={<Repeat className="size-5" aria-hidden="true" />}
                 title={
