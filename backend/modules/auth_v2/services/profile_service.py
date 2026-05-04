@@ -192,7 +192,36 @@ class ProfileService:
                 }, 500
             
             logger.info(f"Password changed for user {user_id}")
-            
+
+            # Best-effort: notify the user + audit the change.
+            try:
+                from flask import request
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip() if request else None
+                device = request.headers.get('User-Agent') if request else None
+                NotificationService().create_for_user(
+                    user_id=user_id,
+                    title="Password changed",
+                    body="Your account password was just changed. If this wasn't you, secure your account immediately.",
+                    category='security',
+                    source='Security',
+                    action_href='/dashboard/settings',
+                    action_label='Review settings',
+                )
+                AuditService().record(
+                    user_id=user_id,
+                    action='Password changed',
+                    details='Account password was updated',
+                    category='security',
+                    severity='warning',
+                    actor='You',
+                    ip=ip,
+                    device=device,
+                )
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "message": "Password changed successfully"

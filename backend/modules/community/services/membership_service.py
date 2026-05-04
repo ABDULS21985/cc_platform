@@ -67,8 +67,49 @@ class MembershipService:
             
             db.session.commit()
             logger.info(f"Added user {user_id} to community {community_id} as {role}")
+
+            # Best-effort: notify owners + audit the joiner.
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                community = self.community_repo.find_by_id(community_id)
+                community_name = community.name if community else 'Community'
+                # Greet the new member.
+                NotificationService().create_for_user(
+                    user_id=user_id,
+                    title=f"Welcome to {community_name}",
+                    body=f"You're now a {role} of {community_name}. Catch up on the latest posts and bills.",
+                    category='communities',
+                    source=community_name,
+                    action_href=f'/dashboard/community/{community_id}',
+                )
+                AuditService().record(
+                    user_id=user_id,
+                    action='Joined community',
+                    details=f"You joined {community_name} as {role}",
+                    category='admin',
+                    severity='info',
+                    actor='You',
+                    target=community_name,
+                )
+                # Tell active owners someone joined.
+                owners = self.member_repo.find_owners(community_id)
+                for o in owners:
+                    if o.user_id == user_id:
+                        continue
+                    NotificationService().create_for_user(
+                        user_id=o.user_id,
+                        title=f"New member in {community_name}",
+                        body=f"A new member just joined as {role}.",
+                        category='communities',
+                        source=community_name,
+                        action_href=f'/dashboard/community/{community_id}',
+                    )
+            except Exception as exc:
+                logger.warning('post-join notify/audit failed: %s', exc)
+
             return member, None
-            
+
         except Exception as e:
             logger.error(f"Error adding member: {str(e)}")
             db.session.rollback()

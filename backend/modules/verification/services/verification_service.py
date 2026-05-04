@@ -147,9 +147,11 @@ class VerificationService:
                 user.bvn_verified = True
                 user.verification_status = 'verified'
                 db.session.commit()
-                
+
                 logger.info(f"BVN verification successful for user {user_id}")
-                
+
+                self._record_verification_audit(user_id, 'bvn')
+
                 return {
                     'success': True,
                     'verification_id': verification.id,
@@ -278,9 +280,11 @@ class VerificationService:
                 user.nin_verified = True
                 user.verification_status = 'verified'
                 db.session.commit()
-                
+
                 logger.info(f"NIN verification successful for user {user_id}")
-                
+
+                self._record_verification_audit(user_id, 'nin')
+
                 return {
                     'success': True,
                     'verification_id': verification.id,
@@ -300,7 +304,33 @@ class VerificationService:
         except Exception as e:
             logger.error(f"NIN verification failed: {str(e)}", exc_info=True)
             raise
-    
+
+    def _record_verification_audit(self, user_id: int, kind: str) -> None:
+        """Best-effort: drop a notification + audit row when KYC succeeds."""
+        try:
+            from modules.notifications.services.notification_service import NotificationService
+            from modules.audit.services.audit_service import AuditService
+            label = kind.upper()
+            NotificationService().create_for_user(
+                user_id=user_id,
+                title=f"{label} verified",
+                body="Your identity is verified. Wallet features are now unlocked.",
+                category='security',
+                source='Identity verification',
+                action_href='/dashboard/wallet',
+                action_label='Open wallet',
+            )
+            AuditService().record(
+                user_id=user_id,
+                action=f'{label} verification successful',
+                details=f'{label} identity verification completed',
+                category='security',
+                severity='info',
+                actor='You',
+            )
+        except Exception as exc:
+            logger.warning('post-verification notify/audit failed: %s', exc)
+
     def get_verification_status(self, user_id: int) -> Dict[str, Any]:
         """
         Get verification status for a user

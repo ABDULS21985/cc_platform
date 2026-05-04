@@ -161,7 +161,38 @@ class PaymentIntentService:
             
             db.session.commit()
             logger.info(f"User {user_id} paid {amount} toward bill {bill_id}")
-            
+
+            # Best-effort: notify the bill creator + audit the payer.
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                from modules.community.repositories.community_repository import CommunityRepository
+                community = CommunityRepository().find_by_id(bill.community_id)
+                community_name = community.name if community else 'Community'
+                notif_service = NotificationService()
+                if bill.creator_id and bill.creator_id != user_id:
+                    notif_service.create_for_user(
+                        user_id=bill.creator_id,
+                        title=f"Payment received: {bill.title}",
+                        body=f"A member paid ₦{amount:,.2f} toward your bill.",
+                        category='money',
+                        source=community_name,
+                        amount_value=f"{amount:,.2f}",
+                        amount_direction='in',
+                        action_href='/dashboard/bills',
+                    )
+                AuditService().record(
+                    user_id=user_id,
+                    action='Bill paid',
+                    details=f"Paid ₦{amount:,.2f} toward '{bill.title}' from your wallet",
+                    category='money',
+                    severity='info',
+                    actor='You',
+                    target=community_name,
+                )
+            except Exception as exc:
+                logger.warning('post-payment notify/audit failed: %s', exc)
+
             return {
                 'transaction_id': transaction.id,
                 'bill_id': bill_id,
@@ -169,7 +200,7 @@ class PaymentIntentService:
                 'status': transaction.status,
                 'timestamp': datetime.utcnow().isoformat()
             }, None
-            
+
         except Exception as e:
             logger.error(f"Error processing bill payment: {str(e)}")
             db.session.rollback()
