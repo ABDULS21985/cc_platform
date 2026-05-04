@@ -1,125 +1,88 @@
 'use client';
 
+import * as React from 'react';
 import { useState } from 'react';
+import { CreditCard, MoreHorizontal, Phone } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+
+interface Subscription {
+  id: number;
+  name: string;
+  description: string;
+  amount: string;
+  cadence: string;
+}
+
+const ACTIVE: Subscription[] = [
+  { id: 1, name: 'Yalleman', description: 'Membership subscription', amount: '₦120', cadence: 'Monthly' },
+  { id: 2, name: 'Lekki Estate dues', description: 'Estate management', amount: '₦18,500', cadence: 'Monthly' },
+  { id: 3, name: 'Cryptos NG · Pro', description: 'Trading academy access', amount: '₦4,500', cadence: 'Quarterly' },
+];
 
 export function SubscriptionsContent() {
-  const [activeStatusTab, setActiveStatusTab] = useState('active');
+  const [tab, setTab] = useState('active');
 
   return (
-    <div className="space-y-6">
-      {/* Status Tabs */}
-      <Tabs value={activeStatusTab} onValueChange={setActiveStatusTab}>
-        <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground">
-          <TabsTrigger value="active">Active</TabsTrigger>
-          <TabsTrigger value="inactive">Inactive</TabsTrigger>
-        </TabsList>
+    <Tabs value={tab} onValueChange={setTab}>
+      <TabsList>
+        <TabsTrigger value="active">
+          Active <Badge variant="successSoft" size="sm" className="ml-2">{ACTIVE.length}</Badge>
+        </TabsTrigger>
+        <TabsTrigger value="inactive">Inactive</TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="active" className="mt-6">
-          {/* Active Subscription Cards */}
-          <div className="space-y-4">
-            {/* Subscription Card 1 */}
-            <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-medium text-[#000000]">Yalleman</h3>
-                  <p className="text-sm text-[#525252]">
-                    Membership Subscription
+      <TabsContent value="active" className="mt-5 space-y-3">
+        {ACTIVE.map((sub) => (
+          <Card key={sub.id} variant="default" density="compact">
+            <CardContent className="flex items-center justify-between gap-3 px-5">
+              <div className="flex items-center gap-3">
+                <span
+                  className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
+                  aria-hidden="true"
+                >
+                  <CreditCard className="size-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold tracking-tight text-foreground">
+                    {sub.name}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {sub.description}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="font-medium text-[#000000]">N120</p>
-                <p className="text-sm text-[#525252]">/Monthly</p>
-              </div>
-            </div>
-
-            {/* Subscription Card 2 */}
-            <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-medium text-[#000000]">Yalleman</h3>
-                  <p className="text-sm text-[#525252]">
-                    Membership Subscription
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums text-foreground">
+                    {sub.amount}
                   </p>
+                  <p className="text-xs text-muted-foreground">/{sub.cadence}</p>
                 </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Options for ${sub.name}`}
+                >
+                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                </Button>
               </div>
-              <div className="text-right">
-                <p className="font-medium text-[#000000]">N120</p>
-                <p className="text-sm text-[#525252]">/Monthly</p>
-              </div>
-            </div>
+            </CardContent>
+          </Card>
+        ))}
+      </TabsContent>
 
-            {/* Subscription Card 3 */}
-            <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="font-medium text-[#000000]">Yalleman</h3>
-                  <p className="text-sm text-[#525252]">
-                    Membership Subscription
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-medium text-[#000000]">N120</p>
-                <p className="text-sm text-[#525252]">/Monthly</p>
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="inactive" className="mt-6">
-          {/* Inactive Subscription Cards */}
-          <div className="text-center py-12">
-            <p className="text-gray-500">No inactive subscriptions found</p>
-          </div>
-        </TabsContent>
-      </Tabs>
-    </div>
+      <TabsContent value="inactive" className="mt-5">
+        <EmptyState
+          icon={<Phone className="size-5" aria-hidden="true" />}
+          title="No inactive subscriptions"
+          description="When you cancel or pause a subscription, it'll appear here."
+        />
+      </TabsContent>
+    </Tabs>
   );
 }

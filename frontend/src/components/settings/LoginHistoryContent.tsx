@@ -1,123 +1,166 @@
 'use client';
 
+import * as React from 'react';
 import { useState } from 'react';
+import { Globe, LogOut, MapPin, Monitor, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface LoginEntry {
+  id: number;
+  device: string;
+  deviceType: 'desktop' | 'mobile';
+  browser: string;
+  ip: string;
+  location: string;
+  timestamp: string;
+  isCurrent?: boolean;
+}
+
+const ENTRIES: LoginEntry[] = [
+  {
+    id: 1,
+    device: 'MacBook Pro',
+    deviceType: 'desktop',
+    browser: 'Chrome',
+    ip: '192.168.1.1',
+    location: 'Lagos, Nigeria',
+    timestamp: '2026-05-04 10:30',
+    isCurrent: true,
+  },
+  {
+    id: 2,
+    device: 'iPhone 15',
+    deviceType: 'mobile',
+    browser: 'Safari',
+    ip: '105.112.40.18',
+    location: 'Lagos, Nigeria',
+    timestamp: '2026-05-03 18:12',
+  },
+  {
+    id: 3,
+    device: 'Windows PC',
+    deviceType: 'desktop',
+    browser: 'Edge',
+    ip: '197.210.45.6',
+    location: 'Abuja, Nigeria',
+    timestamp: '2026-05-01 09:47',
+  },
+  {
+    id: 4,
+    device: 'Android phone',
+    deviceType: 'mobile',
+    browser: 'Chrome',
+    ip: '102.89.78.15',
+    location: 'Ibadan, Nigeria',
+    timestamp: '2026-04-29 22:08',
+  },
+];
 
 export function LoginHistoryContent() {
-  const [selectedCommunity, setSelectedCommunity] =
-    useState('the-tech-community');
+  const [revoked, setRevoked] = useState<Set<number>>(new Set());
 
-  const loginEntries = [
-    {
-      id: 1,
-      name: 'Aishat Adwan',
-      ip: '192.168.1.1',
-      timestamp: '2024-01-15 10:30 AM',
-    },
-    {
-      id: 2,
-      name: 'Aishat Adwan',
-      ip: '192.168.1.1',
-      timestamp: '2024-01-15 10:30 AM',
-    },
-    {
-      id: 3,
-      name: 'Aishat Adwan',
-      ip: '192.168.1.1',
-      timestamp: '2024-01-15 10:30 AM',
-    },
-    {
-      id: 4,
-      name: 'Aishat Adwan',
-      ip: '192.168.1.1',
-      timestamp: '2024-01-15 10:30 AM',
-    },
-  ];
+  const handleRevoke = (id: number) => {
+    setRevoked((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    toast.success('Session signed out');
+  };
 
-  const handleLogout = (id: number) => {
-    console.log('Logout user:', id);
+  const handleSignOutAll = () => {
+    setRevoked(new Set(ENTRIES.filter((e) => !e.isCurrent).map((e) => e.id)));
+    toast.success('Signed out of all other sessions');
   };
 
   return (
-    <div className="w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <svg
-            className="w-5 h-5 text-[#525252] cursor-pointer"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-          {/* <h2 className="text-xl font-bold text-[#000000]">Login history</h2> */}
-        </div>
-
-        {/* Community Dropdown */}
-        <Select value={selectedCommunity} onValueChange={setSelectedCommunity}>
-          <SelectTrigger className="w-48 h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-            <SelectValue placeholder="Select community" />
-          </SelectTrigger>
-          <SelectContent className="bg-white border border-gray-200 rounded-lg">
-            <SelectItem
-              value="the-tech-community"
-              className="cursor-pointer hover:bg-gray-50"
-            >
-              The tech community
-            </SelectItem>
-            <SelectItem
-              value="design-community"
-              className="cursor-pointer hover:bg-gray-50"
-            >
-              Design community
-            </SelectItem>
-            <SelectItem
-              value="business-community"
-              className="cursor-pointer hover:bg-gray-50"
-            >
-              Business community
-            </SelectItem>
-          </SelectContent>
-        </Select>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Recent sign-ins to your account, across devices and browsers.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          leadingIcon={<LogOut className="size-3.5" />}
+          onClick={handleSignOutAll}
+        >
+          Sign out everywhere else
+        </Button>
       </div>
 
-      {/* Login Entries */}
-      <div className="space-y-4">
-        {loginEntries.map((entry) => (
-          <div
-            key={entry.id}
-            className="flex items-center justify-between p-4 bg-white border-b border-gray-100 rounded-lg"
-          >
-            <div className="flex-1">
-              <div className="font-medium text-[#000000] mb-1">
-                {entry.name}
+      <Card variant="default" density="compact">
+        <CardContent className="divide-y divide-border px-0">
+          {ENTRIES.map((e) => {
+            const DeviceIcon = e.deviceType === 'mobile' ? Smartphone : Monitor;
+            const isRevoked = revoked.has(e.id);
+            return (
+              <div
+                key={e.id}
+                className={cn(
+                  'flex items-start justify-between gap-4 px-5 py-4',
+                  isRevoked && 'opacity-60'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <DeviceIcon className="size-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">
+                        {e.device} · {e.browser}
+                      </p>
+                      {e.isCurrent && (
+                        <Badge variant="successSoft" size="sm">
+                          This device
+                        </Badge>
+                      )}
+                      {isRevoked && (
+                        <Badge variant="destructiveSoft" size="sm">
+                          Revoked
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="size-3" aria-hidden="true" />
+                        {e.location}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Globe className="size-3" aria-hidden="true" />
+                        {e.ip}
+                      </span>
+                      <time className="font-mono tabular-nums">{e.timestamp}</time>
+                    </div>
+                  </div>
+                </div>
+
+                {!e.isCurrent && !isRevoked && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRevoke(e.id)}
+                    className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    leadingIcon={<LogOut className="size-3.5" />}
+                  >
+                    Sign out
+                  </Button>
+                )}
               </div>
-              <div className="text-sm text-[#525252]">
-                {entry.ip} • {entry.timestamp}
-              </div>
-            </div>
-            <Button
-              onClick={() => handleLogout(entry.id)}
-              className="bg-gray-100 text-[#525252] hover:bg-gray-200 h-8 rounded-lg font-medium px-4 text-sm"
-            >
-              Logout
-            </Button>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }

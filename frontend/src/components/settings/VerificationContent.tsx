@@ -1,223 +1,265 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Fingerprint, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ApiService } from '@/services/api';
 import { toast } from 'sonner';
-import { CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { toastAxiosError } from '@/hooks/useAxiosError';
+import { cn } from '@/lib/utils';
+
+interface VerificationState {
+  bvn_verified?: boolean;
+  nin_verified?: boolean;
+  status?: string;
+}
+
+interface VerifierFormState {
+  number: string;
+  dob: string;
+  loading: boolean;
+}
+
+const EMPTY_FORM: VerifierFormState = { number: '', dob: '', loading: false };
 
 export function VerificationContent() {
-  const [verificationData, setVerificationData] = useState<any>(null);
+  const [data, setData] = useState<VerificationState | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // BVN Form State
-  const [bvn, setBvn] = useState('');
-  const [dobBvn, setDobBvn] = useState('');
-  const [verifyingBvn, setVerifyingBvn] = useState(false);
+  const [bvnForm, setBvnForm] = useState<VerifierFormState>(EMPTY_FORM);
+  const [ninForm, setNinForm] = useState<VerifierFormState>(EMPTY_FORM);
 
-  // NIN Form State
-  const [nin, setNin] = useState('');
-  const [dobNin, setDobNin] = useState('');
-  const [verifyingNin, setVerifyingNin] = useState(false);
+  const loadStatus = React.useCallback(async () => {
+    try {
+      const res = await ApiService.verification.getStatus();
+      if (res.data.success && res.data.data) {
+        const s = res.data.data;
+        const next: VerificationState = {
+          bvn_verified: s.verification_type === 'bvn' && s.verified,
+          nin_verified: s.verification_type === 'nin' && s.verified,
+          status: s.status,
+        };
+        setData(next);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            'verification_data',
+            JSON.stringify(next)
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load verification status', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadStatus();
-  }, []);
+  }, [loadStatus]);
 
-  const loadStatus = async () => {
-      try {
-          const res = await ApiService.verification.getStatus();
-          // res.data is VerificationStatus
-          if (res.data.success && res.data.data) {
-              const statusData = res.data.data;
-              // Map API status to the shape expected by UI
-              const updated = {
-                  bvn_verified: statusData.verification_type === 'bvn' && statusData.verified,
-                  nin_verified: statusData.verification_type === 'nin' && statusData.verified,
-                  status: statusData.status
-              };
-              setVerificationData(updated);
-              localStorage.setItem('verification_data', JSON.stringify(updated));
-          }
-      } catch (error) {
-          console.error('Failed to load verification status', error);
-      } finally {
-          setLoading(false);
+  const handleVerify = async (
+    type: 'bvn' | 'nin',
+    state: VerifierFormState,
+    setState: React.Dispatch<React.SetStateAction<VerifierFormState>>
+  ) => {
+    if (!state.number || !state.dob) {
+      toast.error(`Enter your ${type.toUpperCase()} and date of birth`);
+      return;
+    }
+    setState((s) => ({ ...s, loading: true }));
+    try {
+      const payload = { date_of_birth: state.dob };
+      const res =
+        type === 'bvn'
+          ? await ApiService.verification.verifyBvn({
+              ...payload,
+              bvn: state.number,
+            })
+          : await ApiService.verification.verifyNin({
+              ...payload,
+              nin: state.number,
+            });
+      const apiResponse = res.data;
+      if (apiResponse.success && apiResponse.data) {
+        if (apiResponse.data.task_id) {
+          toast.success('Verification started…');
+          window.location.href = `/verifying?taskId=${apiResponse.data.task_id}&returnUrl=/dashboard/settings`;
+        } else if (
+          apiResponse.data.status === 'verified' ||
+          apiResponse.data.status === 'success'
+        ) {
+          toast.success(`${type.toUpperCase()} verified`);
+          loadStatus();
+        }
       }
-  };
-
-  const verifyBvn = async () => {
-    if (!bvn || !dobBvn) {
-        toast.error('Please enter BVN and Date of Birth');
-        return;
-    }
-    setVerifyingBvn(true);
-    try {
-        const response = await ApiService.verification.verifyBvn({ bvn, date_of_birth: dobBvn });
-        const apiResponse = response.data;
-        
-        if (apiResponse.success && apiResponse.data) {
-            if (apiResponse.data.task_id) {
-                toast.success('Verification started...');
-                // In settings, we might want to poll in place or redirect
-                // For now, let's redirect to the verifying page like auth flow
-                window.location.href = `/verifying?taskId=${apiResponse.data.task_id}&returnUrl=/dashboard/settings`;
-            } else if (apiResponse.data.status === 'verified' || apiResponse.data.status === 'success') {
-                toast.success('BVN Verified Successfully');
-                loadStatus();
-            }
-        }
-    } catch (error: any) {
-        console.error(error);
-        toastAxiosError(error, 'BVN Verification Failed. Please check your details and try again.');
+    } catch (error: unknown) {
+      toastAxiosError(
+        error,
+        `${type.toUpperCase()} verification failed. Check your details and try again.`
+      );
     } finally {
-        setVerifyingBvn(false);
+      setState((s) => ({ ...s, loading: false }));
     }
   };
 
-  const verifyNin = async () => {
-    if (!nin || !dobNin) {
-        toast.error('Please enter NIN and Date of Birth');
-        return;
-    }
-    setVerifyingNin(true);
-    try {
-        const response = await ApiService.verification.verifyNin({ nin, date_of_birth: dobNin });
-        const apiResponse = response.data;
-
-        if (apiResponse.success && apiResponse.data) {
-            if (apiResponse.data.task_id) {
-                toast.success('Verification started...');
-                window.location.href = `/verifying?taskId=${apiResponse.data.task_id}&returnUrl=/dashboard/settings`;
-            } else if (apiResponse.data.status === 'verified' || apiResponse.data.status === 'success') {
-                toast.success('NIN Verified Successfully');
-                loadStatus();
-            }
-        }
-    } catch (error: any) {
-        toastAxiosError(error, 'NIN Verification Failed. Please check your details and try again.');
-    } finally {
-        setVerifyingNin(false);
-    }
-  };
-
-  if (loading && !verificationData) return <div className="p-4 flex justify-center"><Loader2 className="animate-spin" /></div>;
+  if (loading && !data) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 rounded-2xl" />
+        <Skeleton className="h-32 rounded-2xl" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 animate-fade-in">
-        <div>
-            <h3 className="text-lg font-semibold mb-2">Identity Verification</h3>
-            <p className="text-gray-500 text-sm">Verify your identity to increase limits and access full features.</p>
-        </div>
-
-        {/* BVN Section */}
-        <div className="border rounded-xl p-6 bg-white shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-blue-50 p-2 rounded-lg">
-                        <span className="font-bold text-blue-600">BVN</span>
-                    </div>
-                    <div>
-                        <h4 className="font-medium">Bank Verification Number</h4>
-                        <p className="text-xs text-gray-500">Link your BVN to verify your account</p>
-                    </div>
-                </div>
-                {verificationData?.bvn_verified ? (
-                     <span className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-medium">
-                         <CheckCircle2 className="w-4 h-4" /> Verified
-                     </span>
-                ) : (
-                    <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-xs font-medium">
-                        <ShieldAlert className="w-4 h-4" /> Unverified
-                    </span>
-                )}
-            </div>
-
-            {!verificationData?.bvn_verified && (
-                <div className="space-y-4 max-w-md mt-6">
-                    <div className="space-y-2">
-                        <Label>BVN Number</Label>
-                        <Input 
-                            placeholder="12345678901" 
-                            value={bvn}
-                            onChange={(e) => setBvn(e.target.value)}
-                            maxLength={11}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Date of Birth</Label>
-                        <Input 
-                            type="date" 
-                            value={dobBvn}
-                            onChange={(e) => setDobBvn(e.target.value)}
-                        />
-                    </div>
-                    <Button 
-                        onClick={verifyBvn} 
-                        disabled={verifyingBvn}
-                        className="w-full bg-[#0E9DA5] hover:bg-[#0b7d84]"
-                    >
-                        {verifyingBvn ? <Loader2 className="animate-spin" /> : 'Verify BVN'}
-                    </Button>
-                </div>
-            )}
-        </div>
-
-        {/* NIN Section */}
-        <div className="border rounded-xl p-6 bg-white shadow-sm">
-             <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <div className="bg-green-50 p-2 rounded-lg">
-                        <span className="font-bold text-green-600">NIN</span>
-                    </div>
-                    <div>
-                        <h4 className="font-medium">National Identity Number</h4>
-                        <p className="text-xs text-gray-500">Link your NIN for advanced verification</p>
-                    </div>
-                </div>
-                {verificationData?.nin_verified ? (
-                     <span className="flex items-center gap-1 text-green-600 bg-green-50 px-3 py-1 rounded-full text-xs font-medium">
-                         <CheckCircle2 className="w-4 h-4" /> Verified
-                     </span>
-                ) : (
-                    <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-xs font-medium">
-                        <ShieldAlert className="w-4 h-4" /> Unverified
-                    </span>
-                )}
-            </div>
-
-            {!verificationData?.nin_verified && (
-                <div className="space-y-4 max-w-md mt-6">
-                    <div className="space-y-2">
-                        <Label>NIN Number</Label>
-                        <Input 
-                            placeholder="12345678901"
-                            value={nin}
-                            onChange={(e) => setNin(e.target.value)}
-                            maxLength={11}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Date of Birth</Label>
-                        <Input 
-                            type="date" 
-                            value={dobNin}
-                            onChange={(e) => setDobNin(e.target.value)}
-                        />
-                    </div>
-                    <Button 
-                        onClick={verifyNin} 
-                        disabled={verifyingNin}
-                        className="w-full bg-[#0E9DA5] hover:bg-[#0b7d84]"
-                    >
-                        {verifyingNin ? <Loader2 className="animate-spin" /> : 'Verify NIN'}
-                    </Button>
-                </div>
-            )}
-        </div>
+    <div className="space-y-5">
+      <VerifierBlock
+        type="bvn"
+        title="Bank Verification Number"
+        description="Link your BVN to verify your account."
+        verified={!!data?.bvn_verified}
+        state={bvnForm}
+        setState={setBvnForm}
+        onVerify={() => handleVerify('bvn', bvnForm, setBvnForm)}
+      />
+      <VerifierBlock
+        type="nin"
+        title="National Identity Number"
+        description="Link your NIN for advanced verification."
+        verified={!!data?.nin_verified}
+        state={ninForm}
+        setState={setNinForm}
+        onVerify={() => handleVerify('nin', ninForm, setNinForm)}
+      />
     </div>
+  );
+}
+
+interface VerifierBlockProps {
+  type: 'bvn' | 'nin';
+  title: string;
+  description: string;
+  verified: boolean;
+  state: VerifierFormState;
+  setState: React.Dispatch<React.SetStateAction<VerifierFormState>>;
+  onVerify: () => void;
+}
+
+function VerifierBlock({
+  type,
+  title,
+  description,
+  verified,
+  state,
+  setState,
+  onVerify,
+}: VerifierBlockProps) {
+  const Icon = type === 'bvn' ? Fingerprint : ShieldCheck;
+  return (
+    <Card variant="default">
+      <CardContent className="space-y-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                'grid size-10 shrink-0 place-items-center rounded-xl',
+                verified
+                  ? 'bg-success/15 text-success'
+                  : 'bg-brand-soft text-accent-foreground'
+              )}
+              aria-hidden="true"
+            >
+              <Icon className="size-5" />
+            </span>
+            <div>
+              <p className="text-base font-semibold tracking-tight text-foreground">
+                {title}
+              </p>
+              <p className="text-xs text-muted-foreground">{description}</p>
+            </div>
+          </div>
+          {verified ? (
+            <Badge variant="successSoft" size="lg" className="gap-1.5">
+              <CheckCircle2 className="size-3.5" aria-hidden="true" />
+              Verified
+            </Badge>
+          ) : (
+            <Badge variant="warningSoft" size="lg" className="gap-1.5">
+              <ShieldAlert className="size-3.5" aria-hidden="true" />
+              Unverified
+            </Badge>
+          )}
+        </div>
+
+        {!verified && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onVerify();
+            }}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+            noValidate
+          >
+            <div className="space-y-1.5">
+              <label
+                htmlFor={`${type}-number`}
+                className="block text-sm font-medium text-foreground"
+              >
+                {type.toUpperCase()} number
+              </label>
+              <Input
+                id={`${type}-number`}
+                value={state.number}
+                onChange={(e) =>
+                  setState((s) => ({
+                    ...s,
+                    number: e.target.value.replace(/\D/g, '').slice(0, 11),
+                  }))
+                }
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="11 digits"
+                maxLength={11}
+                className="h-12 tabular-nums tracking-widest"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor={`${type}-dob`}
+                className="block text-sm font-medium text-foreground"
+              >
+                Date of birth
+              </label>
+              <Input
+                id={`${type}-dob`}
+                type="date"
+                value={state.dob}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, dob: e.target.value }))
+                }
+                className="h-12"
+                max={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Button
+                type="submit"
+                size="default"
+                block
+                loading={state.loading}
+                disabled={state.number.length !== 11 || !state.dob}
+              >
+                {state.loading ? 'Verifying…' : `Verify ${type.toUpperCase()}`}
+              </Button>
+            </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
   );
 }

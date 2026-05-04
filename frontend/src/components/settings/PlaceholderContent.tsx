@@ -1,18 +1,19 @@
 'use client';
 
+import { Construction } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
+
 interface PlaceholderContentProps {
   title: string;
   description: string;
 }
 
-export function PlaceholderContent({
-  title,
-  description,
-}: PlaceholderContentProps) {
+export function PlaceholderContent({ title, description }: PlaceholderContentProps) {
   return (
-    <div className="text-center py-12">
-      <h3 className="text-lg font-medium text-gray-700 mb-2">{title}</h3>
-      <p className="text-gray-500">{description}</p>
-    </div>
+    <EmptyState
+      icon={<Construction className="size-5" aria-hidden="true" />}
+      title={title}
+      description={description}
+    />
   );
 }
