@@ -4,6 +4,7 @@ from modules.notifications.schemas.notification_schema import (
     NotificationResponseSchema,
     NotificationCreateSchema,
     NotificationErrorSchema,
+    NotificationPreferencesSchema,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     'NotificationResponseSchema',
     'NotificationCreateSchema',
     'NotificationErrorSchema',
+    'NotificationPreferencesSchema',
 ]

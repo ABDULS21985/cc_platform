@@ -16,6 +16,7 @@ from modules.notifications.schemas.notification_schema import (
     NotificationErrorSchema,
     NotificationListQuerySchema,
     NotificationListResponseSchema,
+    NotificationPreferencesSchema,
     NotificationResponseSchema,
 )
 from modules.notifications.services.notification_service import NotificationService
@@ -99,6 +100,34 @@ class NotificationMarkAllReadResource(MethodView):
             return format_data(data=result, message='All notifications marked read', status_code=status)
         except Exception as exc:
             logger.error('Error marking all notifications read: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
+@notification_blp.route('/preferences')
+class NotificationPreferencesResource(MethodView):
+    """Per-user category mute settings."""
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def get(self, current_user=None):
+        try:
+            result, status = notification_service.get_preferences(current_user.id)
+            return format_data(data=result, message='Preferences retrieved', status_code=status)
+        except Exception as exc:
+            logger.error('Error fetching notification preferences: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+    @token_required
+    @notification_blp.arguments(NotificationPreferencesSchema)
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def put(self, data, current_user=None):
+        try:
+            # Drop None entries — only update fields the caller actually sent.
+            flags = {k: v for k, v in data.items() if v is not None}
+            result, status = notification_service.update_preferences(current_user.id, flags)
+            return format_data(data=result, message='Preferences updated', status_code=status)
+        except Exception as exc:
+            logger.error('Error updating notification preferences: %s', exc, exc_info=True)
             return format_internal_error(str(exc))
 
 
