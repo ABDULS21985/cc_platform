@@ -74,15 +74,15 @@ const SECTIONS: NavSection[] = [
     heading: 'Money',
     items: [
       { href: '/dashboard/wallet', label: 'Wallet', icon: <WalletIcon />, badge: '3', badgeTone: 'count' },
-      { href: '/dashboard/community', label: 'Bills', icon: <Receipt className="size-5" />, badge: '2', badgeTone: 'count' },
-      { href: '/dashboard/wallet', label: 'Activity', icon: <Activity className="size-5" /> },
+      { href: '/dashboard/bills', label: 'Bills', icon: <Receipt className="size-5" />, badge: '2', badgeTone: 'count' },
+      { href: '/dashboard/activity', label: 'Activity', icon: <Activity className="size-5" /> },
       { href: '/dashboard/wallet', label: 'Recurring', icon: <Repeat className="size-5" />, badge: 'Soon', badgeTone: 'soon', comingSoon: true },
     ],
   },
   {
     heading: 'Workspace',
     items: [
-      { href: '/dashboard', label: 'Inbox', icon: <Inbox className="size-5" />, badge: '12', badgeTone: 'count' },
+      { href: '/dashboard/inbox', label: 'Inbox', icon: <Inbox className="size-5" />, badge: '12', badgeTone: 'count' },
       { href: '/dashboard', label: 'Saved', icon: <Bookmark className="size-5" />, badge: 'Soon', badgeTone: 'soon', comingSoon: true },
     ],
   },
