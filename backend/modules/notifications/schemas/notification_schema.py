@@ -69,3 +69,8 @@ class NotificationPreferencesSchema(Schema):
     communities = fields.Boolean(load_default=None, allow_none=True)
     events = fields.Boolean(load_default=None, allow_none=True)
     system = fields.Boolean(load_default=None, allow_none=True)
+    digest_frequency = fields.String(
+        load_default=None,
+        allow_none=True,
+        validate=validate.OneOf(['off', 'daily', 'weekly']),
+    )

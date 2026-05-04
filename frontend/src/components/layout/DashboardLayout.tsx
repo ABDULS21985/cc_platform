@@ -2,13 +2,14 @@
 
 import * as React from 'react';
 import { Suspense, useEffect, useState } from 'react';
-import { Bell, Menu, Search } from 'lucide-react';
+import { Activity, Bell, Menu, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import Protected from '@/components/Protected';
 import LogoutDialog from '../dialogs/LogoutDialog';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
 import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
+import { ActivityDrawer } from '@/components/layout/ActivityDrawer';
 import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { MobileNav } from '@/components/layout/MobileNav';
@@ -19,6 +20,23 @@ import useUserData from '@/hooks/useUserData';
 interface DashboardLayoutProps {
   children: React.ReactNode;
   pageTitle: string;
+}
+
+function ActivityButton() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Recent activity"
+        onClick={() => setOpen(true)}
+        className="relative grid size-10 place-items-center rounded-xl border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-input hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Activity className="size-4" aria-hidden="true" />
+      </button>
+      <ActivityDrawer open={open} onOpenChange={setOpen} />
+    </>
+  );
 }
 
 function NotificationBell() {
@@ -133,6 +151,8 @@ function DashboardLayoutContent({ children, pageTitle }: DashboardLayoutProps) {
               </button>
 
               <ThemeSwitcher compact />
+
+              <ActivityButton />
 
               <NotificationBell />
             </div>
