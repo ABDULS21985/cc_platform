@@ -1,65 +1,182 @@
-import React from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { Users } from 'lucide-react';
+'use client';
 
-const dummyEvents = [
+import * as React from 'react';
+import Link from 'next/link';
+import { ArrowRight, Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+interface CommunityEvent {
+  id: number;
+  title: string;
+  community: string;
+  date: { day: number; month: string };
+  time: string;
+  location: string;
+  attendees: number;
+  capacity: number;
+  status: 'live' | 'upcoming' | 'starting-soon';
+}
+
+const EVENTS: CommunityEvent[] = [
   {
     id: 1,
-    title: 'Crypto academy',
+    title: 'Crypto academy · Week 4',
+    community: 'Cryptos NG',
+    date: { day: 14, month: 'Jun' },
+    time: '18:00',
+    location: 'Online',
     attendees: 14,
-    image: '/images/image.png',
+    capacity: 30,
+    status: 'live',
   },
   {
     id: 2,
-    title: 'Networking for Designers',
+    title: 'Designers Networking Mixer',
+    community: 'UI/UX Africa',
+    date: { day: 21, month: 'Jun' },
+    time: '17:30',
+    location: 'Yaba, Lagos',
     attendees: 8,
-    image: '/images/image.png',
+    capacity: 20,
+    status: 'upcoming',
   },
   {
     id: 3,
-    title: 'Tech Meetup 2024',
+    title: 'Tech Meetup 2026',
+    community: 'Lagos Devs',
+    date: { day: 28, month: 'Jun' },
+    time: '10:00',
+    location: 'Co-Creation Hub',
     attendees: 23,
-    image: '/images/image.png',
-  },
-  {
-    id: 4,
-    title: 'Startup Pitch Night',
-    attendees: 16,
-    image: '/images/image.png',
+    capacity: 50,
+    status: 'starting-soon',
   },
 ];
 
-export default function OngoingEvents() {
-  return (
-    <div className="bg-white rounded-lg p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Ongoing events</h3>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-[#0E9DA5] hover:text-[#0E9DA5]"
-        >
-          See all
-        </Button>
-      </div>
+const statusBadge: Record<
+  CommunityEvent['status'],
+  {
+    variant: 'successSoft' | 'warningSoft' | 'soft';
+    label: string;
+    pulse?: boolean;
+  }
+> = {
+  live: { variant: 'successSoft', label: 'Live', pulse: true },
+  'starting-soon': { variant: 'warningSoft', label: 'Soon' },
+  upcoming: { variant: 'soft', label: 'Upcoming' },
+};
 
-      <div className="space-y-4">
-        {dummyEvents.map((event) => (
-          <div key={event.id} className="flex items-start space-x-3">
-            <div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0"></div>
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-gray-900 mb-1">
-                {event.title}
-              </h4>
-              <div className="flex items-center space-x-2 text-xs text-gray-500">
-                <Users className="w-3 h-3" />
-                <span>{event.attendees} Attendees</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+export default function OngoingEvents({ loading = false }: { loading?: boolean }) {
+  return (
+    <Card variant="default" density="compact">
+      <CardContent className="space-y-4 px-5">
+        <header className="flex items-center justify-between">
+          <h3 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-foreground">
+            <span className="grid size-7 place-items-center rounded-lg bg-brand-soft text-accent-foreground">
+              <Calendar className="size-3.5" aria-hidden="true" />
+            </span>
+            Ongoing events
+          </h3>
+          <Link
+            href="/dashboard/events"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline underline-offset-4"
+          >
+            See all
+            <ArrowRight className="size-3" aria-hidden="true" />
+          </Link>
+        </header>
+
+        {loading ? (
+          <ul className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <Skeleton className="size-12 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-3/4" />
+                  <Skeleton className="h-2.5 w-1/2" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <ul role="list" className="space-y-3">
+            {EVENTS.map((e) => {
+              const status = statusBadge[e.status];
+              const pct = (e.attendees / e.capacity) * 100;
+              return (
+                <li key={e.id}>
+                  <Link
+                    href={`/dashboard/events/${e.id}`}
+                    className={cn(
+                      'group flex items-start gap-3 rounded-xl border border-transparent p-2 transition-colors',
+                      '-mx-2 hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    )}
+                  >
+                    {/* Date tile */}
+                    <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand to-[oklch(0.18_0.025_220)] text-white shadow-sm">
+                      <div className="text-center leading-tight">
+                        <p className="text-[8px] font-bold uppercase tracking-widest text-white/80">
+                          {e.date.month}
+                        </p>
+                        <p className="text-base font-black tabular-nums">
+                          {e.date.day}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary">
+                          {e.title}
+                        </p>
+                        <Badge
+                          variant={status.variant}
+                          size="sm"
+                          className="shrink-0 gap-1"
+                        >
+                          {status.pulse && (
+                            <span className="relative flex size-1.5" aria-hidden="true">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-70" />
+                              <span className="relative inline-flex size-1.5 rounded-full bg-success" />
+                            </span>
+                          )}
+                          {status.label}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="size-3" aria-hidden="true" />
+                          {e.time}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="size-3" aria-hidden="true" />
+                          {e.location}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-brand to-brand-bright transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                          <Users className="size-3" aria-hidden="true" />
+                          {e.attendees}/{e.capacity}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

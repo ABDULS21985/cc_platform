@@ -1,25 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import {
-  Smile,
-  Image as ImageIcon,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
   Calendar,
-  X,
   Globe,
-  Lock,
-  Loader2,
+  Image as ImageIcon,
+  Pin,
+  Send,
+  Smile,
+  X,
 } from 'lucide-react';
 import { ApiService } from '@/services/api';
 import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import useUserData from '@/hooks/useUserData';
-
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 interface CreatePostDialogProps {
   isOpen: boolean;
@@ -29,6 +36,13 @@ interface CreatePostDialogProps {
   onPostCreated?: () => void;
   isOwner?: boolean;
 }
+
+interface MyCommunity {
+  id: number;
+  name: string;
+}
+
+const MAX_LENGTH = 280;
 
 export function CreatePostDialog({
   isOpen,
@@ -42,39 +56,48 @@ export function CreatePostDialog({
   const [loading, setLoading] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [commentsEnabled, setCommentsEnabled] = useState(true);
-  const [selectedCommunityId, setSelectedCommunityId] = useState<number | undefined>(communityId);
-  const [selectedCommunityName, setSelectedCommunityName] = useState<string | undefined>(communityName);
-  const [myCommunities, setMyCommunities] = useState<any[]>([]);
-  const userData = useUserData();
+  const [selectedCommunityId, setSelectedCommunityId] = useState<number | undefined>(
+    communityId
+  );
+  const [selectedCommunityName, setSelectedCommunityName] = useState<string | undefined>(
+    communityName
+  );
+  const [myCommunities, setMyCommunities] = useState<MyCommunity[]>([]);
+  const userData = useUserData() as
+    | {
+        full_name?: string;
+        firstname?: string;
+        profile_image?: string | null;
+      }
+    | null;
 
-  // Update selected community when props change
   useEffect(() => {
     if (communityId) setSelectedCommunityId(communityId);
     if (communityName) setSelectedCommunityName(communityName);
   }, [communityId, communityName]);
 
-  // Fetch joined communities if no communityId provided
   useEffect(() => {
     if (isOpen && !communityId) {
       const fetchMyCommunities = async () => {
         try {
           const response = await ApiService.communities.joined({ limit: 50 });
-          setMyCommunities(response.data.data.communities);
-          if (response.data.data.communities.length > 0 && !selectedCommunityId) {
-             setSelectedCommunityId(response.data.data.communities[0].id);
-             setSelectedCommunityName(response.data.data.communities[0].name);
+          const list: MyCommunity[] = response.data.data.communities ?? [];
+          setMyCommunities(list);
+          if (list.length > 0 && !selectedCommunityId) {
+            setSelectedCommunityId(list[0].id);
+            setSelectedCommunityName(list[0].name);
           }
         } catch (error) {
-          console.error("Error fetching joined communities", error);
+          console.error('Error fetching joined communities', error);
         }
       };
       fetchMyCommunities();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, communityId]);
 
   const handlePost = async () => {
     if (!text.trim() || !selectedCommunityId) return;
-    
     setLoading(true);
     try {
       await ApiService.communities.createPost(selectedCommunityId, {
@@ -82,10 +105,10 @@ export function CreatePostDialog({
         post_type: 'post',
         is_pinned: isPinned,
         comments_enabled: commentsEnabled,
-        media_urls: [], // Placeholder for media
-        mentioned_user_ids: [], // Placeholder for mentions
+        media_urls: [],
+        mentioned_user_ids: [],
       });
-      toast.success('Post shared successfully!');
+      toast.success('Post shared');
       setText('');
       setIsPinned(false);
       setCommentsEnabled(true);
@@ -106,129 +129,208 @@ export function CreatePostDialog({
     setCommentsEnabled(true);
   };
 
+  const remaining = MAX_LENGTH - text.length;
+  const overLimit = remaining < 0;
+
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
-      <DialogContent showClose={false} className="p-0 bg-white/95 backdrop-blur-2xl rounded-[32px] w-full max-w-xl overflow-hidden border-white/20 shadow-elevated animate-in fade-in zoom-in-95 duration-200">
-        <DialogHeader className="p-6 border-b border-gray-50 flex flex-row items-center justify-between">
-          <DialogTitle className="text-xl font-extrabold text-gray-900 tracking-tight">
-            Create Post
-          </DialogTitle>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={handleCancel} 
-            className="rounded-full h-8 w-8 text-gray-400 hover:text-gray-900 hover:bg-gray-100"
+      <DialogContent
+        showClose={false}
+        className="w-full max-w-xl overflow-hidden rounded-2xl border-border bg-card p-0 shadow-2xl"
+      >
+        <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-5 py-4">
+          <div className="space-y-0.5">
+            <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
+              Create a post
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Share an update with your community.
+            </DialogDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleCancel}
+            aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="size-4" aria-hidden="true" />
           </Button>
         </DialogHeader>
 
-        <div className="p-6 space-y-6">
+        <div className="space-y-5 px-5 py-5 sm:px-6">
+          {/* Author */}
           <div className="flex items-center gap-3">
-             <Avatar className="h-10 w-10 border-2 border-white shadow-soft rounded-xl overflow-hidden">
-                <AvatarImage src={userData?.profile_image || "/images/image.png"} className="object-cover" />
-                <AvatarFallback className="bg-teal-50 text-[#0E9DA5] font-bold">
-                  {userData?.firstname?.charAt(0) || "U"}
-                </AvatarFallback>
-             </Avatar>
-             <div>
-                <p className="text-sm font-extrabold text-gray-900 tracking-tight leading-none mb-1">
-                  {userData?.full_name}
-                </p>
+            <Avatar className="size-10">
+              <AvatarImage
+                src={userData?.profile_image || '/images/image.png'}
+                alt=""
+              />
+              <AvatarFallback className="bg-brand-soft text-accent-foreground font-bold">
+                {userData?.firstname?.charAt(0)?.toUpperCase() || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+                {userData?.full_name || 'You'}
+              </p>
+              <div className="mt-1">
                 {communityId ? (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-full w-fit">
-                    <Globe className="w-3 h-3 text-gray-400" />
-                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{communityName}</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    <Globe
+                      className="size-3 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                      {communityName}
+                    </span>
+                  </span>
                 ) : (
-                  <div className="flex items-center gap-1.5">
-                    <select 
-                      className="text-[10px] font-bold text-[#0E9DA5] uppercase tracking-wider bg-teal-50 border border-teal-100 rounded-full px-2 py-0.5 outline-none cursor-pointer"
-                      value={selectedCommunityId}
-                      onChange={(e) => {
-                        const id = Number(e.target.value);
-                        setSelectedCommunityId(id);
-                        const name = myCommunities.find(c => c.id === id)?.name;
-                        setSelectedCommunityName(name);
-                      }}
-                    >
-                      {myCommunities.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                      {myCommunities.length === 0 && <option>No circles joined</option>}
-                    </select>
-                  </div>
+                  <label className="sr-only" htmlFor="post-community">
+                    Choose community
+                  </label>
                 )}
-             </div>
+                {!communityId && (
+                  <select
+                    id="post-community"
+                    value={selectedCommunityId ?? ''}
+                    onChange={(e) => {
+                      const id = Number(e.target.value);
+                      setSelectedCommunityId(id);
+                      const name = myCommunities.find((c) => c.id === id)?.name;
+                      setSelectedCommunityName(name);
+                    }}
+                    className="cursor-pointer rounded-full border border-border bg-brand-soft px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-accent-foreground outline-none transition-colors hover:border-input focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {myCommunities.length === 0 && (
+                      <option value="">No circles joined</option>
+                    )}
+                    {myCommunities.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {selectedCommunityName && !communityId && myCommunities.length === 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Join a community first
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
-          <textarea
-            placeholder={`What's on your mind, ${userData?.firstname || 'friend'}?`}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full min-h-[160px] resize-none outline-none border-0 focus:ring-0 text-lg font-medium text-gray-700 placeholder:text-gray-300 transition-all custom-scrollbar"
-            autoFocus
-          />
-
-          {/* Post Settings */}
-          <div className="flex flex-wrap gap-4 pt-4 border-t border-gray-50">
-             {isOwner && (
-               <div className="flex items-center space-x-2 bg-amber-50/50 px-3 py-2 rounded-xl border border-amber-100/50">
-                 <Switch 
-                   id="pin-post" 
-                   checked={isPinned} 
-                   onCheckedChange={setIsPinned}
-                   className="data-[state=checked]:bg-amber-500"
-                 />
-                 <Label htmlFor="pin-post" className="text-xs font-bold text-amber-700 cursor-pointer">Pin to top</Label>
-               </div>
-             )}
-             <div className="flex items-center space-x-2 bg-teal-50/50 px-3 py-2 rounded-xl border border-teal-100/50">
-               <Switch 
-                 id="enable-comments" 
-                 checked={commentsEnabled} 
-                 onCheckedChange={setCommentsEnabled}
-                 className="data-[state=checked]:bg-[#0E9DA5]"
-               />
-               <Label htmlFor="enable-comments" className="text-xs font-bold text-[#0E9DA5] cursor-pointer">Enable comments</Label>
-             </div>
+          {/* Composer */}
+          <div className="space-y-1.5">
+            <label htmlFor="post-body" className="sr-only">
+              Post content
+            </label>
+            <textarea
+              id="post-body"
+              placeholder={`What's on your mind, ${userData?.firstname || 'friend'}?`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              aria-invalid={overLimit ? 'true' : undefined}
+              className={cn(
+                'custom-scrollbar w-full min-h-[160px] resize-none rounded-xl border border-border bg-muted/30 px-4 py-3',
+                'text-base font-medium text-foreground placeholder:text-muted-foreground',
+                'outline-none transition-colors hover:border-input focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30'
+              )}
+              autoFocus
+            />
           </div>
 
-          <div className="flex flex-col gap-4">
-             {/* Action Toolbar */}
-             <div className="flex items-center justify-between p-2 bg-gray-50/50 border border-gray-100 rounded-2xl">
-                <div className="flex items-center gap-1">
-                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50" title="Add Image">
-                      <ImageIcon className="w-5 h-5" />
-                   </Button>
-                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50" title="Add Emoji">
-                      <Smile className="w-5 h-5" />
-                   </Button>
-                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50" title="Schedule">
-                      <Calendar className="w-5 h-5" />
-                   </Button>
-                </div>
-                <div className="px-3">
-                   <span className={`text-xs font-bold ${text.length > 280 ? 'text-red-500' : 'text-gray-400'}`}>
-                      {text.length} / 280
-                   </span>
-                </div>
-             </div>
+          {/* Settings */}
+          <div className="flex flex-wrap gap-2.5 border-t border-border pt-4">
+            {isOwner && (
+              <div className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-1.5">
+                <Switch
+                  id="pin-post"
+                  checked={isPinned}
+                  onCheckedChange={setIsPinned}
+                  className="data-[state=checked]:bg-warning"
+                />
+                <Label
+                  htmlFor="pin-post"
+                  className="inline-flex cursor-pointer items-center gap-1 text-xs font-semibold text-warning"
+                >
+                  <Pin className="size-3" aria-hidden="true" />
+                  Pin to top
+                </Label>
+              </div>
+            )}
+            <div className="flex items-center gap-2 rounded-xl border border-brand/20 bg-brand-soft/60 px-3 py-1.5">
+              <Switch
+                id="enable-comments"
+                checked={commentsEnabled}
+                onCheckedChange={setCommentsEnabled}
+              />
+              <Label
+                htmlFor="enable-comments"
+                className="cursor-pointer text-xs font-semibold text-accent-foreground"
+              >
+                Comments enabled
+              </Label>
+            </div>
+          </div>
 
-             <Button
-                disabled={!text.trim() || loading || text.length > 280 || !selectedCommunityId}
-                onClick={handlePost}
-                className="w-full h-14 rounded-2xl bg-[#0E9DA5] hover:bg-[#0a7a80] text-white font-extrabold text-base shadow-glow transition-all hover:shadow-lg disabled:bg-gray-100 disabled:text-gray-300 flex items-center justify-center gap-2"
-             >
-                {loading ? (
-                   <>
-                     <Loader2 className="w-5 h-5 animate-spin" />
-                     Posting...
-                   </>
-                ) : (
-                   'Share Post'
-                )}
-             </Button>
+          {/* Action toolbar + send */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/40 p-1.5">
+              <div className="flex items-center gap-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Add image"
+                  title="Add image"
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <ImageIcon className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Add emoji"
+                  title="Add emoji"
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <Smile className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Schedule"
+                  title="Schedule"
+                  className="text-muted-foreground hover:text-primary"
+                >
+                  <Calendar className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+              <Badge
+                variant={overLimit ? 'destructiveSoft' : 'soft'}
+                size="sm"
+                className="tabular-nums"
+              >
+                {text.length} / {MAX_LENGTH}
+              </Badge>
+            </div>
+
+            <Button
+              type="button"
+              size="xl"
+              block
+              loading={loading}
+              disabled={!text.trim() || overLimit || !selectedCommunityId}
+              trailingIcon={!loading ? <Send className="size-4" /> : undefined}
+              onClick={handlePost}
+              className="h-12 text-base"
+            >
+              {loading ? 'Posting…' : 'Share post'}
+            </Button>
           </div>
         </div>
       </DialogContent>
