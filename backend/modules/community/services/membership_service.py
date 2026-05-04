@@ -237,9 +237,39 @@ class MembershipService:
                 user_id,
                 MemberStatus.SUSPENDED.value
             )
-            
+
             db.session.commit()
             logger.warning(f"Suspended user {user_id} in community {community_id}")
+
+            # Best-effort: notify the suspended user + security audit.
+            try:
+                from modules.notifications.services.notification_service import NotificationService
+                from modules.audit.services.audit_service import AuditService
+                community = self.community_repo.find_by_id(community_id)
+                community_name = community.name if community else 'Community'
+                NotificationService().create_for_user(
+                    user_id=user_id,
+                    title=f"Suspended in {community_name}",
+                    body=(
+                        "An admin suspended your access to this community. "
+                        "Reach out to the community owner if you believe this is a mistake."
+                    ),
+                    category='security',
+                    source=community_name,
+                    action_href=f'/dashboard/community/{community_id}',
+                )
+                AuditService().record(
+                    user_id=user_id,
+                    action='Membership suspended',
+                    details=f"You were suspended from {community_name}",
+                    category='security',
+                    severity='warning',
+                    actor='Community admin',
+                    target=community_name,
+                )
+            except Exception as exc:
+                logger.warning('post-suspend notify/audit failed: %s', exc)
+
             return member, None
             
         except Exception as e:
