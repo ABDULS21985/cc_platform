@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { ApiService } from '@/services/api';
-import { Button } from '@/components/ui/button';
-import { Eye, EyeOff } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ArrowDownToLine, ArrowUpRight, Eye, EyeOff, Plus, Wallet } from 'lucide-react';
 import { MakePaymentModal } from './MakePaymentModal';
 import { AccountDetailsModal } from './AccountDetailsModal';
 import { SendMoneyModal } from './SendMoneyModal';
@@ -11,11 +11,22 @@ import { WithdrawMoneyModal } from './WithdrawMoneyModal';
 import { TransactionPinModal } from './TransactionPinModal';
 import { SuccessModal } from './SuccessModal';
 import { toastAxiosError } from '@/hooks/useAxiosError';
+import { cn } from '@/lib/utils';
+
+const QUICK_ACTIONS = [
+  { id: 'fund', label: 'Fund', icon: Plus },
+  { id: 'send', label: 'Send', icon: ArrowUpRight },
+  { id: 'withdraw', label: 'Withdraw', icon: ArrowDownToLine },
+  { id: 'account', label: 'Account', icon: Wallet },
+] as const;
+
+type QuickActionId = (typeof QUICK_ACTIONS)[number]['id'];
 
 export default function WalletBalanceCard() {
   const [balance, setBalance] = useState<string>('0.00');
   const [loading, setLoading] = useState(true);
-  
+  const [isBalanceVisible, setIsBalanceVisible] = useState(true);
+
   const [isMakePaymentOpen, setIsMakePaymentOpen] = useState(false);
   const [isAccountDetailsOpen, setIsAccountDetailsOpen] = useState(false);
   const [isSendMoneyOpen, setIsSendMoneyOpen] = useState(false);
@@ -26,49 +37,39 @@ export default function WalletBalanceCard() {
   const [isWithdrawSuccessOpen, setIsWithdrawSuccessOpen] = useState(false);
   const [transactionAmount, setTransactionAmount] = useState('');
   const [recipientName, setRecipientName] = useState('');
-  const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
   useEffect(() => {
     const fetchWallet = async () => {
-        try {
-            const response = await ApiService.wallet.getSummary();
-            // response.data is WalletSummaryResponse, response.data.data is WalletSummaryData
-            if (response.data.data.wallet) {
-                setBalance(response.data.data.wallet.balance);
-            }
-        } catch (error) {
-            console.error('Failed to fetch wallet', error);
-            toastAxiosError(error, "Failed to load wallet balance.");
-        } finally {
-            setLoading(false);
+      try {
+        const response = await ApiService.wallet.getSummary();
+        if (response.data.data.wallet) {
+          setBalance(response.data.data.wallet.balance);
         }
+      } catch (error) {
+        console.error('Failed to fetch wallet', error);
+        toastAxiosError(error, 'Failed to load wallet balance.');
+      } finally {
+        setLoading(false);
+      }
     };
     fetchWallet();
   }, []);
 
-  const handleTopUp = () => {
-    setIsMakePaymentOpen(true);
-  };
-
-  const handleMakePaymentClose = () => {
-    setIsMakePaymentOpen(false);
-  };
-
-  const handleMakePaymentSend = () => {
-    setIsMakePaymentOpen(false);
-    setIsAccountDetailsOpen(true);
-  };
-
-  const handleAccountDetailsClose = () => {
-    setIsAccountDetailsOpen(false);
-  };
-
-  const handleSendMoneyClose = () => {
-    setIsSendMoneyOpen(false);
-  };
-
-  const handleWithdrawMoneyClose = () => {
-    setIsWithdrawMoneyOpen(false);
+  const handleQuickAction = (id: QuickActionId) => {
+    switch (id) {
+      case 'fund':
+        setIsMakePaymentOpen(true);
+        break;
+      case 'send':
+        setIsSendMoneyOpen(true);
+        break;
+      case 'withdraw':
+        setIsWithdrawMoneyOpen(true);
+        break;
+      case 'account':
+        setIsAccountDetailsOpen(true);
+        break;
+    }
   };
 
   // Send Money Flow
@@ -79,19 +80,6 @@ export default function WalletBalanceCard() {
     setIsSendPinOpen(true);
   };
 
-  const handleSendPinClose = () => {
-    setIsSendPinOpen(false);
-  };
-
-  const handleSendPinConfirm = () => {
-    setIsSendPinOpen(false);
-    setIsSendSuccessOpen(true);
-  };
-
-  const handleSendSuccessClose = () => {
-    setIsSendSuccessOpen(false);
-  };
-
   // Withdraw Money Flow
   const handleWithdrawMoneySubmit = (amount: string) => {
     setTransactionAmount(amount);
@@ -99,134 +87,158 @@ export default function WalletBalanceCard() {
     setIsWithdrawPinOpen(true);
   };
 
-  const handleWithdrawPinClose = () => {
-    setIsWithdrawPinOpen(false);
-  };
-
-  const handleWithdrawPinConfirm = () => {
-    setIsWithdrawPinOpen(false);
-    setIsWithdrawSuccessOpen(true);
-  };
-
-  const handleWithdrawSuccessClose = () => {
-    setIsWithdrawSuccessOpen(false);
-  };
-
   return (
     <>
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#0E9DA5] to-[#043336] rounded-[32px] p-8 text-white shadow-elevated border border-white/10 group">
-        {/* Decorative elements */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-white/10 transition-colors duration-700" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-400/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
+      <section
+        aria-labelledby="wallet-balance-heading"
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-[oklch(0.18_0.025_220)] p-7 text-white shadow-lg"
+      >
+        {/* Subtle highlights */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-16 -left-12 h-40 w-40 rounded-full bg-white/8 blur-3xl"
+        />
 
-        <div className="relative z-10 space-y-8">
-          {/* Header with title and Eye Icon */}
+        <div className="relative space-y-6">
+          {/* Header */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full border border-white/10 w-fit">
-              <span className="text-[10px] font-black uppercase tracking-widest text-teal-100">Active Balance</span>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 backdrop-blur-md">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/80">
+                Active balance
+              </span>
               <button
-                onClick={() => setIsBalanceVisible(!isBalanceVisible)}
-                className="text-white/60 hover:text-white transition-colors"
+                type="button"
+                onClick={() => setIsBalanceVisible((v) => !v)}
+                aria-label={isBalanceVisible ? 'Hide balance' : 'Show balance'}
+                aria-pressed={!isBalanceVisible}
+                className="text-white/70 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded-full"
               >
                 {isBalanceVisible ? (
-                  <Eye className="w-3.5 h-3.5" />
+                  <Eye className="size-3.5" aria-hidden="true" />
                 ) : (
-                  <EyeOff className="w-3.5 h-3.5" />
+                  <EyeOff className="size-3.5" aria-hidden="true" />
                 )}
               </button>
             </div>
-            <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10">
-               <span className="font-black text-xs">NGN</span>
-            </div>
+            <span
+              className="grid size-10 place-items-center rounded-xl border border-white/15 bg-white/10 text-[10px] font-bold backdrop-blur-md"
+              aria-label="Currency: Nigerian Naira"
+            >
+              NGN
+            </span>
           </div>
 
-          {/* Balance Amount */}
+          {/* Balance */}
           <div className="space-y-1">
+            <h2
+              id="wallet-balance-heading"
+              className="text-xs font-medium uppercase tracking-widest text-white/70"
+            >
+              Total available funds
+            </h2>
             {loading ? (
-               <div className="h-12 w-48 bg-white/10 animate-pulse rounded-2xl"></div>
+              <Skeleton className="h-12 w-56 rounded-2xl bg-white/15" />
             ) : (
-               <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold text-teal-200/80">₦</span>
-                  <h2 className="text-5xl font-black tracking-tighter">
-                    {isBalanceVisible ? Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '••••••'}
-                  </h2>
-               </div>
+              <div
+                className="flex items-baseline gap-1"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span className="text-2xl font-bold text-white/70">₦</span>
+                <span
+                  className={cn(
+                    'text-5xl font-black tracking-tighter tabular-nums',
+                    !isBalanceVisible && 'tracking-[0.1em]'
+                  )}
+                >
+                  {isBalanceVisible
+                    ? Number(balance).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })
+                    : '••••••'}
+                </span>
+              </div>
             )}
-            <p className="text-xs font-medium text-teal-100/60">Total available funds</p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              onClick={handleTopUp}
-              className="flex-1 bg-white text-[#043336] hover:bg-teal-50 rounded-2xl h-12 font-extrabold text-sm shadow-lg transition-all active:scale-95"
-            >
-              Fund
-            </Button>
-            <Button
-              onClick={() => setIsSendMoneyOpen(true)}
-              className="flex-1 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 text-white rounded-2xl h-12 font-extrabold text-sm transition-all active:scale-95"
-            >
-              Send
-            </Button>
-            <Button
-              onClick={() => setIsWithdrawMoneyOpen(true)}
-              className="flex-1 bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 text-white rounded-2xl h-12 font-extrabold text-sm transition-all active:scale-95"
-            >
-              Withdraw
-            </Button>
+          {/* Quick actions */}
+          <div className="grid grid-cols-4 gap-2 pt-1">
+            {QUICK_ACTIONS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleQuickAction(id)}
+                className={cn(
+                  'group flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-md',
+                  'text-xs font-semibold text-white transition-colors hover:bg-white/20',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60'
+                )}
+              >
+                <span className="grid size-8 place-items-center rounded-full bg-white/15 transition-transform group-hover:scale-105">
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Make Payment Modal */}
       <MakePaymentModal
         isOpen={isMakePaymentOpen}
-        onClose={handleMakePaymentClose}
-        onSend={handleMakePaymentSend}
+        onClose={() => setIsMakePaymentOpen(false)}
+        onSend={() => {
+          setIsMakePaymentOpen(false);
+          setIsAccountDetailsOpen(true);
+        }}
       />
 
-      {/* Account Details Modal */}
       <AccountDetailsModal
         isOpen={isAccountDetailsOpen}
-        onClose={handleAccountDetailsClose}
+        onClose={() => setIsAccountDetailsOpen(false)}
       />
 
-      {/* Send Money Modal */}
       <SendMoneyModal
         isOpen={isSendMoneyOpen}
-        onClose={handleSendMoneyClose}
+        onClose={() => setIsSendMoneyOpen(false)}
         onSend={handleSendMoneySubmit}
       />
 
-      {/* Withdraw Money Modal */}
       <WithdrawMoneyModal
         isOpen={isWithdrawMoneyOpen}
-        onClose={handleWithdrawMoneyClose}
+        onClose={() => setIsWithdrawMoneyOpen(false)}
         onConfirm={handleWithdrawMoneySubmit}
       />
 
-      {/* Transaction Pin Modals */}
       <TransactionPinModal
         isOpen={isSendPinOpen}
-        onClose={handleSendPinClose}
-        onConfirm={handleSendPinConfirm}
+        onClose={() => setIsSendPinOpen(false)}
+        onConfirm={() => {
+          setIsSendPinOpen(false);
+          setIsSendSuccessOpen(true);
+        }}
         title="Confirm transfer"
         confirmButtonText="Send"
       />
 
       <TransactionPinModal
         isOpen={isWithdrawPinOpen}
-        onClose={handleWithdrawPinClose}
-        onConfirm={handleWithdrawPinConfirm}
+        onClose={() => setIsWithdrawPinOpen(false)}
+        onConfirm={() => {
+          setIsWithdrawPinOpen(false);
+          setIsWithdrawSuccessOpen(true);
+        }}
         title="Withdraw funds"
         confirmButtonText="Withdraw"
       />
 
-      {/* Success Modals */}
       <SuccessModal
         isOpen={isSendSuccessOpen}
-        onClose={handleSendSuccessClose}
+        onClose={() => setIsSendSuccessOpen(false)}
         amount={`₦${transactionAmount}`}
         message={`You have successfully sent ${transactionAmount} to ${recipientName}`}
         isWithdrawal={false}
@@ -234,7 +246,7 @@ export default function WalletBalanceCard() {
 
       <SuccessModal
         isOpen={isWithdrawSuccessOpen}
-        onClose={handleWithdrawSuccessClose}
+        onClose={() => setIsWithdrawSuccessOpen(false)}
         amount={`₦${transactionAmount}`}
         message="Your withdrawal has been completed"
         isWithdrawal={true}

@@ -7,81 +7,80 @@ import TrendingTopics from '@/components/dashboard/TrendingTopics';
 import OngoingEvents from '@/components/dashboard/OngoingEvents';
 import NewMembers from '@/components/dashboard/NewMembers';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Paperclip, Smile, Image as ImageIcon } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { CreatePostDialog } from '@/components/community/CreatePostDialog';
-import { Menu, X } from 'lucide-react';
+import { Image as ImageIcon, Paperclip, Smile, Sparkles } from 'lucide-react';
 import VerificationNotice from '@/components/dashboard/VerificationNotice';
 
-// Reusable Right Sidebar Content
-const RightSidebarContent = () => (
+function RightRailContent() {
+  return (
     <div className="space-y-6">
-        <TrendingTopics />
-        <OngoingEvents />
-        <NewMembers />
+      <TrendingTopics />
+      <OngoingEvents />
+      <NewMembers />
     </div>
-);
+  );
+}
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'my-groups'>('all');
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
+  const [isRightRailOpen, setIsRightRailOpen] = useState(false);
 
   const toggleCreatePost = () => setIsCreatePostOpen((s) => !s);
-  const toggleRightSidebar = () => setIsRightSidebarOpen((s) => !s);
-
-  // Close sidebar when route changes or content clicked (optional)
-  // useEffect(() => setIsRightSidebarOpen(false), [pathname]); 
 
   return (
     <DashboardLayout pageTitle="Home">
-      <div className="relative">
-        <div className="flex flex-col lg:flex-row gap-6 relative">
-            {/* Mobile Header for Right Sidebar Toggle */}
-            <div className="lg:hidden flex justify-end mb-4">
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={toggleRightSidebar}
-                    className="flex items-center gap-2"
-                >
-                    <Menu className="w-4 h-4" />
-                    <span>Trending & Events</span>
-                </Button>
-            </div>
+      <div className="relative flex flex-col gap-6 lg:flex-row">
+        {/* Mobile right-rail trigger */}
+        <div className="flex justify-end lg:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsRightRailOpen(true)}
+            leadingIcon={<Sparkles className="h-4 w-4" />}
+          >
+            Trending &amp; events
+          </Button>
+        </div>
 
-            <div className="flex-1 min-w-0"> {/* min-w-0 ensures flex child doesn't overflow */}
-            <VerificationNotice />
-          <div className="bg-white rounded-lg p-4 mb-4">
-            <div className="flex items-start gap-3">
-              <Avatar className="h-[40px] w-[40px]">
-                <AvatarImage src="/images/image.png" />
-                <AvatarFallback>AS</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 relative h-[40px]">
-                <Input
-                  placeholder="Post something"
-                  className="bg-[#f5f5f5] text-gray-600 pr-32 rounded-full h-[40px]"
+        {/* Main column */}
+        <div className="min-w-0 flex-1 space-y-4">
+          <VerificationNotice />
+
+          {/* Composer */}
+          <Card variant="default" density="compact">
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src="/images/image.png" alt="" />
+                  <AvatarFallback>AS</AvatarFallback>
+                </Avatar>
+                <button
+                  type="button"
                   onClick={toggleCreatePost}
-                  readOnly
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <Paperclip className="w-4 h-4 text-gray-500" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <Smile className="w-4 h-4 text-gray-500" />
-                  </button>
-                  <button className="p-1 hover:bg-gray-100 rounded">
-                    <ImageIcon className="w-4 h-4 text-gray-500" />
-                  </button>
-                </div>
+                  className="group flex h-11 flex-1 items-center justify-between rounded-full border border-border bg-muted/40 px-4 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Compose a post"
+                >
+                  <span>Post something to your community…</span>
+                  <span className="hidden items-center gap-1 sm:inline-flex">
+                    <span className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors group-hover:text-foreground">
+                      <Paperclip className="size-4" aria-hidden="true" />
+                    </span>
+                    <span className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors group-hover:text-foreground">
+                      <Smile className="size-4" aria-hidden="true" />
+                    </span>
+                    <span className="grid size-7 place-items-center rounded-full text-muted-foreground transition-colors group-hover:text-foreground">
+                      <ImageIcon className="size-4" aria-hidden="true" />
+                    </span>
+                  </span>
+                </button>
               </div>
-            </div>
 
-            <div className="flex items-center justify-between mt-4">
               <Tabs
                 value={activeTab}
                 onValueChange={(v) => setActiveTab(v as 'all' | 'my-groups')}
@@ -91,8 +90,8 @@ export default function DashboardPage() {
                   <TabsTrigger value="my-groups">My groups</TabsTrigger>
                 </TabsList>
               </Tabs>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           <CreatePostDialog
             isOpen={isCreatePostOpen}
@@ -102,41 +101,22 @@ export default function DashboardPage() {
           <PostFeed />
         </div>
 
-        {/* Desktop Right Sidebar */}
-        <div className="hidden lg:block w-80 flex-shrink-0">
+        {/* Desktop right rail */}
+        <aside className="hidden w-80 flex-shrink-0 lg:block" aria-label="Trending and events">
           <div className="sticky top-6">
-             <RightSidebarContent />
+            <RightRailContent />
           </div>
-        </div>
+        </aside>
       </div>
 
-      {/* Mobile Right Sidebar Drawer */}
-      {/* Overlay */}
-      {isRightSidebarOpen && (
-          <div 
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden animate-fade-in"
-            onClick={toggleRightSidebar}
-          />
-      )}
-      
-      {/* Drawer */}
-      <div className={`fixed inset-y-0 right-0 w-[300px] bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out lg:hidden ${isRightSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-4 h-full flex flex-col">
-              <div className="flex items-center justify-between mb-6">
-                  <h2 className="font-bold text-lg">Thinking & Events</h2>
-                  <Button variant="ghost" size="icon" onClick={toggleRightSidebar}>
-                      <X className="w-5 h-5" />
-                  </Button>
-              </div>
-              <div className="overflow-y-auto custom-scrollbar flex-1 pb-4">
-                 <RightSidebarContent />
-              </div>
-          </div>
-      </div>
-     </div>
+      {/* Mobile right rail (vaul bottom sheet) */}
+      <Sheet open={isRightRailOpen} onOpenChange={setIsRightRailOpen}>
+        <SheetContent side="right" title="Trending & events" description="Catch up on what's happening">
+          <RightRailContent />
+        </SheetContent>
+      </Sheet>
     </DashboardLayout>
   );
 }
 
-// Force dynamic rendering for this page
 export const dynamic = 'force-dynamic';
