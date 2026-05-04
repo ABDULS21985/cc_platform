@@ -840,4 +840,72 @@ export const ApiService = {
     get: (id: number) =>
       axiosInstance.get<OrganizationResponse>(`/v2/organizations/${id}`),
   },
+
+  // =========================================================================
+  // Notifications (in-app inbox)
+  // =========================================================================
+  notifications: {
+    list: (params?: {
+      limit?: number;
+      offset?: number;
+      unread_only?: boolean;
+      category?: string;
+    }) =>
+      axiosInstance.get<ApiResponse<{
+        notifications: NotificationApi[];
+        pagination: { total: number; limit: number; offset: number };
+        unread_count: number;
+      }>>("/v2/notifications/", { params }),
+
+    unreadCount: () =>
+      axiosInstance.get<ApiResponse<{ unread_count: number }>>(
+        "/v2/notifications/unread-count",
+      ),
+
+    create: (data: {
+      title: string;
+      body?: string;
+      category?: string;
+      source?: string;
+      action_href?: string | null;
+      action_label?: string | null;
+    }) =>
+      axiosInstance.post<ApiResponse<NotificationApi>>(
+        "/v2/notifications/",
+        data,
+      ),
+
+    markRead: (id: number) =>
+      axiosInstance.patch<ApiResponse<{ notification: NotificationApi }>>(
+        `/v2/notifications/${id}`,
+      ),
+
+    markAllRead: () =>
+      axiosInstance.post<ApiResponse<{ updated: number }>>(
+        "/v2/notifications/read-all",
+      ),
+
+    delete: (id: number) =>
+      axiosInstance.delete<ApiResponse<{ deleted: boolean }>>(
+        `/v2/notifications/${id}`,
+      ),
+  },
 };
+
+export interface NotificationApi {
+  id: number;
+  user_id: number;
+  category: string;
+  title: string;
+  body: string;
+  source: string;
+  action_href: string | null;
+  action_label: string | null;
+  amount: { value: string; direction: "in" | "out" } | null;
+  initials: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  timestamp: string;
+  created_at: string;
+  updated_at: string | null;
+}

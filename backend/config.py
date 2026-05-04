@@ -8,17 +8,31 @@ from dotenv import load_dotenv
 FLASK_ENV = os.getenv("FLASK_ENV", "development")
 if FLASK_ENV != "production":
     # Project layout (after the monorepo move) is:
-    #   /cc_platform/backend/.env   ← local backend overrides
-    #   /cc_platform/.ENV           ← shared canonical secrets (Neon DB, ENCRYPTION_KEY, ...)
-    # Load BOTH, with backend/.env winning for any conflict — that lets a dev
-    # override a single secret locally without forking the canonical file.
+    #   /cc_platform/backend/.env   ← dev-only defaults (Redis URL, session config, dummy secrets)
+    #   /cc_platform/.ENV           ← shared canonical secrets (Neon DB, ENCRYPTION_KEY, BellMFB, ...)
+    # Why .ENV must win: Flask CLI auto-loads backend/.env from CWD before our code runs,
+    # which means by the time config.py is imported the backend/.env values are already
+    # in os.environ. We need .ENV to override them so DB_HOST etc. point at Neon.
     backend_root = Path(__file__).resolve().parent
     project_root = backend_root.parent
-    # Order matters: dotenv won't override existing env vars, so load the more-
-    # general file (project root) first, then the more-specific (backend/.env).
-    for env_path in (project_root / ".ENV", project_root / ".env", backend_root / ".env"):
-        if env_path.exists():
-            load_dotenv(env_path, override=False)
+    # Load backend/.env first as a baseline, then .ENV with override=True so the
+    # canonical secrets always win — but exclude operational keys that PM2 sets
+    # explicitly (PORT, PYTHONUNBUFFERED, NODE_ENV) so the orchestrator stays
+    # authoritative for runtime config.
+    if (backend_root / ".env").exists():
+        load_dotenv(backend_root / ".env", override=False)
+    if (project_root / ".env").exists():
+        load_dotenv(project_root / ".env", override=False)
+    canonical_env = project_root / ".ENV"
+    if canonical_env.exists():
+        from dotenv import dotenv_values
+        _orchestrator_keys = {"PORT", "PYTHONUNBUFFERED", "NODE_ENV"}
+        for key, value in dotenv_values(canonical_env).items():
+            if value is None:
+                continue
+            if key in _orchestrator_keys and os.environ.get(key) is not None:
+                continue
+            os.environ[key] = value
 
 
 def _bool(value, default=False):
