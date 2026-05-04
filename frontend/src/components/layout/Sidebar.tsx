@@ -67,7 +67,7 @@ const SECTIONS: NavSection[] = [
       { href: '/dashboard/community', label: 'Communities', icon: <CommunityIcon /> },
       { href: '/dashboard/explore', label: 'Discover', icon: <Compass className="size-5" /> },
       { href: '/dashboard/events', label: 'Events', icon: <EventsIcon /> },
-      { href: '/dashboard/community', label: 'Members', icon: <Users className="size-5" /> },
+      { href: '/dashboard/members', label: 'Members', icon: <Users className="size-5" /> },
     ],
   },
   {
@@ -76,21 +76,21 @@ const SECTIONS: NavSection[] = [
       { href: '/dashboard/wallet', label: 'Wallet', icon: <WalletIcon />, badge: '3', badgeTone: 'count' },
       { href: '/dashboard/bills', label: 'Bills', icon: <Receipt className="size-5" />, badge: '2', badgeTone: 'count' },
       { href: '/dashboard/activity', label: 'Activity', icon: <Activity className="size-5" /> },
-      { href: '/dashboard/wallet', label: 'Recurring', icon: <Repeat className="size-5" />, badge: 'Soon', badgeTone: 'soon', comingSoon: true },
+      { href: '/dashboard/recurring', label: 'Recurring', icon: <Repeat className="size-5" /> },
     ],
   },
   {
     heading: 'Workspace',
     items: [
       { href: '/dashboard/inbox', label: 'Inbox', icon: <Inbox className="size-5" />, badge: '12', badgeTone: 'count' },
-      { href: '/dashboard', label: 'Saved', icon: <Bookmark className="size-5" />, badge: 'Soon', badgeTone: 'soon', comingSoon: true },
+      { href: '/dashboard/saved', label: 'Saved', icon: <Bookmark className="size-5" /> },
     ],
   },
   {
     heading: 'Account',
     items: [
       { href: '/dashboard/settings', label: 'Settings', icon: <SettingsIcon /> },
-      { href: '/dashboard/settings', label: 'Audit log', icon: <ShieldCheck className="size-5" />, badge: 'Soon', badgeTone: 'soon', comingSoon: true },
+      { href: '/dashboard/audit', label: 'Audit log', icon: <ShieldCheck className="size-5" /> },
     ],
   },
 ];
