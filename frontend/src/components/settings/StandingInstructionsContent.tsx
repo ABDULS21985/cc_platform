@@ -1,9 +1,50 @@
 'use client';
 
+import * as React from 'react';
 import { useState } from 'react';
+import { Calendar, MoreHorizontal, Plus, Repeat } from 'lucide-react';
 import { AddInstructionsModal } from './AddInstructionsModal';
 import { PasswordConfirmModal } from './PasswordConfirmModal';
 import { SplitPaymentModal } from './SplitPaymentModal';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+
+interface StandingInstruction {
+  id: number;
+  name: string;
+  description: string;
+  amount: string;
+  cadence: string;
+  next: string;
+}
+
+const INSTRUCTIONS: StandingInstruction[] = [
+  {
+    id: 1,
+    name: 'Yalleman',
+    description: 'Membership dues',
+    amount: '₦120',
+    cadence: 'Monthly',
+    next: '14 Jun',
+  },
+  {
+    id: 2,
+    name: 'Estate fund',
+    description: 'Lekki block 3',
+    amount: '₦18,500',
+    cadence: 'Monthly',
+    next: '01 Jun',
+  },
+  {
+    id: 3,
+    name: 'Marathon vendor',
+    description: 'T-shirt printing',
+    amount: '₦45,000',
+    cadence: 'Quarterly',
+    next: '01 Aug',
+  },
+];
 
 export function StandingInstructionsContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -11,28 +52,23 @@ export function StandingInstructionsContent() {
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [currentTitle, setCurrentTitle] = useState('');
 
-  const handleAddClick = () => {
-    setIsAddModalOpen(true);
-  };
-
-  const handleAddModalNext = (data: any) => {
+  const handleAddModalNext = (data: { title: string }) => {
     setCurrentTitle(data.title);
     setIsAddModalOpen(false);
     setIsPasswordModalOpen(true);
   };
 
-  const handlePasswordModalNext = (password: string) => {
+  const handlePasswordModalNext = () => {
     setIsPasswordModalOpen(false);
     setIsSplitModalOpen(true);
   };
 
-  const handleSplitModalComplete = (data: any) => {
+  const handleSplitModalComplete = (data: unknown) => {
     setIsSplitModalOpen(false);
-    // Handle completion logic here
     console.log('Standing instruction created:', data);
   };
 
-  const handleCloseAllModals = () => {
+  const closeAll = () => {
     setIsAddModalOpen(false);
     setIsPasswordModalOpen(false);
     setIsSplitModalOpen(false);
@@ -40,137 +76,83 @@ export function StandingInstructionsContent() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div></div>
-        <button
-          onClick={handleAddClick}
-          className="flex items-center gap-2 px-4 py-2 bg-[#0E9DA5] text-white rounded-full hover:bg-[#0d8a91] transition-colors"
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Scheduled transfers that run automatically.
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setIsAddModalOpen(true)}
+          leadingIcon={<Plus className="size-3.5" />}
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
-          </svg>
-          Add
-        </button>
+          New instruction
+        </Button>
       </div>
 
-      {/* Standing Instructions Cards */}
-      <div className="space-y-4">
-        {/* Standing Instruction Card 1 */}
-        <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-medium text-[#000000]">Yalleman</h3>
-              <p className="text-sm text-[#525252]">Standing Instruction</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-medium text-[#000000]">N120</p>
-            <p className="text-sm text-[#525252]">/Monthly</p>
-          </div>
-        </div>
+      <ul className="space-y-3" role="list">
+        {INSTRUCTIONS.map((s) => (
+          <li key={s.id}>
+            <Card variant="default" density="compact">
+              <CardContent className="flex items-center justify-between gap-3 px-5">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
+                    aria-hidden="true"
+                  >
+                    <Repeat className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold tracking-tight text-foreground">
+                      {s.name}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {s.description}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="soft" size="sm" className="hidden gap-1 sm:inline-flex">
+                    <Calendar className="size-3" aria-hidden="true" />
+                    Next {s.next}
+                  </Badge>
+                  <div className="text-right">
+                    <p className="text-sm font-bold tabular-nums text-foreground">
+                      {s.amount}
+                    </p>
+                    <p className="text-xs text-muted-foreground">/{s.cadence}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Options for ${s.name}`}
+                  >
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </li>
+        ))}
+      </ul>
 
-        {/* Standing Instruction Card 2 */}
-        <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-medium text-[#000000]">Yalleman</h3>
-              <p className="text-sm text-[#525252]">Standing Instruction</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-medium text-[#000000]">N120</p>
-            <p className="text-sm text-[#525252]">/Monthly</p>
-          </div>
-        </div>
-
-        {/* Standing Instruction Card 3 */}
-        <div className="bg-gray-100 rounded-lg p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-              <svg
-                className="w-6 h-6 text-gray-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-medium text-[#000000]">Yalleman</h3>
-              <p className="text-sm text-[#525252]">Standing Instruction</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="font-medium text-[#000000]">N120</p>
-            <p className="text-sm text-[#525252]">/Monthly</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Modals */}
+      {/* Modal flow preserved */}
       <AddInstructionsModal
         isOpen={isAddModalOpen}
-        onClose={handleCloseAllModals}
+        onClose={closeAll}
         onNext={handleAddModalNext}
       />
-
       <PasswordConfirmModal
         isOpen={isPasswordModalOpen}
-        onClose={handleCloseAllModals}
+        onClose={closeAll}
         onNext={handlePasswordModalNext}
         title={currentTitle}
       />
-
       <SplitPaymentModal
         isOpen={isSplitModalOpen}
-        onClose={handleCloseAllModals}
+        onClose={closeAll}
         onComplete={handleSplitModalComplete}
         title={currentTitle}
       />
