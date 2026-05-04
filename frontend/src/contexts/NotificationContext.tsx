@@ -121,12 +121,40 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           // listener errors should not break others
         }
       }
-      // Lightweight global toast as a fallback for pages not subscribed.
       const direction = payload.notification.amount?.direction;
       const desc = direction
         ? `₦${payload.notification.amount?.value} ${direction === 'in' ? 'received' : 'sent'}`
         : payload.notification.body || payload.notification.source;
-      toast(payload.notification.title, { description: desc });
+
+      // If the user is in another tab and granted OS permission, fire a
+      // native notification. Otherwise fall back to an in-app toast.
+      const tabHidden =
+        typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      if (
+        tabHidden &&
+        typeof window !== 'undefined' &&
+        typeof window.Notification !== 'undefined' &&
+        window.Notification.permission === 'granted'
+      ) {
+        try {
+          const osNotif = new window.Notification(payload.notification.title, {
+            body: desc,
+            tag: `ccp-notif-${payload.notification.id}`,
+            icon: '/favicon.ico',
+          });
+          osNotif.onclick = () => {
+            window.focus();
+            const href = payload.notification.action_href || '/dashboard/inbox';
+            window.location.href = href;
+            osNotif.close();
+          };
+        } catch {
+          // Some browsers throw when constructed without a service worker.
+          toast(payload.notification.title, { description: desc });
+        }
+      } else {
+        toast(payload.notification.title, { description: desc });
+      }
     };
 
     socket.on('notification_created', handleCreated);
@@ -138,8 +166,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [refresh]);
 
   const value = React.useMemo<NotificationContextValue>(
-    () => ({ unreadCount, onNotification, refresh, markRead, markAllRead }),
-    [unreadCount, onNotification, refresh, markRead, markAllRead]
+    () => ({
+      unreadCount,
+      onNotification,
+      refresh,
+      markRead,
+      markAllRead,
+      osPermission,
+      requestOSPermission,
+    }),
+    [unreadCount, onNotification, refresh, markRead, markAllRead, osPermission, requestOSPermission]
   );
 
   return (
@@ -158,6 +194,8 @@ export function useNotifications(): NotificationContextValue {
       refresh: async () => {},
       markRead: () => {},
       markAllRead: async () => {},
+      osPermission: 'unsupported' as const,
+      requestOSPermission: async () => 'unsupported' as const,
     };
   }
   return ctx;

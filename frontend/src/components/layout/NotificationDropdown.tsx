@@ -49,7 +49,13 @@ interface Props {
 
 export function NotificationDropdown({ children }: Props) {
   const router = useRouter();
-  const { onNotification, markRead, markAllRead } = useNotifications();
+  const {
+    onNotification,
+    markRead,
+    markAllRead,
+    osPermission,
+    requestOSPermission,
+  } = useNotifications();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<NotificationApi[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -133,6 +139,22 @@ export function NotificationDropdown({ children }: Props) {
             Mark all read
           </Button>
         </div>
+
+        {osPermission === 'default' && (
+          <button
+            type="button"
+            onClick={() => void requestOSPermission()}
+            className="flex w-full items-start gap-2 border-b border-border bg-info/10 px-4 py-2.5 text-left text-[11px] text-foreground hover:bg-info/15"
+          >
+            <Bell className="mt-0.5 size-3.5 shrink-0 text-info" aria-hidden="true" />
+            <span>
+              <span className="font-semibold">Get desktop alerts.</span>{' '}
+              <span className="text-muted-foreground">
+                Click to allow notifications when you're in another tab.
+              </span>
+            </span>
+          </button>
+        )}
 
         <div className="max-h-[28rem] overflow-y-auto">
           {loading && items.length === 0 ? (
