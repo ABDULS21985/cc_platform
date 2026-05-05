@@ -33,6 +33,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { motion, AnimatePresence } from '@/components/ui/motion';
 import { BillsHero } from '@/components/bills/BillsHero';
 import { BillCard } from '@/components/bills/BillCard';
+import { TransactionPinModal } from '@/components/wallet/TransactionPinModal';
 import type { BillItem } from '@/components/bills/types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -247,6 +248,14 @@ interface ApiBill {
   id: number;
   community_id: number;
   creator_id: number;
+  /** Embedded creator summary the backend now ships inline. */
+  creator?: {
+    id: number;
+    firstname?: string | null;
+    lastname?: string | null;
+    full_name?: string | null;
+    profile_photo?: string | null;
+  } | null;
   title: string;
   description?: string | null;
   amount: number;
@@ -318,10 +327,13 @@ async function fetchAggregatedBills(currentUserId?: number): Promise<BillItem[]>
       dueAt: bill.due_date,
       status,
       createdBy: {
+        // Prefer the inlined creator summary; fall back to "You" / "User #N".
         name:
           bill.creator_id === currentUserId
             ? 'You'
-            : `User #${bill.creator_id}`,
+            : bill.creator?.full_name ||
+              [bill.creator?.firstname, bill.creator?.lastname].filter(Boolean).join(' ') ||
+              `User #${bill.creator_id}`,
         isYou: bill.creator_id === currentUserId,
       },
       members: { paid, total },
@@ -474,53 +486,120 @@ export default function BillsPage() {
     }));
   }, [filtered]);
 
-  const handlePay = (id: string) => {
-    setBills((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? {
-              ...b,
-              status: 'paid',
-              paidAt: new Date().toISOString(),
-              paidVia: 'CCPay wallet',
-              members: {
-                paid: Math.min(b.members.paid + 1, b.members.total),
-                total: b.members.total,
-              },
-            }
-          : b
-      )
-    );
-    const bill = bills.find((b) => b.id === id);
-    toast.success(`Paid ${bill?.title}`, {
-      description: bill ? `₦${bill.amountFormatted} settled` : undefined,
-    });
+  // PIN dialog state. `pendingPay` is either:
+  //   - { kind: 'single', billId } — pay one bill from a card
+  //   - { kind: 'bulk', billIds } — settle every outstanding/overdue bill
+  type PendingPay =
+    | { kind: 'single'; billId: string }
+    | { kind: 'bulk'; billIds: string[] }
+    | null;
+  const [pendingPay, setPendingPay] = useState<PendingPay>(null);
+  const [paying, setPaying] = useState(false);
+
+  const requestPay = (id: string) => {
+    if (usingMock) {
+      // No real bills loaded — keep the optimistic toast UX from before.
+      setBills((prev) =>
+        prev.map((b) =>
+          b.id === id
+            ? {
+                ...b,
+                status: 'paid',
+                paidAt: new Date().toISOString(),
+                paidVia: 'CCPay wallet',
+              }
+            : b,
+        ),
+      );
+      const bill = bills.find((b) => b.id === id);
+      toast.success(`Paid ${bill?.title}`, {
+        description: bill ? `₦${bill.amountFormatted} settled (demo)` : undefined,
+      });
+      return;
+    }
+    setPendingPay({ kind: 'single', billId: id });
   };
 
-  const handleSettleAll = () => {
+  const requestSettleAll = () => {
     const ids = bills
       .filter((b) => b.status === 'pending' || b.status === 'overdue')
       .map((b) => b.id);
     if (ids.length === 0) return;
-    setBills((prev) =>
-      prev.map((b) =>
-        ids.includes(b.id)
-          ? {
-              ...b,
-              status: 'paid',
-              paidAt: new Date().toISOString(),
-              paidVia: 'CCPay wallet',
-            }
-          : b
-      )
-    );
-    toast.success(`Settled ${ids.length} bills`);
+    if (usingMock) {
+      setBills((prev) =>
+        prev.map((b) =>
+          ids.includes(b.id)
+            ? {
+                ...b,
+                status: 'paid',
+                paidAt: new Date().toISOString(),
+                paidVia: 'CCPay wallet',
+              }
+            : b,
+        ),
+      );
+      toast.success(`Settled ${ids.length} bills (demo)`);
+      return;
+    }
+    setPendingPay({ kind: 'bulk', billIds: ids });
+  };
+
+  const performPay = async (pin: string) => {
+    if (!pendingPay) return;
+    setPaying(true);
+    const idsToPay =
+      pendingPay.kind === 'single' ? [pendingPay.billId] : pendingPay.billIds;
+    const targets = bills.filter((b) => idsToPay.includes(b.id));
+
+    let succeeded = 0;
+    let failed = 0;
+    for (const bill of targets) {
+      try {
+        await ApiService.communities.payBill(
+          Number(bill.community.id),
+          Number(bill.id),
+          {
+            amount: bill.amount,
+            payment_method: 'wallet',
+            pin,
+          },
+        );
+        succeeded += 1;
+        setBills((prev) =>
+          prev.map((b) =>
+            b.id === bill.id
+              ? {
+                  ...b,
+                  status: 'paid',
+                  paidAt: new Date().toISOString(),
+                  paidVia: 'CCPay wallet',
+                }
+              : b,
+          ),
+        );
+      } catch (err) {
+        failed += 1;
+        toastAxiosError(err, `Failed to pay "${bill.title}".`);
+      }
+    }
+    setPaying(false);
+    setPendingPay(null);
+    if (succeeded > 0 && failed === 0) {
+      toast.success(
+        succeeded === 1 ? 'Bill paid' : `${succeeded} bills settled`,
+      );
+    } else if (succeeded > 0 && failed > 0) {
+      toast(
+        `${succeeded} of ${succeeded + failed} bills paid`,
+        { description: `${failed} failed — check inbox for details.` },
+      );
+    }
   };
 
   return (
     <DashboardLayout pageTitle="Bills">
       <div className="space-y-6">
-        <BillsHero stats={stats} onSettleAll={handleSettleAll} />
+        <BillsHero stats={stats} onSettleAll={requestSettleAll} />
 
         {/* Tabs */}
         <div
@@ -726,7 +805,7 @@ export default function BillsPage() {
                     <AnimatePresence initial={false}>
                       {group.items.map((b) => (
                         <li key={b.id}>
-                          <BillCard bill={b} onPay={handlePay} />
+                          <BillCard bill={b} onPay={requestPay} />
                         </li>
                       ))}
                     </AnimatePresence>

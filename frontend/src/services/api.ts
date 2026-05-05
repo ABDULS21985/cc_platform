@@ -474,6 +474,8 @@ export interface PayBillPayload {
   amount: number;
   payment_method: "wallet" | "transfer" | "card";
   transaction_reference?: string | null;
+  /** Required for `payment_method: 'wallet'` — backend verifies via TransactionPinService. */
+  pin?: string;
 }
 
 export interface PaymentData {
