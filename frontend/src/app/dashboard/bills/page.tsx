@@ -850,6 +850,23 @@ export default function BillsPage() {
           We send a reminder 3 days before each bill is due, and again 12 hours before.
         </p>
       </div>
+
+      <TransactionPinModal
+        isOpen={pendingPay !== null}
+        onClose={() => {
+          if (!paying) setPendingPay(null);
+        }}
+        onConfirm={performPay}
+        title={
+          pendingPay?.kind === 'bulk'
+            ? `Settle ${pendingPay.billIds.length} bills`
+            : 'Pay bill'
+        }
+        confirmButtonText={
+          pendingPay?.kind === 'bulk' ? 'Settle all' : 'Pay'
+        }
+        loading={paying}
+      />
     </DashboardLayout>
   );
 }
