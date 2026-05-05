@@ -53,9 +53,13 @@ const fmt = (n: number) => n.toLocaleString('en-NG');
  *     source_account_name, source_bank_name, destination_account_name,
  *     status, community_id, bill_id, transaction_type, meta, completed_at,
  *     created_at }
+ *
+ * `communityNames` maps community_id → display name so each transaction
+ * carries the real circle name (not the placeholder "Community" stub).
  */
 function mapApiTransaction(
-  t: Record<string, unknown>
+  t: Record<string, unknown>,
+  communityNames: Map<number, string>,
 ): ActivityItem {
   const amount = Number(t.amount as string) || 0;
   const signedAmount = Number(t.signed_amount as string) || amount;
@@ -107,7 +111,12 @@ function mapApiTransaction(
       (t.created_at as string) ||
       new Date().toISOString(),
     community: t.community_id
-      ? { id: String(t.community_id), name: 'Community' }
+      ? {
+          id: String(t.community_id),
+          name:
+            communityNames.get(Number(t.community_id)) ||
+            `Community #${t.community_id}`,
+        }
       : undefined,
     counterparty: counterpartyName
       ? {
@@ -491,19 +500,32 @@ export default function ActivityPage() {
   // renders an actionable empty state pointing them at verification.
   const [walletMissing, setWalletMissing] = useState(false);
 
-  // Fetch transactions on mount. Period filtering is client-side because the
-  // backend endpoint doesn't support date ranges yet.
+  // Fetch transactions + joined communities on mount. Period filtering is
+  // client-side because the backend endpoint doesn't support date ranges yet.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      // Joined communities give us a real id→name lookup so every
+      // transaction's community label is accurate. Failure is non-fatal —
+      // we fall back to "Community #<id>".
+      const communityNames = new Map<number, string>();
+      try {
+        const joinedRes = await ApiService.communities.joined({ limit: 100 });
+        for (const c of joinedRes.data?.data?.communities ?? []) {
+          communityNames.set(c.id, c.name);
+        }
+      } catch {
+        // ignore — labels degrade gracefully
+      }
+
       try {
         const res = await ApiService.wallet.getTransactions({ limit: 100 });
         if (cancelled) return;
         const list = (res.data?.data?.transactions ?? []) as unknown as Array<
           Record<string, unknown>
         >;
-        setItems(list.map(mapApiTransaction));
+        setItems(list.map((tx) => mapApiTransaction(tx, communityNames)));
         setWalletMissing(false);
       } catch (err) {
         if (cancelled) return;
@@ -559,7 +581,7 @@ export default function ActivityPage() {
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
-  }, [period, filters]);
+  }, [items, period, filters]);
 
   const stats = useMemo(() => {
     const totalIn = filtered

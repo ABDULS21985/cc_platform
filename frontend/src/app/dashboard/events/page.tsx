@@ -707,10 +707,26 @@ export default function EventsPage() {
         <CreateEventDialog
           isOpen={createOpen}
           onClose={() => setCreateOpen(false)}
-          onSubmit={(data: unknown) => {
-            console.log('Creating event:', data);
+          onSubmit={async (data) => {
             setCreateOpen(false);
-            toast.success('Event scheduled');
+            try {
+              const res = await ApiService.events.create({
+                title: data.title,
+                description: data.description,
+                starts_at: new Date(data.startsAt).toISOString(),
+                location: data.location,
+                is_private: data.isPrivate,
+                ticket_price: data.fee?.trim() ? data.fee.trim() : null,
+              });
+              const created = res.data?.data?.event;
+              if (created) {
+                setEvents((prev) => [mapApiEvent(created), ...prev]);
+                setUsingMock(false);
+              }
+              toast.success('Event scheduled');
+            } catch {
+              toast.error('Could not create event');
+            }
           }}
         />
       </div>

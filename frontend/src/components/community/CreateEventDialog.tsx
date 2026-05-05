@@ -20,6 +20,8 @@ interface EventFormData {
   fee: string;
   autoApproveMembers: boolean;
   isPrivate: boolean;
+  /** datetime-local string (YYYY-MM-DDTHH:mm). Required. */
+  startsAt: string;
   banner?: File;
 }
 
@@ -35,6 +37,7 @@ export function CreateEventDialog({
     fee: '',
     autoApproveMembers: false,
     isPrivate: true,
+    startsAt: '',
   });
 
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -61,7 +64,12 @@ export function CreateEventDialog({
   };
 
   const handleSubmit = () => {
-    if (formData.title && formData.description && formData.location) {
+    if (
+      formData.title &&
+      formData.description &&
+      formData.location &&
+      formData.startsAt
+    ) {
       onSubmit({
         ...formData,
         banner: bannerFile || undefined,
@@ -75,6 +83,7 @@ export function CreateEventDialog({
         fee: '',
         autoApproveMembers: false,
         isPrivate: true,
+        startsAt: '',
       });
       setBannerFile(null);
     }
@@ -82,7 +91,6 @@ export function CreateEventDialog({
 
   const handleClose = () => {
     onClose();
-    // Reset form
     setFormData({
       title: '',
       description: '',
@@ -90,6 +98,7 @@ export function CreateEventDialog({
       fee: '',
       autoApproveMembers: false,
       isPrivate: true,
+      startsAt: '',
     });
     setBannerFile(null);
   };
@@ -143,6 +152,23 @@ export function CreateEventDialog({
               placeholder="Enter event location"
               value={formData.location}
               onChange={(e) => handleInputChange('location', e.target.value)}
+              className="w-full rounded-lg border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5]"
+            />
+          </div>
+
+          {/* Starts at */}
+          <div>
+            <label
+              htmlFor="event-starts-at"
+              className="block text-sm font-medium text-[#959595] mb-2"
+            >
+              Starts at
+            </label>
+            <Input
+              id="event-starts-at"
+              type="datetime-local"
+              value={formData.startsAt}
+              onChange={(e) => handleInputChange('startsAt', e.target.value)}
               className="w-full rounded-lg border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5]"
             />
           </div>

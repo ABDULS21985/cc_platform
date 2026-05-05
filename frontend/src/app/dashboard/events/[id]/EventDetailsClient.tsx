@@ -1,298 +1,320 @@
 'use client';
 
-import { useState } from 'react';
+import * as React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Calendar,
   Clock,
   MapPin,
-  Heart,
-  MessageCircle,
-  Share2,
-  Smile,
-  Image as ImageIcon,
+  Globe,
+  Lock,
+  Ticket,
+  Users,
+  ArrowLeft,
 } from 'lucide-react';
 import { PaymentDialog } from '@/components/events/PaymentDialog';
+import { ApiService, type EventApi } from '@/services/api';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
-interface EventDetails {
-  id: string;
-  title: string;
-  date: string;
-  time: string;
-  location: string;
-  fee: string;
-  host: string;
-  hostAvatar: string;
-  description: string;
-  likes: number;
-  comments: number;
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-interface Comment {
-  id: string;
-  user: string;
-  avatar: string;
-  text: string;
-}
-
-interface Attendee {
-  id: string;
-  name: string;
-  avatar: string;
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 
 export default function EventDetailsClient() {
-  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const eventId = useMemo(() => Number(params?.id), [params?.id]);
 
-  const eventDetails: EventDetails = {
-    id: '1',
-    title: 'Virtual Coffee Chat: Networking for Designers',
-    date: 'Tue Jun 12',
-    time: '11:15pm',
-    location: 'Online zoom',
-    fee: 'N5,000',
-    host: 'Crypto academy',
-    hostAvatar: '/images/avatar1.png',
-    description:
-      'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.',
-    likes: 15,
-    comments: 12,
+  const [event, setEvent] = useState<EventApi | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!Number.isFinite(eventId)) {
+      setError('Invalid event id');
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const res = await ApiService.events.get(eventId);
+        if (cancelled) return;
+        const e = res.data?.data?.event;
+        if (!e) {
+          setError('Event not found');
+        } else {
+          setEvent(e);
+        }
+      } catch {
+        if (!cancelled) setError('Could not load event');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
+  const isPaid = !!(event?.ticket_price && event.ticket_price !== '0' && event.ticket_price !== '');
+  const isAttending = !!event?.is_attending;
+
+  const handleJoin = async () => {
+    if (!event) return;
+    if (isPaid && !isAttending) {
+      setPaymentOpen(true);
+      return;
+    }
+    await commitAttendance();
   };
 
-  const comments: Comment[] = [
-    {
-      id: '1',
-      user: '@maymamud',
-      avatar: '/images/avatar2.png',
-      text: 'This is lovely, i will definitely be there!',
-    },
-    {
-      id: '2',
-      user: '@maymamud',
-      avatar: '/images/avatar2.png',
-      text: 'This is lovely, i will definitely be there!',
-    },
-  ];
-
-  const attendees: Attendee[] = [
-    {
-      id: '1',
-      name: 'Aishat Ugochuwkwu',
-      avatar: '/images/avatar3.png',
-    },
-    {
-      id: '2',
-      name: 'Aishat Ugochuwkwu',
-      avatar: '/images/avatar3.png',
-    },
-    {
-      id: '3',
-      name: 'Aishat Ugochuwkwu',
-      avatar: '/images/avatar3.png',
-    },
-    {
-      id: '4',
-      name: '@maymamud',
-      avatar: '/images/avatar2.png',
-    },
-    {
-      id: '5',
-      name: '@maymamud',
-      avatar: '/images/avatar2.png',
-    },
-    {
-      id: '6',
-      name: '@maymamud',
-      avatar: '/images/avatar2.png',
-    },
-  ];
-
-  const handleJoinEvent = () => {
-    setIsPaymentDialogOpen(true);
+  const commitAttendance = async () => {
+    if (!event) return;
+    setSubmitting(true);
+    try {
+      const res = isAttending
+        ? await ApiService.events.cancelAttendance(event.id)
+        : await ApiService.events.attend(event.id);
+      const updated = res.data?.data?.event;
+      if (updated) setEvent(updated);
+      toast.success(isAttending ? 'Removed from your events' : 'Added to your events');
+    } catch {
+      toast.error('Could not update attendance');
+    } finally {
+      setSubmitting(false);
+      setPaymentOpen(false);
+    }
   };
 
-  const handlePaymentClose = () => {
-    setIsPaymentDialogOpen(false);
-  };
+  if (loading) {
+    return (
+      <DashboardLayout pageTitle="Event">
+        <div className="space-y-4">
+          <Skeleton className="h-48 w-full rounded-2xl" />
+          <Skeleton className="h-8 w-2/3 rounded" />
+          <Skeleton className="h-4 w-1/2 rounded" />
+          <Skeleton className="h-32 w-full rounded-2xl" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  const handlePayment = () => {
-    // Handle payment logic here
-    console.log('Processing payment for:', eventDetails.fee);
-    setIsPaymentDialogOpen(false);
-    // You can add payment processing logic here
-  };
+  if (error || !event) {
+    return (
+      <DashboardLayout pageTitle="Event">
+        <EmptyState
+          icon={<Calendar className="size-5" aria-hidden="true" />}
+          title={error ?? 'Event not found'}
+          description="This event may have been cancelled or removed."
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push('/dashboard/events')}
+              leadingIcon={<ArrowLeft className="size-4" />}
+            >
+              Back to events
+            </Button>
+          }
+        />
+      </DashboardLayout>
+    );
+  }
 
   return (
-    <DashboardLayout pageTitle="Event Details">
-      <div className="flex gap-6">
-        {/* Main Content Area */}
-        <div className="flex-1 space-y-6">
-          <div className="bg-white rounded-lg overflow-hidden">
-            <div className="relative w-full h-auto flex items-center justify-center">
+    <DashboardLayout pageTitle="Event">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-6">
+          {/* Cover */}
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-brand-soft to-brand/15 aspect-[16/7]">
+            {event.cover_image ? (
               <img
-                src="/images/chew.svg"
-                alt="Chew Banner"
-                className="w-full h-full object-cover"
+                src={event.cover_image}
+                alt={event.title}
+                className="h-full w-full object-cover"
               />
-            </div>
+            ) : (
+              <div className="grid h-full place-items-center text-6xl font-extrabold text-brand/30 select-none">
+                {event.community_initial || event.title.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <Badge
+              variant={
+                event.status === 'live'
+                  ? 'destructiveSoft'
+                  : event.status === 'past'
+                    ? 'soft'
+                    : 'soft'
+              }
+              size="sm"
+              className="absolute left-4 top-4 capitalize"
+            >
+              {event.status}
+            </Badge>
           </div>
 
-          {/* Event Details Card */}
-          <div className="bg-white rounded-lg p-6 space-y-6">
-            {/* Title and Join Button */}
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-[#000000]">
-                {eventDetails.title}
-              </h1>
+          {/* Title + Join */}
+          <div className="rounded-2xl border border-border bg-card p-6 space-y-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {event.is_private ? (
+                    <Lock className="size-3" aria-hidden="true" />
+                  ) : (
+                    <Globe className="size-3" aria-hidden="true" />
+                  )}
+                  <span>{event.is_private ? 'Private' : 'Public'}</span>
+                  {event.community_name && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{event.community_name}</span>
+                    </>
+                  )}
+                  {event.category && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{event.category}</span>
+                    </>
+                  )}
+                </div>
+                <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-foreground">
+                  {event.title}
+                </h1>
+              </div>
               <Button
-                onClick={handleJoinEvent}
-                className="bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white px-6 py-2 rounded-full"
+                type="button"
+                size="default"
+                disabled={submitting || event.status === 'past'}
+                variant={isAttending ? 'soft' : 'default'}
+                onClick={handleJoin}
               >
-                Join event
+                {isAttending
+                  ? "You're going"
+                  : isPaid
+                    ? `Get ticket · ₦${event.ticket_price}`
+                    : 'Join event'}
               </Button>
             </div>
 
-            {/* Event Metadata */}
-            <div className="flex items-center gap-6 text-sm text-[#959595]">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                <span>{eventDetails.date}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                <span>{eventDetails.time}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <span>{eventDetails.location}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">₦</span>
-                <span>{eventDetails.fee}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={eventDetails.hostAvatar} />
-                <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
-                  CA
-                </AvatarFallback>
-              </Avatar>
+            {/* Metadata */}
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
               <div>
-                <p className="text-sm text-[#959595]">Hosted by</p>
-                <p className="text-sm font-medium text-[#000000]">
-                  {eventDetails.host}
+                <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Date
+                </dt>
+                <dd className="mt-1 flex items-center gap-2 text-foreground">
+                  <Calendar className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {formatDate(event.starts_at)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Time
+                </dt>
+                <dd className="mt-1 flex items-center gap-2 text-foreground">
+                  <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {formatTime(event.starts_at)}
+                  {event.duration_label ? ` · ${event.duration_label}` : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Location
+                </dt>
+                <dd className="mt-1 flex items-center gap-2 text-foreground">
+                  <MapPin className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {event.location || (event.is_online ? 'Online' : '—')}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Fee
+                </dt>
+                <dd className="mt-1 flex items-center gap-2 text-foreground">
+                  <Ticket className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {isPaid ? `₦${event.ticket_price}` : 'Free'}
+                </dd>
+              </div>
+            </dl>
+
+            {/* Description */}
+            {event.description && (
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">About</h2>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                  {event.description}
                 </p>
               </div>
-            </div>
+            )}
+          </div>
+        </div>
 
-            {/* Event Description */}
-            <div>
-              <p className="text-sm text-[#525252] leading-relaxed">
-                {eventDetails.description}
-              </p>
+        {/* Right rail */}
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-foreground">Attendees</h3>
+              <Badge variant="soft" size="sm" className="tabular-nums">
+                {event.attendees}
+              </Badge>
             </div>
-
-            {/* Engagement Section */}
-            <div className="flex items-center gap-6">
-              <button className="flex items-center gap-2 text-sm text-[#959595] hover:text-red-500">
-                <Heart className="w-4 h-4" />
-                <span>{eventDetails.likes} Likes</span>
-              </button>
-              <button className="flex items-center gap-2 text-sm text-[#959595] hover:text-[#0E9DA5]">
-                <MessageCircle className="w-4 h-4" />
-                <span>{eventDetails.comments} comments</span>
-              </button>
-              <button className="flex items-center gap-2 text-sm text-[#959595] hover:text-[#0E9DA5]">
-                <Share2 className="w-4 h-4" />
-                <span>Share</span>
-              </button>
-            </div>
-
-            {/* Comment Input */}
-            <div className="border-t border-gray-100 pt-6">
-              <div className="relative">
-                <Input
-                  placeholder="Add a comment"
-                  className="w-full pr-20 rounded-lg border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5]"
-                />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-                  <button className="text-gray-400 hover:text-[#0E9DA5]">
-                    <Smile className="w-4 h-4" />
-                  </button>
-                  <button className="text-gray-400 hover:text-[#0E9DA5]">
-                    <ImageIcon className="w-4 h-4" />
-                  </button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {event.capacity > 0
+                ? `${event.attendees}/${event.capacity} going`
+                : `${event.attendees} going`}
+            </p>
+            {event.community_name && (
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3">
+                <Avatar className="size-10">
+                  <AvatarFallback className="bg-brand/15 text-brand">
+                    {event.community_initial || event.community_name.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Hosted by
+                  </p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {event.community_name}
+                  </p>
                 </div>
               </div>
-            </div>
-
-            {/* Comments */}
-            <div className="space-y-4">
-              {comments.map((comment) => (
-                <div key={comment.id} className="flex items-start gap-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={comment.avatar} />
-                    <AvatarFallback className="bg-gray-200 text-gray-600 text-xs">
-                      {comment.user.charAt(1).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-[#000000]">
-                        {comment.user}
-                      </span>
-                    </div>
-                    <p className="text-sm text-[#525252]">{comment.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
-        </div>
-
-        {/* Right Sidebar - Attendees */}
-        <div className="w-80">
-          <div className="bg-white rounded-lg p-4 border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">
-                Attendees ({attendees.length})
-              </h3>
-              <a href="#" className="text-sm text-[#0E9DA5] hover:underline">
-                See all
-              </a>
-            </div>
-            <div className="space-y-3">
-              {attendees.map((attendee) => (
-                <div key={attendee.id} className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={attendee.avatar} />
-                    <AvatarFallback className="bg-gray-200 text-gray-600 text-sm">
-                      {attendee.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {attendee.name}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        </aside>
       </div>
 
-      {/* Payment Dialog */}
       <PaymentDialog
-        isOpen={isPaymentDialogOpen}
-        onClose={handlePaymentClose}
-        onPay={handlePayment}
-        amount={eventDetails.fee}
+        isOpen={paymentOpen}
+        onClose={() => setPaymentOpen(false)}
+        onPay={commitAttendance}
+        amount={event.ticket_price ?? '0'}
       />
     </DashboardLayout>
   );
