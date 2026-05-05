@@ -14,13 +14,14 @@ import {
   Users,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { FadeIn, StaggerList, StaggerItem } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface Category {
   id: string;
   label: string;
-  count: number;
   icon: React.ComponentType<{ className?: string }>;
   /** Background tone for the card (subtle gradient). */
   tone: string;
@@ -32,7 +33,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'estate',
     label: 'Estate & HOA',
-    count: 840,
     icon: Building2,
     tone: 'from-info/10 to-card',
     iconTone: 'bg-info/15 text-info',
@@ -40,7 +40,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'faith',
     label: 'Faith & ministry',
-    count: 430,
     icon: Church,
     tone: 'from-warning/10 to-card',
     iconTone: 'bg-warning/15 text-warning',
@@ -48,7 +47,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'sports',
     label: 'Sports & fitness',
-    count: 612,
     icon: Trophy,
     tone: 'from-brand-soft to-card',
     iconTone: 'bg-brand-soft text-accent-foreground',
@@ -56,7 +54,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'co-op',
     label: 'Cooperatives',
-    count: 380,
     icon: HeartHandshake,
     tone: 'from-success/10 to-card',
     iconTone: 'bg-success/15 text-success',
@@ -64,7 +61,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'tech',
     label: 'Tech & startups',
-    count: 528,
     icon: Code2,
     tone: 'from-info/10 to-card',
     iconTone: 'bg-info/15 text-info',
@@ -72,7 +68,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'education',
     label: 'Education',
-    count: 295,
     icon: GraduationCap,
     tone: 'from-brand/10 to-card',
     iconTone: 'bg-brand/15 text-primary',
@@ -80,7 +75,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'business',
     label: 'Small business',
-    count: 412,
     icon: Briefcase,
     tone: 'from-warning/10 to-card',
     iconTone: 'bg-warning/15 text-warning',
@@ -88,7 +82,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'arts',
     label: 'Arts & culture',
-    count: 178,
     icon: Palette,
     tone: 'from-brand-soft to-card',
     iconTone: 'bg-brand-soft text-accent-foreground',
@@ -96,7 +89,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'music',
     label: 'Music',
-    count: 156,
     icon: Music,
     tone: 'from-info/10 to-card',
     iconTone: 'bg-info/15 text-info',
@@ -104,7 +96,6 @@ const CATEGORIES: Category[] = [
   {
     id: 'social',
     label: 'Friends & family',
-    count: 2_800,
     icon: Users,
     tone: 'from-success/10 to-card',
     iconTone: 'bg-success/15 text-success',
@@ -117,6 +108,28 @@ interface CategoryGridProps {
 }
 
 export function CategoryGrid({ selected, onSelect }: CategoryGridProps) {
+  const [counts, setCounts] = React.useState<Record<string, number>>({});
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const labels = CATEGORIES.map((c) => c.label);
+        const res = await ApiService.communities.categoryCounts(labels);
+        const remote = res.data?.data?.counts ?? {};
+        if (!cancelled) setCounts(remote);
+      } catch {
+        // keep counts empty — UI shows "—" when unknown
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <section aria-labelledby="categories-heading" className="space-y-4">
       <FadeIn>
@@ -186,7 +199,15 @@ export function CategoryGrid({ selected, onSelect }: CategoryGridProps) {
                       {c.label}
                     </p>
                     <p className="text-[11px] font-medium text-muted-foreground">
-                      {c.count.toLocaleString()} circles
+                      {loading ? (
+                        <Skeleton className="h-3 w-14 rounded" />
+                      ) : counts[c.label] === undefined ? (
+                        '— circles'
+                      ) : (
+                        `${counts[c.label].toLocaleString()} ${
+                          counts[c.label] === 1 ? 'circle' : 'circles'
+                        }`
+                      )}
                     </p>
                   </div>
                 </CardContent>

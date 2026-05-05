@@ -12,7 +12,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { FadeIn } from '@/components/ui/motion';
+import { ApiService, type EventApi } from '@/services/api';
 
 interface FeaturedEventCardProps {
   title: string;
@@ -27,21 +29,119 @@ interface FeaturedEventCardProps {
   category: string;
 }
 
-const FEATURED_EVENT: FeaturedEventCardProps = {
-  title: 'Lagos Half Marathon 2026',
-  community: 'Lekki Runners',
-  date: { day: 14, month: 'Jun' },
-  time: '06:00',
-  location: 'Lekki Phase 1, Lagos',
-  attendees: 184,
-  capacity: 300,
-  ticketPrice: '₦12,500',
-  href: '/dashboard/events/1',
-  category: 'Sports & fitness',
-};
+const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * Pick the headline upcoming event: most-subscribed first, soonest-start as
+ * tiebreaker. Anything not status='upcoming' is filtered out.
+ */
+function pickFeatured(events: EventApi[]): EventApi | null {
+  const upcoming = events.filter((e) => e.status === 'upcoming');
+  if (upcoming.length === 0) return null;
+  return [...upcoming].sort((a, b) => {
+    if (b.attendees !== a.attendees) return b.attendees - a.attendees;
+    return new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime();
+  })[0];
+}
+
+function eventToProps(ev: EventApi): FeaturedEventCardProps {
+  const start = new Date(ev.starts_at);
+  const time = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+  return {
+    title: ev.title,
+    community: ev.community_name ?? 'Public',
+    date: { day: start.getDate(), month: MONTHS_SHORT[start.getMonth()] },
+    time,
+    location: ev.location || (ev.is_online ? 'Online' : 'TBA'),
+    attendees: ev.attendees,
+    capacity: ev.capacity || Math.max(ev.attendees, 1),
+    ticketPrice: ev.ticket_price ? `₦${ev.ticket_price}` : 'Free',
+    href: `/dashboard/events/${ev.id}`,
+    category: ev.category || 'Community',
+  };
+}
 
 export function FeaturedEvent() {
-  const e = FEATURED_EVENT;
+  const [event, setEvent] = React.useState<FeaturedEventCardProps | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.events.list({ scope: 'upcoming', limit: 25 });
+        const list = res.data?.data?.events ?? [];
+        const featured = pickFeatured(list);
+        if (!cancelled) setEvent(featured ? eventToProps(featured) : null);
+      } catch {
+        if (!cancelled) setEvent(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <section
+        aria-label="Featured event loading"
+        className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-brand to-[oklch(0.18_0.025_220)] p-7 text-white shadow-2xl sm:p-9"
+      >
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[auto_1fr_auto]">
+          <Skeleton className="size-28 rounded-3xl bg-white/15" />
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-32 rounded-full bg-white/15" />
+            <Skeleton className="h-7 w-2/3 bg-white/15" />
+            <Skeleton className="h-3 w-1/2 bg-white/15" />
+          </div>
+          <Skeleton className="h-12 w-32 rounded-md bg-white/30" />
+        </div>
+      </section>
+    );
+  }
+
+  if (!event) {
+    return (
+      <FadeIn>
+        <section
+          aria-label="Featured event"
+          className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card to-brand-soft/30 p-7 sm:p-9"
+        >
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span
+                className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
+                aria-hidden="true"
+              >
+                <Sparkles className="size-5" />
+              </span>
+              <div>
+                <p className="text-base font-bold tracking-tight text-foreground">
+                  No featured event yet
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  When communities start hosting, the headline event lands here.
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/events">
+              <Button variant="outline" trailingIcon={<ArrowRight className="size-4" />}>
+                Browse events
+              </Button>
+            </Link>
+          </div>
+        </section>
+      </FadeIn>
+    );
+  }
+
+  const e = event;
   const pct = Math.min(100, Math.round((e.attendees / e.capacity) * 100));
 
   return (

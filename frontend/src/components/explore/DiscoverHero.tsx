@@ -35,12 +35,18 @@ export function DiscoverHero({ value, onChange }: DiscoverHeroProps) {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Live total community count via the public list endpoint.
+      // Live total community count via the public list endpoint. The
+      // backend nests the total under `data.pagination.total`; we also
+      // accept a top-level `data.total` for forward-compat.
       try {
         const res = await ApiService.communities.list({ limit: 1 });
+        const data = res.data?.data as
+          | { total?: number; pagination?: { total?: number }; communities?: unknown[] }
+          | undefined;
         const total =
-          (res.data?.data as { total?: number })?.total ??
-          res.data?.data?.communities?.length ??
+          data?.total ??
+          data?.pagination?.total ??
+          data?.communities?.length ??
           null;
         if (!cancelled && typeof total === 'number') setTotalCount(total);
       } catch {
@@ -99,8 +105,16 @@ export function DiscoverHero({ value, onChange }: DiscoverHeroProps) {
 
         <SlideUp delay={0.1}>
           <p className="mx-auto mt-3 max-w-xl text-pretty text-sm text-muted-foreground sm:text-base">
-            Search 5,000+ communities or browse by interest. Public circles are
-            free to join — bring your group and start moving money together.
+            Search{' '}
+            <span className="font-semibold text-foreground">
+              {totalCount === null
+                ? 'every community'
+                : `${totalCount.toLocaleString()} ${
+                    totalCount === 1 ? 'community' : 'communities'
+                  }`}
+            </span>{' '}
+            or browse by interest. Public circles are free to join — bring your
+            group and start moving money together.
           </p>
         </SlideUp>
 
@@ -145,7 +159,7 @@ export function DiscoverHero({ value, onChange }: DiscoverHeroProps) {
             <span className="mr-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
               Trending
             </span>
-            {TRENDING_TAGS.map((tag) => (
+            {trendingTags.map((tag) => (
               <button
                 key={tag}
                 type="button"
@@ -170,7 +184,10 @@ export function DiscoverHero({ value, onChange }: DiscoverHeroProps) {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-70" />
                 <span className="relative inline-flex size-2 rounded-full bg-success" />
               </span>
-              <span className="font-medium text-foreground">5,240</span> active circles
+              <span className="font-medium text-foreground">
+                {totalCount === null ? '—' : totalCount.toLocaleString()}
+              </span>{' '}
+              active circles
             </span>
             <span aria-hidden="true" className="size-1 rounded-full bg-border" />
             <Link
