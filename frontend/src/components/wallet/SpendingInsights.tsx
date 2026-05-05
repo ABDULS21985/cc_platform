@@ -2,17 +2,20 @@
 
 import * as React from 'react';
 import {
+  ArrowUpRight,
   Briefcase,
-  Calendar,
+  Building2,
   HeartHandshake,
-  Home,
   PiggyBank,
   Receipt,
+  Wallet as WalletIcon,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface CategorySpend {
   id: string;
@@ -23,41 +26,90 @@ interface CategorySpend {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const CATEGORIES: CategorySpend[] = [
-  {
-    id: 'estate',
-    label: 'Estate dues',
-    amount: 28_500,
+interface ApiTx {
+  signed_amount?: number | string;
+  status?: string;
+  transaction_type?: string;
+  type?: string;
+  community_id?: number | null;
+  destination_account_name?: string | null;
+  completed_at?: string;
+  created_at?: string;
+}
+
+/**
+ * Each backend `transaction_type` maps to one display category. Anything
+ * we don't recognize lands in "Other" so the chart always sums to total.
+ */
+const TYPE_CATEGORY: Record<string, { id: string; label: string; tone: CategorySpend['tone']; icon: CategorySpend['icon'] }> = {
+  bill_payment: {
+    id: 'bills',
+    label: 'Community bills',
     tone: { tile: 'bg-info/15 text-info', bar: 'bg-info' },
-    icon: Home,
+    icon: Building2,
   },
-  {
-    id: 'events',
-    label: 'Events & tickets',
-    amount: 24_200,
+  withdrawal: {
+    id: 'withdrawals',
+    label: 'Withdrawals',
     tone: { tile: 'bg-warning/15 text-warning', bar: 'bg-warning' },
-    icon: Calendar,
+    icon: ArrowUpRight,
   },
-  {
-    id: 'co-op',
-    label: 'Co-op contributions',
-    amount: 18_400,
+  transfer: {
+    id: 'transfers',
+    label: 'Transfers',
     tone: { tile: 'bg-success/15 text-success', bar: 'bg-success' },
     icon: HeartHandshake,
   },
-  {
-    id: 'business',
-    label: 'Business expenses',
-    amount: 14_900,
+  payment: {
+    id: 'payments',
+    label: 'Payments',
     tone: { tile: 'bg-brand-soft text-accent-foreground', bar: 'bg-primary' },
     icon: Briefcase,
   },
+};
+
+const OTHER: Pick<CategorySpend, 'id' | 'label' | 'tone' | 'icon'> = {
+  id: 'misc',
+  label: 'Other',
+  tone: { tile: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground' },
+  icon: Receipt,
+};
+
+function deriveCategories(items: ApiTx[]): CategorySpend[] {
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const startMs = start.getTime();
+
+  const buckets = new Map<string, CategorySpend>();
+  for (const t of items) {
+    const status = String(t.status ?? '').toLowerCase();
+    if (status && status !== 'successful' && status !== 'completed') continue;
+    const ts = new Date(t.completed_at ?? t.created_at ?? '').getTime();
+    if (Number.isNaN(ts) || ts < startMs) continue;
+    const signed = Number(t.signed_amount ?? 0);
+    if (signed >= 0) continue; // only outflows count toward "spending"
+    const amount = -signed;
+    const tt = String(t.transaction_type ?? '').toLowerCase();
+    const cfg = TYPE_CATEGORY[tt] ?? OTHER;
+    const cur = buckets.get(cfg.id);
+    if (cur) {
+      cur.amount += amount;
+    } else {
+      buckets.set(cfg.id, { ...cfg, amount });
+    }
+  }
+  // Sort largest first.
+  return [...buckets.values()].sort((a, b) => b.amount - a.amount);
+}
+
+const SEED_CATEGORIES: CategorySpend[] = [
   {
     id: 'misc',
-    label: 'Other',
-    amount: 10_400,
+    label: 'No spending yet',
+    amount: 1, // 1 so the bar still renders thinly; total stays > 0
     tone: { tile: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground' },
-    icon: Receipt,
+    icon: WalletIcon,
   },
 ];
 
@@ -66,9 +118,56 @@ function fmt(n: number): string {
 }
 
 export function SpendingInsights() {
-  const total = CATEGORIES.reduce((s, c) => s + c.amount, 0);
-  const top = CATEGORIES[0];
-  const topShare = Math.round((top.amount / total) * 100);
+  const [categories, setCategories] = React.useState<CategorySpend[] | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.wallet.getTransactions({ limit: 200 });
+        const txs =
+          ((res.data?.data as { transactions?: ApiTx[] })?.transactions ?? []) ||
+          [];
+        const derived = deriveCategories(txs);
+        if (!cancelled) setCategories(derived.length > 0 ? derived : SEED_CATEGORIES);
+      } catch {
+        if (!cancelled) setCategories(SEED_CATEGORIES);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (categories === null) {
+    return (
+      <Card variant="default" density="compact">
+        <CardContent className="space-y-5 px-5">
+          <header className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-2.5 w-56" />
+            </div>
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </header>
+          <Skeleton className="h-3 w-full rounded-full" />
+          <ul className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li key={i} className="flex items-center gap-3">
+                <Skeleton className="size-7 rounded-lg" />
+                <Skeleton className="h-3 flex-1" />
+                <Skeleton className="h-3 w-12" />
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const total = categories.reduce((s, c) => s + c.amount, 0);
+  const top = categories[0];
+  const topShare = total > 0 ? Math.round((top.amount / total) * 100) : 0;
 
   return (
     <Card variant="default" density="compact">
@@ -100,8 +199,8 @@ export function SpendingInsights() {
             role="img"
             aria-label="Spending categories"
           >
-            {CATEGORIES.map((c, i) => {
-              const pct = (c.amount / total) * 100;
+            {categories.map((c, i) => {
+              const pct = total > 0 ? (c.amount / total) * 100 : 0;
               return (
                 <motion.span
                   key={c.id}
@@ -127,8 +226,8 @@ export function SpendingInsights() {
 
         {/* Legend / list */}
         <ul role="list" className="space-y-2">
-          {CATEGORIES.map((c, i) => {
-            const pct = Math.round((c.amount / total) * 100);
+          {categories.map((c, i) => {
+            const pct = total > 0 ? Math.round((c.amount / total) * 100) : 0;
             return (
               <motion.li
                 key={c.id}

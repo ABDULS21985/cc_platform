@@ -11,9 +11,11 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface UpcomingPayment {
   id: string;
@@ -25,45 +27,63 @@ interface UpcomingPayment {
   itemsCount?: number;
 }
 
-const PAYMENTS: UpcomingPayment[] = [
-  {
-    id: '1',
-    title: 'Monthly dues · April',
-    community: 'Lekki Block 3 HOA',
-    amount: '2,000',
-    dueInDays: -2,
-  },
-  {
-    id: '2',
-    title: 'Marathon tickets',
-    community: 'Lekki Runners',
-    amount: '12,500',
-    dueInDays: 3,
-  },
-  {
-    id: '3',
-    title: 'Estate maintenance',
-    community: 'Crown Estate',
-    amount: null,
-    itemsCount: 3,
-    dueInDays: 5,
-  },
-  {
-    id: '4',
-    title: 'Co-op contribution #14',
-    community: 'Trinity Co-op',
-    amount: '8,000',
-    dueInDays: 7,
-  },
-  {
-    id: '5',
-    title: 'Tithe · May',
-    community: 'Grace Assembly',
-    amount: null,
-    itemsCount: 2,
-    dueInDays: 14,
-  },
-];
+interface ApiBill {
+  id: number;
+  title: string;
+  amount: number;
+  status: string;
+  due_date: string;
+}
+
+const NGN = (n: number) =>
+  n.toLocaleString('en-NG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+
+/**
+ * Walk all the user's joined communities, fetch their bills, and surface
+ * any that are still open (status not paid/cancelled). Sort by due date
+ * with overdue first; cap at 12 entries.
+ */
+async function fetchUpcoming(): Promise<UpcomingPayment[]> {
+  const joinedRes = await ApiService.communities.joined({ limit: 50 });
+  const joined = joinedRes.data?.data?.communities ?? [];
+  if (joined.length === 0) return [];
+
+  const lists = await Promise.allSettled(
+    joined.map(async (c) => ({
+      community: c,
+      res: await ApiService.communities.getBills(c.id, { limit: 100 }),
+    })),
+  );
+
+  const out: UpcomingPayment[] = [];
+  for (const r of lists) {
+    if (r.status !== 'fulfilled') continue;
+    const community = r.value.community;
+    const bills = ((r.value.res.data?.data as { bills?: ApiBill[] })?.bills ?? []) as ApiBill[];
+    for (const bill of bills) {
+      const status = String(bill.status ?? '').toLowerCase();
+      if (status === 'paid' || status === 'completed' || status === 'cancelled') continue;
+      const dueMs = new Date(bill.due_date ?? '').getTime();
+      if (Number.isNaN(dueMs)) continue;
+      const dueInDays = Math.round(
+        (dueMs - Date.now()) / (24 * 60 * 60 * 1000),
+      );
+      out.push({
+        id: `bill-${bill.id}`,
+        title: bill.title,
+        community: community.name,
+        amount: NGN(Number(bill.amount ?? 0)),
+        dueInDays,
+      });
+    }
+  }
+  // Most-overdue first, then nearest-due.
+  out.sort((a, b) => a.dueInDays - b.dueInDays);
+  return out.slice(0, 12);
+}
 
 function tone(days: number) {
   if (days < 0) {
@@ -91,6 +111,50 @@ function tone(days: number) {
 }
 
 export default function UpcomingPayments() {
+  const [payments, setPayments] = React.useState<UpcomingPayment[] | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchUpcoming();
+        if (!cancelled) setPayments(list);
+      } catch {
+        if (!cancelled) setPayments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (payments === null) {
+    return (
+      <Card variant="default" density="compact" className="flex flex-col">
+        <CardContent className="flex flex-1 flex-col space-y-4 px-5">
+          <header className="flex items-center justify-between">
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-5 w-16 rounded-full" />
+          </header>
+          <ul className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <li
+                key={i}
+                className="rounded-xl border border-border bg-card p-3"
+              >
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3.5 w-3/4" />
+                  <Skeleton className="h-2.5 w-1/2" />
+                  <Skeleton className="h-4 w-16 rounded-full" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card variant="default" density="compact" className="flex flex-col">
       <CardContent className="flex flex-1 flex-col space-y-4 px-5">
@@ -104,12 +168,14 @@ export default function UpcomingPayments() {
             </span>
             Upcoming payments
           </h3>
-          <Badge variant="warningSoft" size="sm" className="tabular-nums">
-            {PAYMENTS.length} pending
-          </Badge>
+          {payments.length > 0 && (
+            <Badge variant="warningSoft" size="sm" className="tabular-nums">
+              {payments.length} pending
+            </Badge>
+          )}
         </header>
 
-        {PAYMENTS.length === 0 ? (
+        {payments.length === 0 ? (
           <EmptyState
             icon={<Receipt className="size-5" aria-hidden="true" />}
             title="You're all paid up"
@@ -120,7 +186,7 @@ export default function UpcomingPayments() {
             role="list"
             className="custom-scrollbar -mr-2 max-h-[420px] space-y-2 overflow-y-auto pr-2"
           >
-            {PAYMENTS.map((p, i) => {
+            {payments.map((p, i) => {
               const t = tone(p.dueInDays);
               return (
                 <motion.li

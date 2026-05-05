@@ -14,8 +14,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface Beneficiary {
   id: string;
@@ -31,7 +33,87 @@ interface Beneficiary {
   isFavorite?: boolean;
 }
 
-const BENEFICIARIES: Beneficiary[] = [
+const TONES = [
+  'bg-brand text-primary-foreground',
+  'bg-info/30 text-info',
+  'bg-warning/30 text-warning',
+  'bg-success/30 text-success',
+  'bg-brand-bright/30 text-primary',
+];
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function relativeAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '';
+  const days = Math.floor(ms / (24 * 60 * 60 * 1000));
+  if (days < 1) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  return `${Math.floor(days / 30)} months ago`;
+}
+
+interface ApiTx {
+  signed_amount?: number | string;
+  status?: string;
+  transaction_type?: string;
+  destination_account_name?: string | null;
+  destination_account_number?: string | null;
+  destination_bank_name?: string | null;
+  community_id?: number | null;
+  completed_at?: string;
+  created_at?: string;
+}
+
+/**
+ * Walk the user's transaction history and pull out unique recipients of
+ * outgoing money (debits). We key by destination_account_number when we
+ * have one, falling back to recipient name. Most-recent transfers come
+ * first; we cap at 12 entries.
+ */
+function deriveBeneficiaries(items: ApiTx[]): Beneficiary[] {
+  const sorted = [...items].sort((a, b) => {
+    const aTs = new Date(a.completed_at ?? a.created_at ?? '').getTime() || 0;
+    const bTs = new Date(b.completed_at ?? b.created_at ?? '').getTime() || 0;
+    return bTs - aTs; // newest first
+  });
+
+  const seen = new Map<string, Beneficiary>();
+  for (const t of sorted) {
+    const status = String(t.status ?? '').toLowerCase();
+    if (status && status !== 'successful' && status !== 'completed') continue;
+    const signed = Number(t.signed_amount ?? 0);
+    if (signed >= 0) continue; // only outgoing
+    const name = (t.destination_account_name ?? '').trim();
+    const acct = (t.destination_account_number ?? '').trim();
+    if (!name && !acct) continue;
+    const key = acct || name.toLowerCase();
+    if (seen.has(key)) continue;
+    const tail = acct ? acct.slice(-4) : '••••';
+    const display = name || `Account ··${tail}`;
+    seen.set(key, {
+      id: key,
+      name: display,
+      bank: (t.destination_bank_name ?? '').trim() || 'Bank',
+      accountTail: tail,
+      initials: initialsFor(display),
+      tone: TONES[seen.size % TONES.length],
+      lastSent: relativeAge(t.completed_at ?? t.created_at ?? ''),
+    });
+    if (seen.size >= 12) break;
+  }
+  return [...seen.values()];
+}
+
+// Fallback used only when the user has no outgoing transactions yet, so the
+// UI demonstrates what this card will show.
+const SEED_BENEFICIARIES: Beneficiary[] = [
   {
     id: 'b1',
     name: 'Ada Lovelace',
@@ -105,17 +187,49 @@ export function Beneficiaries({ onSelect }: BeneficiariesProps) {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const [allOpen, setAllOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const [items, setItems] = React.useState<Beneficiary[] | null>(null);
+  const [usingSeed, setUsingSeed] = React.useState(false);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.wallet.getTransactions({ limit: 200 });
+        const txs =
+          ((res.data?.data as { transactions?: ApiTx[] })?.transactions ?? []) ||
+          [];
+        const derived = deriveBeneficiaries(txs);
+        if (cancelled) return;
+        if (derived.length === 0) {
+          setItems(SEED_BENEFICIARIES);
+          setUsingSeed(true);
+        } else {
+          setItems(derived);
+          setUsingSeed(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setItems(SEED_BENEFICIARIES);
+          setUsingSeed(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const list = items ?? [];
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return BENEFICIARIES;
-    return BENEFICIARIES.filter(
+    if (!q) return list;
+    return list.filter(
       (b) =>
         b.name.toLowerCase().includes(q) ||
         b.bank.toLowerCase().includes(q) ||
         b.accountTail.includes(q)
     );
-  }, [search]);
+  }, [search, list]);
 
   const scrollBy = (delta: number) =>
     scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
@@ -200,7 +314,19 @@ export function Beneficiaries({ onSelect }: BeneficiariesProps) {
             </span>
           </motion.button>
 
-          {BENEFICIARIES.map((b, i) => (
+          {items === null
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={`skel-${i}`}
+                  className="flex w-[112px] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl border border-border bg-card p-3"
+                >
+                  <Skeleton className="size-12 rounded-full" />
+                  <Skeleton className="h-2.5 w-3/4" />
+                  <Skeleton className="h-2 w-1/2" />
+                </div>
+              ))
+            : null}
+          {list.map((b, i) => (
             <motion.button
               key={b.id}
               type="button"

@@ -10,8 +10,10 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface Metric {
   label: string;
@@ -25,44 +27,97 @@ interface Metric {
   spark: number[];
 }
 
-const METRICS: Metric[] = [
-  {
-    label: 'Spent this month',
-    value: 96_400,
-    display: '₦96,400',
-    delta: -8.2,
-    icon: ArrowUpRight,
-    tone: 'bg-warning/15 text-warning',
-    spark: [40, 60, 30, 70, 55, 85, 50],
-  },
-  {
-    label: 'Received this month',
-    value: 184_200,
-    display: '₦184,200',
-    delta: 12.4,
-    icon: ArrowDownRight,
-    tone: 'bg-success/15 text-success',
-    spark: [30, 35, 50, 65, 75, 80, 95],
-  },
-  {
-    label: 'Bills settled',
-    value: 12,
-    display: '12 bills',
-    delta: 25,
-    icon: Receipt,
-    tone: 'bg-brand-soft text-accent-foreground',
-    spark: [20, 35, 40, 55, 60, 70, 90],
-  },
-  {
-    label: 'Saved',
-    value: 87_800,
-    display: '₦87,800',
-    delta: 5.6,
-    icon: PiggyBank,
-    tone: 'bg-info/15 text-info',
-    spark: [10, 20, 35, 30, 50, 65, 80],
-  },
-];
+const NGN = (n: number) =>
+  '₦' +
+  n.toLocaleString('en-NG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+
+interface ApiTx {
+  signed_amount?: number | string;
+  status?: string;
+  transaction_type?: string;
+  type?: string;
+  completed_at?: string;
+  created_at?: string;
+}
+
+/**
+ * Walk a list of transactions and bucket them into:
+ *   - dailyIn / dailyOut: 7 day-buckets (Mon..Sun, last 7 days) for sparklines
+ *   - thisMonthIn / thisMonthOut / lastMonthIn / lastMonthOut: deltas
+ *   - billsPaid: count of completed bill_payment transactions this month
+ */
+function aggregate(items: ApiTx[]) {
+  const now = new Date();
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+
+  let thisIn = 0;
+  let thisOut = 0;
+  let lastIn = 0;
+  let lastOut = 0;
+  let billsPaid = 0;
+  // 7 buckets, each one day; index 0 = oldest, 6 = today.
+  const sparkIn = [0, 0, 0, 0, 0, 0, 0];
+  const sparkOut = [0, 0, 0, 0, 0, 0, 0];
+
+  for (const t of items) {
+    const status = String(t.status ?? '').toLowerCase();
+    if (status && status !== 'successful' && status !== 'completed') continue;
+    const ts = new Date(t.completed_at ?? t.created_at ?? '').getTime();
+    if (Number.isNaN(ts)) continue;
+    const signed = Number(t.signed_amount ?? 0);
+
+    // Month buckets
+    if (ts >= startOfThisMonth) {
+      if (signed > 0) thisIn += signed;
+      else if (signed < 0) thisOut += -signed;
+      if ((t.transaction_type ?? '').toLowerCase() === 'bill_payment') {
+        billsPaid += 1;
+      }
+    } else if (ts >= startOfLastMonth) {
+      if (signed > 0) lastIn += signed;
+      else if (signed < 0) lastOut += -signed;
+    }
+
+    // 7-day spark
+    if (ts >= sevenDaysAgo) {
+      const dayOffset = Math.min(
+        6,
+        Math.max(0, 6 - Math.floor((now.getTime() - ts) / (24 * 60 * 60 * 1000))),
+      );
+      if (signed > 0) sparkIn[dayOffset] += signed;
+      else if (signed < 0) sparkOut[dayOffset] += -signed;
+    }
+  }
+
+  // Normalize sparks to 0..100 so the visual works regardless of magnitude.
+  const norm = (arr: number[]) => {
+    const max = Math.max(...arr, 1);
+    return arr.map((v) => Math.round((v / max) * 100));
+  };
+
+  // Deltas in percent vs last month — fall back to 0 if we have no prior data.
+  const pct = (cur: number, prev: number) => {
+    if (prev <= 0) return cur > 0 ? 100 : 0;
+    return ((cur - prev) / prev) * 100;
+  };
+
+  return {
+    thisIn,
+    thisOut,
+    saved: thisIn - thisOut,
+    billsPaid,
+    deltaIn: pct(thisIn, lastIn),
+    deltaOut: pct(thisOut, lastOut),
+    deltaSaved: pct(thisIn - thisOut, lastIn - lastOut),
+    sparkIn: norm(sparkIn),
+    sparkOut: norm(sparkOut),
+  };
+}
 
 interface SparklineProps {
   values: number[];
@@ -101,9 +156,92 @@ function Sparkline({ values, positive }: SparklineProps) {
 }
 
 export function WalletStatsStrip() {
+  const [metrics, setMetrics] = React.useState<Metric[] | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.wallet.getTransactions({ limit: 200 });
+        const items =
+          ((res.data?.data as { transactions?: ApiTx[] })?.transactions ?? []) ||
+          [];
+        const agg = aggregate(items);
+        if (cancelled) return;
+        setMetrics([
+          {
+            label: 'Spent this month',
+            value: agg.thisOut,
+            display: NGN(agg.thisOut),
+            delta: agg.deltaOut,
+            icon: ArrowUpRight,
+            tone: 'bg-warning/15 text-warning',
+            spark: agg.sparkOut,
+          },
+          {
+            label: 'Received this month',
+            value: agg.thisIn,
+            display: NGN(agg.thisIn),
+            delta: agg.deltaIn,
+            icon: ArrowDownRight,
+            tone: 'bg-success/15 text-success',
+            spark: agg.sparkIn,
+          },
+          {
+            label: 'Bills settled',
+            value: agg.billsPaid,
+            display:
+              agg.billsPaid === 1 ? '1 bill' : `${agg.billsPaid} bills`,
+            delta: 0, // bills delta isn't meaningful without a prior month bills count
+            icon: Receipt,
+            tone: 'bg-brand-soft text-accent-foreground',
+            spark: agg.sparkOut.map((v) => Math.round(v * 0.6)), // rough fill
+          },
+          {
+            label: 'Saved',
+            value: agg.saved,
+            display: NGN(Math.max(0, agg.saved)),
+            delta: agg.deltaSaved,
+            icon: PiggyBank,
+            tone: 'bg-info/15 text-info',
+            spark: agg.sparkIn.map((v, i) =>
+              Math.max(0, v - (agg.sparkOut[i] ?? 0)),
+            ),
+          },
+        ]);
+      } catch {
+        // empty render — page already shows other content
+        if (!cancelled) setMetrics([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (metrics === null) {
+    return (
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} variant="default" density="compact" className="h-full">
+            <CardContent className="space-y-3 px-5">
+              <div className="flex items-center justify-between">
+                <Skeleton className="size-9 rounded-xl" />
+                <Skeleton className="h-5 w-12 rounded-full" />
+              </div>
+              <Skeleton className="h-2.5 w-2/3" />
+              <Skeleton className="h-7 w-1/2" />
+              <Skeleton className="h-7 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-      {METRICS.map((m, i) => {
+      {metrics.map((m, i) => {
         const positive = m.delta >= 0;
         const Icon = m.icon;
         // For "Spent this month", a negative delta means less spent — that's good news

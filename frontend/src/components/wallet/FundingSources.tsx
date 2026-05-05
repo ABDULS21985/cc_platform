@@ -6,14 +6,17 @@ import {
   Check,
   CreditCard,
   Plus,
+  ShieldAlert,
   Star,
   Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
 interface Source {
   id: string;
@@ -29,42 +32,85 @@ interface Source {
   isVerified?: boolean;
 }
 
-const SOURCES: Source[] = [
-  {
-    id: 's1',
-    type: 'bank',
-    name: 'Bell MFB · Wallet',
-    tail: '8421',
-    brand: 'Bell MFB',
-    tone: 'bg-brand text-primary-foreground',
-    isPrimary: true,
-    isVerified: true,
-  },
-  {
-    id: 's2',
-    type: 'bank',
-    name: 'GTBank',
-    tail: '5871',
-    brand: 'GTBank',
-    tone: 'bg-info text-info-foreground',
-    isVerified: true,
-  },
-  {
-    id: 's3',
-    type: 'card',
-    name: 'Visa debit',
-    tail: '3344',
-    brand: 'Visa',
-    tone: 'bg-foreground text-background',
-  },
-];
-
 interface FundingSourcesProps {
   onAdd?: () => void;
   onSetPrimary?: (id: string) => void;
 }
 
 export function FundingSources({ onAdd, onSetPrimary }: FundingSourcesProps) {
+  const [sources, setSources] = React.useState<Source[] | null>(null);
+  const [walletMissing, setWalletMissing] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.wallet.getDetails();
+        const w = res.data?.data;
+        if (cancelled) return;
+        if (!w?.account_number) {
+          setSources([]);
+          return;
+        }
+        const tail = w.account_number.slice(-4);
+        setSources([
+          {
+            id: `wallet-${w.id}`,
+            type: 'bank',
+            name: 'CCPay wallet',
+            tail,
+            brand: 'Bell MFB',
+            tone: 'bg-brand text-primary-foreground',
+            isPrimary: true,
+            isVerified: w.status?.toLowerCase() === 'active',
+          },
+        ]);
+      } catch (err) {
+        // 404 from /v2/wallet means the user hasn't completed identity
+        // verification yet — surface that path instead of an error.
+        if (!cancelled) {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 404) {
+            setWalletMissing(true);
+            setSources([]);
+          } else {
+            setSources([]);
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (sources === null) {
+    return (
+      <Card variant="default" density="compact">
+        <CardContent className="space-y-4 px-5">
+          <header className="flex items-center justify-between">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-7 w-12 rounded-md" />
+          </header>
+          <ul className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <li
+                key={i}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card p-3"
+              >
+                <Skeleton className="size-10 rounded-xl" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3.5 w-2/3" />
+                  <Skeleton className="h-2.5 w-1/2" />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card variant="default" density="compact">
       <CardContent className="space-y-4 px-5">
@@ -89,8 +135,37 @@ export function FundingSources({ onAdd, onSetPrimary }: FundingSourcesProps) {
           </Button>
         </header>
 
+        {walletMissing && (
+          <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3">
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-xl bg-warning/15 text-warning"
+              aria-hidden="true"
+            >
+              <ShieldAlert className="size-4" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                Verify identity to unlock funding
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Your wallet activates after BVN/NIN check.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <a href="/dashboard/settings?tab=verification">Verify</a>
+            </Button>
+          </div>
+        )}
+
+        {sources.length === 0 && !walletMissing && (
+          <p className="text-xs text-muted-foreground">
+            No linked sources yet. Adding a bank or card lets you top up
+            instantly.
+          </p>
+        )}
+
         <ul role="list" className="space-y-2">
-          {SOURCES.map((s, i) => {
+          {sources.map((s, i) => {
             const Icon = s.type === 'card' ? CreditCard : Building2;
             return (
               <motion.li
