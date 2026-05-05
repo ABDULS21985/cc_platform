@@ -81,15 +81,15 @@ class CommunityMembersResource(MethodView):
                 from modules.community.models.community_post import CommunityPost
                 rows = (
                     _db.session.query(
-                        CommunityPost.author_id,
+                        CommunityPost.author_user_id,
                         _sa_func.count(CommunityPost.id),
                     )
                     .filter(
                         CommunityPost.community_id == community_id,
-                        CommunityPost.author_id.in_(user_ids),
+                        CommunityPost.author_user_id.in_(user_ids),
                         CommunityPost.status == 'active',
                     )
-                    .group_by(CommunityPost.author_id)
+                    .group_by(CommunityPost.author_user_id)
                     .all()
                 )
                 posts_by_user = {int(uid): int(cnt) for uid, cnt in rows}

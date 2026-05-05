@@ -323,7 +323,20 @@ interface ApiMember {
     full_name?: string;
     profile_photo?: string | null;
     bio?: string | null;
+    /** Number of active posts this user has authored in the community. */
+    posts_count?: number;
+    /** ISO timestamp; null when the user has never been seen. */
+    last_seen_at?: string | null;
   };
+}
+
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+function lastSeenIsOnline(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts <= ONLINE_WINDOW_MS;
 }
 
 const TONE_PALETTE = [
@@ -389,10 +402,14 @@ async function fetchAggregatedMembers(): Promise<MemberItem[]> {
       initials: initialsFor(row._community.name),
       role,
     };
+    const memberPostsHere = u.posts_count ?? 0;
     const existing = byUser.get(uid);
     if (existing) {
       existing.communities.push(communityRef);
+      // Sum posts across the communities this user shares with us.
+      existing.postsCount = (existing.postsCount ?? 0) + memberPostsHere;
     } else {
+      const lastSeen = u.last_seen_at ?? undefined;
       byUser.set(uid, {
         id: String(uid),
         name: fullName,
@@ -402,11 +419,11 @@ async function fetchAggregatedMembers(): Promise<MemberItem[]> {
         bio: u.bio ?? undefined,
         location: undefined,
         communities: [communityRef],
-        // Online + activity signals aren't on the API yet — render as offline.
-        isOnline: false,
-        lastSeenAt: undefined,
+        // Real presence: online if last_seen_at is within the 5-min window.
+        isOnline: lastSeenIsOnline(lastSeen),
+        lastSeenAt: lastSeen,
         joinedAt: row.joined_at ?? new Date().toISOString(),
-        postsCount: undefined,
+        postsCount: memberPostsHere,
         isFavorite: false,
         avatarTone: TONE_PALETTE[uid % TONE_PALETTE.length],
       });
