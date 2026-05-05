@@ -209,7 +209,18 @@ class Bill(db.Model):
                 'name': self.community.name,
                 'slug': self.community.slug
             }
-        
+
+        # Always inline a creator summary so the frontend doesn't have to do
+        # an N+1 user lookup just to render "Created by …".
+        if self.creator is not None:
+            data['creator'] = {
+                'id': self.creator.id,
+                'firstname': self.creator.firstname,
+                'lastname': self.creator.lastname,
+                'full_name': self.creator.full_name,
+                'profile_photo': getattr(self.creator, 'profile_photo', None),
+            }
+
         return data
     
     def is_due(self) -> bool:

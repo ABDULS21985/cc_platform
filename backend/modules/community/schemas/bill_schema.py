@@ -250,6 +250,12 @@ class BillDataSchema(Schema):
     paid_member_count = fields.Integer(metadata={'description': 'Number of distinct members who have paid'})
     expected_member_count = fields.Integer(metadata={'description': 'Number of active non-owner members expected to pay'})
     progress_percentage = fields.Integer(metadata={'description': 'Payment progress percentage by member count'})
+    creator = fields.Dict(
+        allow_none=True,
+        metadata={
+            'description': 'Bill creator summary: id, firstname, lastname, full_name, profile_photo',
+        },
+    )
     created_at = fields.String(metadata={'description': 'Creation timestamp'})
     updated_at = fields.String(metadata={'description': 'Last update timestamp'})
 
