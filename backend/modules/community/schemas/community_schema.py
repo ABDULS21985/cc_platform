@@ -216,6 +216,12 @@ class SearchCommunitySchema(Schema):
         metadata={'description': 'Pagination offset'}
     )
 
+    sort = fields.String(
+        load_default='recent',
+        validate=validate.OneOf(['recent', 'popular', 'newest']),
+        metadata={'description': 'Sort order: recent (default), popular (most members first), newest (created_at desc)'},
+    )
+
 
 # ============================================================
 # Response Schemas

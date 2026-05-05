@@ -256,14 +256,15 @@ class CommunityRepository:
         community_filter,
         limit: int = 20,
         offset: int = 0,
+        sort: str = 'recent',
     ) -> tuple:
         """
         Find communities using a CommunityFilter.
 
-        Applies filter conditions, adds a default ordering by ``id DESC``,
-        and returns ``(communities, total_count)``.
+        Applies filter conditions, the requested sort order, and returns
+        ``(communities, total_count)``.
         """
-        community_filter.apply().order(Community.id.desc())
+        community_filter.apply().order_by_sort(sort)
         return community_filter.paginate(limit=limit, offset=offset)
 
     def get_all_active(self, limit: int = 100, offset: int = 0) -> tuple:

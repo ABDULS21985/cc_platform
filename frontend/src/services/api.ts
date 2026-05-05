@@ -307,6 +307,13 @@ export interface CommunityData {
   is_joined: boolean;
   member_cost: string;
   member_count: number;
+  /** Active post count, returned by the backend serializer. */
+  posts_count?: number;
+  /** Profile picture / avatar URL — backend field `community_profile_picture`. */
+  community_profile_picture?: string | null;
+  /** Cover banner URL — backend field `community_cover_photo` (alias of `banner_url`). */
+  community_cover_photo?: string | null;
+  banner_url?: string | null;
   name: string;
   organization_id: number;
   slug: string;
@@ -316,7 +323,8 @@ export interface CommunityData {
 
 export interface CommunityListData {
   communities: CommunityData[];
-  pagination: any;
+  pagination?: { total?: number; limit?: number; offset?: number };
+  total?: number;
 }
 
 export interface CommunityListResponse {
@@ -636,6 +644,7 @@ export const ApiService = {
       query?: string;
       interest_id?: number;
       visibility?: string;
+      sort?: 'recent' | 'popular' | 'newest';
       limit?: number;
       offset?: number;
     }) => axiosInstance.get<CommunityListResponse>("/v2/community", { params }),
@@ -644,6 +653,7 @@ export const ApiService = {
       query?: string;
       interest_id?: number;
       visibility?: string;
+      sort?: 'recent' | 'popular' | 'newest';
       limit?: number;
       offset?: number;
     }) =>
@@ -655,6 +665,7 @@ export const ApiService = {
       query?: string;
       interest_id?: number;
       visibility?: string;
+      sort?: 'recent' | 'popular' | 'newest';
       limit?: number;
       offset?: number;
     }) =>

@@ -220,7 +220,8 @@ class CommunityService:
         Search and filter communities.
 
         Accepts the validated Marshmallow args dict from ``SearchCommunitySchema``
-        and delegates all query composition to ``CommunityFilter``.
+        and delegates all query composition to ``CommunityFilter``. The
+        ``sort`` arg is read from the validator (``'recent'`` by default).
 
         Returns:
             Tuple of (communities, total_count)
@@ -228,7 +229,8 @@ class CommunityService:
         from modules.community.utils import CommunityFilter
 
         f = CommunityFilter(Community.query, args)
-        return self.repo.find_filtered(f, limit=limit, offset=offset)
+        sort = args.get('sort') or 'recent'
+        return self.repo.find_filtered(f, limit=limit, offset=offset, sort=sort)
 
     def get_user_communities(self, user_id: int, limit: int = 20, offset: int = 0) -> Tuple[List[Community], int]:
         """Get communities where user is an active member."""

@@ -56,6 +56,26 @@ class CommunityFilter(BaseFilter):
 
         return self
 
+    def order_by_sort(self, sort: str) -> "CommunityFilter":
+        """Apply an ORDER BY clause based on the validated `sort` param.
+
+        Acceptable values: 'recent' | 'popular' | 'newest'. Anything else
+        falls back to recent (id desc).
+        """
+        from modules.community.models.community import Community
+
+        if sort == 'popular':
+            self._query = self._query.order_by(
+                Community.member_count.desc().nullslast(), Community.id.desc()
+            )
+        elif sort == 'newest':
+            self._query = self._query.order_by(
+                Community.created_at.desc().nullslast(), Community.id.desc()
+            )
+        else:  # 'recent' or fallback
+            self._query = self._query.order_by(Community.id.desc())
+        return self
+
 
 class MemberFilter(BaseFilter):
     """Filter for CommunityMember list queries."""

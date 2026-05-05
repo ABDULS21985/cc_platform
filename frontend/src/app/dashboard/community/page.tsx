@@ -68,6 +68,8 @@ interface CommunityViewItem {
   isJoined: boolean;
   isOwner: boolean;
   avatar: string;
+  /** Optional banner / cover image URL from the backend. */
+  cover?: string | null;
 }
 
 interface UserShape {
@@ -120,11 +122,16 @@ function CommunityContent() {
         const params: {
           query?: string;
           visibility?: string;
+          sort?: 'recent' | 'popular' | 'newest';
           limit?: number;
         } = {};
         if (filters.searchValue?.trim()) params.query = filters.searchValue.trim();
         if (filters.visibility && filters.visibility !== 'all')
           params.visibility = filters.visibility;
+        const sort = filters.selectedFilter;
+        if (sort === 'popular' || sort === 'newest' || sort === 'recent') {
+          params.sort = sort;
+        }
         const res = await activeMeta.fetcher(params);
         if (cancelled) return;
         const list = res.data?.data?.communities || [];
@@ -136,15 +143,25 @@ function CommunityContent() {
               description:
                 c.description || 'No description provided for this circle.',
               members: c.member_count || 0,
-              posts: 0,
+              // Real count from the backend serializer; falls back to 0 only
+              // when the field is missing (older API or stale cache).
+              posts: c.posts_count ?? 0,
               isPrivate: c.visibility === 'private',
               isJoined: !!c.is_joined,
               isOwner: c.created_by === userData?.id,
-              avatar: '/images/image.png',
+              avatar:
+                c.community_profile_picture || '/images/image.png',
+              cover: c.community_cover_photo || c.banner_url || null,
             })
           )
         );
-        setCounts((prev) => ({ ...prev, [activeTab]: list.length }));
+        // Prefer the API's `total` (full result-set size) over `list.length`
+        // (which is just the page we received).
+        const total =
+          (res.data?.data as { total?: number; pagination?: { total?: number } })?.total ??
+          (res.data?.data as { pagination?: { total?: number } })?.pagination?.total ??
+          list.length;
+        setCounts((prev) => ({ ...prev, [activeTab]: total }));
       } catch (err) {
         if (cancelled) return;
         console.error('Failed to fetch communities', err);

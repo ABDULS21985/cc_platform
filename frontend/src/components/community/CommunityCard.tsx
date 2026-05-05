@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Lock, Users, UserPlus, Shield } from 'lucide-react';
+import { Check, Lock, MessageSquare, Users, UserPlus, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useState } from 'react';
@@ -35,6 +35,9 @@ interface Community {
   avatar: string;
   isJoined?: boolean;
   isOwner: boolean;
+  /** Optional banner image from the backend; falls back to a stable Unsplash
+   * cover when omitted so the card never renders blank. */
+  cover?: string | null;
 }
 
 interface CommunityCardProps {
@@ -47,7 +50,10 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
   const [memberCount, setMemberCount] = useState(community.members);
   const router = useRouter();
 
-  const coverImage = COVER_IMAGES[community.id % COVER_IMAGES.length];
+  // Prefer the community's real banner; fall back to a stable Unsplash
+  // cover keyed by id so unbranded circles still look distinct.
+  const coverImage =
+    community.cover || COVER_IMAGES[community.id % COVER_IMAGES.length];
   const goToDetails = () => router.push(`/dashboard/community/${community.id}`);
 
   const handleJoin = async (e: React.MouseEvent) => {
@@ -146,9 +152,19 @@ const CommunityCard = ({ community }: CommunityCardProps) => {
         </p>
 
         <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-          <div className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Users className="size-3.5 text-primary" aria-hidden="true" />
-            {memberCount.toLocaleString()} <span className="hidden sm:inline">members</span>
+          <div className="inline-flex items-center gap-3 text-xs font-medium text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <Users className="size-3.5 text-primary" aria-hidden="true" />
+              {memberCount.toLocaleString()}
+              <span className="hidden sm:inline">members</span>
+            </span>
+            {community.posts > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <MessageSquare className="size-3.5 text-primary" aria-hidden="true" />
+                {community.posts.toLocaleString()}
+                <span className="hidden sm:inline">posts</span>
+              </span>
+            )}
           </div>
 
           {community.isOwner ? (
