@@ -244,7 +244,38 @@ def create_app():
         from modules.admin.commands import register_admin_commands
         register_admin_commands(app)
         logger.info("✓ Admin CLI commands registered")
-        
+
+        # ========== Presence: bump User.last_seen_at on each authed request ==========
+        # Debounced to once per minute so the hot path stays cheap. Failures
+        # never bubble up — presence is best-effort.
+        from datetime import datetime as _dt, timedelta as _td
+        from flask import request as _request
+        from flask_login import current_user as _current_user
+        from modules.auth_v2.extensions import db as _db
+
+        @app.before_request
+        def _bump_last_seen():
+            try:
+                # Skip OPTIONS preflights and Socket.IO polling — they fire constantly.
+                if _request.method == 'OPTIONS':
+                    return
+                if not getattr(_current_user, 'is_authenticated', False):
+                    return
+                user = _current_user
+                last = getattr(user, 'last_seen_at', None)
+                if last is not None and (_dt.utcnow() - last) < _td(seconds=60):
+                    return
+                user.last_seen_at = _dt.utcnow()
+                _db.session.commit()
+            except Exception:
+                # Roll back so the rest of the request still runs cleanly.
+                try:
+                    _db.session.rollback()
+                except Exception:
+                    pass
+
+        logger.info("✓ Presence middleware installed")
+
         # ========== LAYER 8: Start Background Services ==========
         # Start transaction polling service to auto-verify pending payments
         try:

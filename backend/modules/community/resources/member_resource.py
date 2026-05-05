@@ -71,9 +71,39 @@ class CommunityMembersResource(MethodView):
                 offset=offset,
             )
 
+            # Batch each member's post count in this community in one
+            # GROUP BY rather than N+1 individual count queries.
+            user_ids = [m.user_id for m in members if m.user_id]
+            posts_by_user: dict[int, int] = {}
+            if user_ids:
+                from sqlalchemy import func as _sa_func
+                from modules.auth_v2.extensions import db as _db
+                from modules.community.models.community_post import CommunityPost
+                rows = (
+                    _db.session.query(
+                        CommunityPost.author_id,
+                        _sa_func.count(CommunityPost.id),
+                    )
+                    .filter(
+                        CommunityPost.community_id == community_id,
+                        CommunityPost.author_id.in_(user_ids),
+                        CommunityPost.status == 'active',
+                    )
+                    .group_by(CommunityPost.author_id)
+                    .all()
+                )
+                posts_by_user = {int(uid): int(cnt) for uid, cnt in rows}
+
+            payload = []
+            for m in members:
+                row = m.to_dict(include_user=True)
+                if row.get('user') and m.user_id is not None:
+                    row['user']['posts_count'] = posts_by_user.get(int(m.user_id), 0)
+                payload.append(row)
+
             return format_data(
                 data={
-                    'members': [m.to_dict(include_user=True) for m in members],
+                    'members': payload,
                     'pagination': {
                         'total': total,
                         'limit': limit,

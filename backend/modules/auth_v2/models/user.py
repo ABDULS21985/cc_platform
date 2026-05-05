@@ -43,7 +43,11 @@ class User(db.Model, UserMixin):
 
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
-    
+
+    # Presence: bumped on every authenticated request (debounced to once
+    # per minute by the middleware so we don't hammer the DB).
+    last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
+
     def __repr__(self):
         """String representation"""
         return f"<User(id={self.id}, email='{self.email}', name='{self.full_name}')>"

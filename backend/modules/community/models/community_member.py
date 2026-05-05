@@ -142,12 +142,22 @@ class CommunityMember(db.Model):
         }
         
         if include_user and self.user:
+            user = self.user
+            last_seen = getattr(user, 'last_seen_at', None)
             data['user'] = {
-                'id': self.user.id,
-                'email': self.user.email,
-                'firstname': self.user.firstname,
-                'lastname': self.user.lastname,
-                'full_name': self.user.full_name
+                'id': user.id,
+                'email': user.email,
+                'firstname': user.firstname,
+                'lastname': user.lastname,
+                'full_name': user.full_name,
+                # Surface profile fields the Members page renders directly.
+                'profile_photo': getattr(user, 'profile_photo', None),
+                'bio': getattr(user, 'bio', None),
+                # Presence — populated by the auth middleware that bumps
+                # `last_seen_at` on every authenticated request.
+                'last_seen_at': last_seen.isoformat() if last_seen else None,
+                # `posts_count` is filled in by the resource layer via a
+                # batched query — the model can't compute cheaply per row.
             }
         
         if include_community and self.community:

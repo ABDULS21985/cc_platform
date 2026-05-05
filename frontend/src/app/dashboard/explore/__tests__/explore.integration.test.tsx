@@ -109,6 +109,23 @@ describe('DiscoverHero', () => {
     });
   });
 
+  it('reads total from pagination.total when present (real backend shape)', async () => {
+    // The live backend nests the value under data.pagination.total.
+    apiMocks.communities.list.mockResolvedValue({
+      data: {
+        data: {
+          communities: [{}],
+          pagination: { limit: 1, offset: 0, total: 21 },
+        },
+      },
+    });
+    const { DiscoverHero } = await importComponents();
+    render(<DiscoverHero value="" onChange={() => {}} />);
+    await waitFor(() => {
+      expect(screen.getAllByText(/21/).length).toBeGreaterThan(0);
+    });
+  });
+
   it('falls back to "—" placeholder when the API request fails', async () => {
     apiMocks.communities.list.mockRejectedValue(new Error('boom'));
     const { DiscoverHero } = await importComponents();
