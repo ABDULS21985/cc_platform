@@ -6,8 +6,9 @@ import { Search, Sparkles, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
 
-const TRENDING_TAGS = [
+const FALLBACK_TAGS = [
   'estate-dues',
   'marathon-2026',
   'crypto-academy',
@@ -26,6 +27,40 @@ interface DiscoverHeroProps {
 
 export function DiscoverHero({ value, onChange }: DiscoverHeroProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const [totalCount, setTotalCount] = React.useState<number | null>(null);
+  const [trendingTags, setTrendingTags] = React.useState<string[]>([
+    ...FALLBACK_TAGS,
+  ]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Live total community count via the public list endpoint.
+      try {
+        const res = await ApiService.communities.list({ limit: 1 });
+        const total =
+          (res.data?.data as { total?: number })?.total ??
+          res.data?.data?.communities?.length ??
+          null;
+        if (!cancelled && typeof total === 'number') setTotalCount(total);
+      } catch {
+        // leave totalCount null → renders "—" placeholder
+      }
+      // Real trending tags from posts; fall back to seed list when empty.
+      try {
+        const res = await ApiService.discovery.trending({ limit: 8 });
+        const topics = res.data?.data?.topics ?? [];
+        if (!cancelled && topics.length > 0) {
+          setTrendingTags(topics.map((t) => t.tag));
+        }
+      } catch {
+        // keep fallback tags
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <section

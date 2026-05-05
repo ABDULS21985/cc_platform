@@ -274,3 +274,16 @@ class CommunityErrorSchema(Schema):
     success = fields.Boolean(dump_default=False)
     error = fields.String(metadata={'description': 'Error code'})
     message = fields.String(metadata={'description': 'Error message'})
+
+
+class CommunityGenericResponseSchema(Schema):
+    """Permissive envelope used for ad-hoc community endpoints (e.g. category counts).
+
+    Smorest filters response payloads through whichever schema the route
+    declares. The strict CommunityListResponseSchema would strip arbitrary
+    fields like ``counts``; this schema declares ``data`` as a free-form
+    dict so the inner shape passes through verbatim.
+    """
+    success = fields.Boolean()
+    message = fields.String()
+    data = fields.Dict()

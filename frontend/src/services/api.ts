@@ -685,6 +685,13 @@ export const ApiService = {
     getStats: (id: number) =>
       axiosInstance.get<ApiResponse<any>>(`/v2/community/${id}/stats`),
 
+    /** Aggregate community counts per Discover-page category label. */
+    categoryCounts: (labels: string[]) =>
+      axiosInstance.get<ApiResponse<{ counts: Record<string, number> }>>(
+        "/v2/community/category-counts",
+        { params: { label: labels } },
+      ),
+
     // Membership
     joinFree: (id: number) =>
       axiosInstance.post<ApiResponse<any>>(`/v2/community/${id}/join`),

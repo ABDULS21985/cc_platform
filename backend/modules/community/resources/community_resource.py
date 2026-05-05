@@ -14,7 +14,8 @@ from modules.community.schemas.community_schema import (
     SearchCommunitySchema,
     CommunityResponseSchema,
     CommunityListResponseSchema,
-    CommunityErrorSchema
+    CommunityErrorSchema,
+    CommunityGenericResponseSchema,
 )
 from modules.community.services import CommunityService, MembershipService
 from modules.community.utils import resolve_optional_user_id
@@ -112,6 +113,66 @@ class CommunityListResource(MethodView):
         except Exception as e:
             logger.error(f"Error creating community: {str(e)}", exc_info=True)
             return format_internal_error(str(e))
+
+
+@community_blp.route('/category-counts')
+class CommunityCategoryCountsResource(MethodView):
+    """Aggregate community counts per Discover-page category label.
+
+    The frontend's category taxonomy (estate, faith, sports, …) doesn't map
+    cleanly to a single column on the community model. We accept the labels
+    as repeated `?label=` query params and return a dict of label → count
+    by matching against name/description (case-insensitive). Communities
+    with explicit `category::<label>` interests are also counted.
+
+    Example:
+        GET /api/v2/community/category-counts?label=Estate%20%26%20HOA&label=Sports%20%26%20fitness
+        →  { "data": { "counts": { "Estate & HOA": 4, "Sports & fitness": 12 } } }
+    """
+
+    @community_blp.response(200, CommunityGenericResponseSchema)
+    def get(self):
+        from flask import request
+        from sqlalchemy import or_
+        from modules.community.models.community import Community
+        from modules.community.constants import CommunityStatus
+
+        labels = request.args.getlist('label')
+        if not labels:
+            return format_data(data={'counts': {}}, message='No labels supplied', status_code=200)
+
+        # Cap to a reasonable upper bound so a malicious caller can't run
+        # 10k LIKE queries.
+        labels = labels[:32]
+        counts: dict = {}
+        for label in labels:
+            term = label.strip()
+            if not term:
+                counts[label] = 0
+                continue
+            try:
+                like_pat = f'%{term}%'
+                # Strip simple connectives so "Sports & fitness" still matches
+                # a community named "Sports community".
+                primary = term.split('&')[0].split('/')[0].strip() or term
+                primary_pat = f'%{primary}%'
+                count = (
+                    Community.query.filter(
+                        Community.status == CommunityStatus.ACTIVE.value,
+                        or_(
+                            Community.name.ilike(like_pat),
+                            Community.description.ilike(like_pat),
+                            Community.name.ilike(primary_pat),
+                            Community.description.ilike(primary_pat),
+                        ),
+                    ).count()
+                )
+                counts[label] = int(count)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning('category-count failed for %r: %s', label, exc)
+                counts[label] = 0
+
+        return format_data(data={'counts': counts}, message='Category counts', status_code=200)
 
 
 @community_blp.route('/<int:community_id>')
