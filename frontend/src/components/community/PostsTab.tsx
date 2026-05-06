@@ -13,21 +13,25 @@ import {
 } from '@/components/ui/select';
 import {
   Paperclip,
-  Smile,
   Image as ImageIcon,
   Heart,
   MessageCircle,
   Share2,
   MoreHorizontal,
   Bookmark,
-  Send,
   Loader2,
   Pin,
-  ExternalLink,
   Trash2,
   AlertCircle,
 } from 'lucide-react';
-import { type Dispatch, type SetStateAction, useEffect, useState } from 'react';
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { ApiService, type PostCommentData, type PostData } from '@/services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { toastAxiosError } from '@/hooks/useAxiosError';
@@ -53,10 +57,15 @@ interface PostsTabProps {
   isOwner?: boolean;
 }
 
+const PAGE_SIZE = 20;
+type SortOption = 'recent' | 'popular' | 'newest';
+
 export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps) {
   const [posts, setPosts] = useState<PostData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState('recent');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [postToDelete, setPostToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -69,23 +78,53 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
   const [reactingPosts, setReactingPosts] = useState<Set<number>>(new Set());
   const [savingBookmarks, setSavingBookmarks] = useState<Set<number>>(new Set());
   const userData = useUserData();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const toggleCreatePost = () => setIsCreatePostOpen((s) => !s);
 
-  const fetchPosts = async () => {
-    setLoading(true);
+  const fetchPosts = useCallback(
+    async (sort: SortOption = sortBy) => {
+      setLoading(true);
+      try {
+        const response = await ApiService.communities.getPosts(communityId, {
+          sort,
+          limit: PAGE_SIZE,
+          offset: 0,
+        });
+        setPosts(response.data.data.posts);
+        setHasMore(Boolean(response.data.data.pagination?.has_more));
+      } catch (error) {
+        toastAxiosError(error, 'Failed to load posts.');
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [communityId],
+  );
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMore || loading || !hasMore) return;
+    setLoadingMore(true);
     try {
       const response = await ApiService.communities.getPosts(communityId, {
-        limit: 20,
-        offset: 0,
+        sort: sortBy,
+        limit: PAGE_SIZE,
+        offset: posts.length,
       });
-      setPosts(response.data.data.posts);
+      const newPosts = response.data.data.posts ?? [];
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id));
+        return [...prev, ...newPosts.filter((p) => !existingIds.has(p.id))];
+      });
+      setHasMore(Boolean(response.data.data.pagination?.has_more));
     } catch (error) {
-      toastAxiosError(error, 'Failed to load posts.');
+      toastAxiosError(error, 'Failed to load more posts.');
     } finally {
-      setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [communityId, hasMore, loading, loadingMore, posts.length, sortBy]);
 
   const handleDeletePost = async () => {
     if (!postToDelete) return;
@@ -94,13 +133,15 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
     try {
       await ApiService.communities.deletePost(idToRemove);
       toast.success('Post deleted successfully');
-      
+
       // Close the modal first to allow Radix UI to cleanup focus and scroll lock
       setPostToDelete(null);
-      
+
       // Small delay to ensure modal transition starts/completes before state update
       setTimeout(() => {
         setPosts((prev) => prev.filter((p) => p.id !== idToRemove));
+        // Re-fetch to keep pagination state consistent with the source of truth
+        void fetchPosts(sortBy);
       }, 100);
     } catch (error) {
       toastAxiosError(error, 'Failed to delete post.');
@@ -248,8 +289,26 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
   };
 
   useEffect(() => {
-    fetchPosts();
-  }, [communityId]);
+    void fetchPosts(sortBy);
+  }, [communityId, sortBy, fetchPosts]);
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    if (!hasMore) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadMorePosts();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMorePosts]);
 
   // Safety cleanup for Radix UI body locks
   useEffect(() => {
@@ -307,16 +366,6 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
                     <Paperclip className="w-4 h-4" />
                     Attach
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled
-                    title="Emoji picker is not supported yet"
-                    className="rounded-full text-gray-400 font-bold text-xs gap-2"
-                  >
-                    <Smile className="w-4 h-4" />
-                    Emoji
-                  </Button>
                 </div>
                 <Button 
                   onClick={toggleCreatePost}
@@ -334,7 +383,7 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
         <h3 className="text-lg font-extrabold text-gray-900 tracking-tight">Recent Posts</h3>
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Sort by:</span>
-          <Select value={sortBy} onValueChange={setSortBy}>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
             <SelectTrigger className="w-32 h-9 rounded-xl border-gray-100 bg-white/50 text-xs font-bold focus:ring-[#0E9DA5]/10">
               <SelectValue placeholder="Recent" />
             </SelectTrigger>
@@ -515,6 +564,26 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
               </div>
             </article>
           ))
+        )}
+
+        {!loading && posts.length > 0 && hasMore && (
+          <div ref={sentinelRef} className="flex justify-center py-4">
+            <Button
+              variant="outline"
+              onClick={() => void loadMorePosts()}
+              disabled={loadingMore}
+              className="rounded-2xl border-[#0E9DA5]/30 text-[#0E9DA5] hover:bg-teal-50 font-bold"
+            >
+              {loadingMore ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Loading more...
+                </>
+              ) : (
+                'Load more posts'
+              )}
+            </Button>
+          </div>
         )}
       </div>
 

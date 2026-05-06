@@ -12,6 +12,12 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   ApiService,
   type SubscriptionApi,
   type StandingInstructionCreatePayload,
@@ -179,6 +185,8 @@ export function StandingInstructionsContent() {
       const updated = res.data?.data?.subscription;
       if (updated) {
         setItems((prev) => prev.map((it) => (it.id === id ? updated : it)));
+      } else {
+        await load();
       }
       toast.success(
         next === 'paused'
@@ -332,14 +340,64 @@ export function StandingInstructionsContent() {
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Options for ${s.name}`}
-                    >
-                      <MoreHorizontal className="size-4" aria-hidden="true" />
-                    </Button>
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={busyId === s.id}
+                          aria-label={`Options for ${s.name}`}
+                        >
+                          <MoreHorizontal className="size-4" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        {s.status !== 'cancelled' && (
+                          <>
+                            {s.status === 'paused' ? (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void setStatus(s.id, 'active');
+                                }}
+                              >
+                                <Play className="mr-2 size-3.5" aria-hidden="true" />
+                                Resume
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void setStatus(s.id, 'paused');
+                                }}
+                              >
+                                <Pause className="mr-2 size-3.5" aria-hidden="true" />
+                                Pause
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onSelect={() => {
+                                void setStatus(s.id, 'cancelled');
+                              }}
+                            >
+                              <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                              Cancel
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        {s.status === 'cancelled' && (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => {
+                              void deleteInstruction(s.id);
+                            }}
+                          >
+                            <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                            Remove
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardContent>
               </Card>

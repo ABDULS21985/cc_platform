@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Calendar, Clock, MapPin, Users } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ApiService, type EventApi } from '@/services/api';
+import { CreateEventDialog } from './CreateEventDialog';
+import { toast } from 'sonner';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 
 interface EventsTabProps {
   communityId: number;
@@ -39,32 +42,79 @@ export function EventsTab({ communityId, communityName }: EventsTabProps) {
   const [activeTab, setActiveTab] = useState<TabValue>('ongoing');
   const [events, setEvents] = useState<EventApi[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const fetchEvents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await ApiService.events.list({
+        scope: 'all',
+        community_id: communityId,
+        limit: 100,
+      });
+      setEvents(res.data?.data?.events ?? []);
+    } catch (error) {
+      toastAxiosError(error, 'Failed to load events.');
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [communityId]);
 
   useEffect(() => {
-    let cancelled = false;
+    void fetchEvents();
+  }, [fetchEvents]);
 
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await ApiService.events.list({
-          scope: 'all',
-          community_id: communityId,
-          limit: 100,
-        });
-        if (!cancelled) {
-          setEvents(res.data?.data?.events ?? []);
+  const handleCreateEvent = async (form: {
+    title: string;
+    description: string;
+    location: string;
+    fee: string;
+    autoApproveMembers: boolean;
+    isPrivate: boolean;
+    startsAt: string;
+    banner?: File;
+  }) => {
+    if (!form.startsAt) {
+      toast.error('Pick a start time');
+      return;
+    }
+    setCreating(true);
+    try {
+      let coverImage: string | null = null;
+      if (form.banner) {
+        try {
+          const fd = new FormData();
+          fd.append('file', form.banner);
+          const upload = await ApiService.events.uploadCover(fd);
+          coverImage = upload.data?.data?.cover_image ?? null;
+        } catch (error) {
+          toastAxiosError(error, 'Failed to upload event banner.');
         }
-      } catch {
-        if (!cancelled) setEvents([]);
-      } finally {
-        if (!cancelled) setLoading(false);
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [communityId]);
+      const ticketPrice = form.fee.trim() ? form.fee.trim() : null;
+      await ApiService.events.create({
+        title: form.title,
+        description: form.description,
+        starts_at: new Date(form.startsAt).toISOString(),
+        community_id: communityId,
+        location: form.location,
+        is_online: !form.location || /online|virtual|zoom/i.test(form.location),
+        is_private: form.isPrivate,
+        ticket_price: ticketPrice,
+        auto_approve_members: form.autoApproveMembers,
+        cover_image: coverImage,
+      });
+      toast.success('Event created');
+      setCreateOpen(false);
+      await fetchEvents();
+    } catch (error) {
+      toastAxiosError(error, 'Failed to create event.');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const filtered = useMemo(
     () =>
@@ -110,10 +160,12 @@ export function EventsTab({ communityId, communityName }: EventsTabProps) {
           </Tabs>
 
           <Button
-            asChild
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            disabled={creating}
             className="rounded-full bg-[#0E9DA5] px-4 py-2 text-white hover:bg-[#0E9DA5]/90"
           >
-            <Link href="/dashboard/events">Create event</Link>
+            {creating ? 'Creating…' : 'Create event'}
           </Button>
         </div>
       </div>
@@ -200,6 +252,14 @@ export function EventsTab({ communityId, communityName }: EventsTabProps) {
           )}
         </TabsContent>
       </Tabs>
+
+      <CreateEventDialog
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={(form) => {
+          void handleCreateEvent(form);
+        }}
+      />
     </div>
   );
 }

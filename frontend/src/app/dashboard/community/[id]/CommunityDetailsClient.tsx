@@ -57,7 +57,7 @@ export default function CommunityDetailsClient({
   const [joiningCommunity, setJoiningCommunity] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [hasCopiedLink, setHasCopiedLink] = useState(false);
-  const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
+  const [globalUnreadCount, setGlobalUnreadCount] = useState(0);
 
   const { getActiveTabFor, setActiveTabFor } = useCommunityTabStore();
   const activeTab = getActiveTabFor(String(communityId));
@@ -122,20 +122,37 @@ export default function CommunityDetailsClient({
     fetchMembers();
   }, [communityId]);
 
+  // Global unread inbox count for the mail icon badge.
   useEffect(() => {
-    if (!communityId) return;
-
-    const fetchCommunityUnread = async () => {
+    let cancelled = false;
+    const fetchGlobalUnread = async () => {
       try {
-        const response = await ApiService.notifications.unreadByCommunity(communityId);
-        setCommunityUnreadCount(response.data.data.unread_count ?? 0);
-      } catch (error) {
-        toastAxiosError(error, "Failed to load community notifications.");
+        const res = await ApiService.notifications.unreadCount();
+        if (!cancelled) {
+          setGlobalUnreadCount(res.data?.data?.unread_count ?? 0);
+        }
+      } catch {
+        // Silent failure: badge just stays at last value or zero.
       }
     };
 
-    void fetchCommunityUnread();
-  }, [communityId]);
+    void fetchGlobalUnread();
+
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        void fetchGlobalUnread();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      cancelled = true;
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+  }, []);
 
   const handleRemoveMember = async (userId: number) => {
     if (!confirm("Are you sure you want to remove this member?")) return;
@@ -290,12 +307,18 @@ export default function CommunityDetailsClient({
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={
+                          globalUnreadCount > 0
+                            ? `${globalUnreadCount} unread notifications`
+                            : "Notifications"
+                        }
+                        onClick={() => router.push("/dashboard/notifications")}
                         className="w-11 h-11 rounded-2xl bg-gray-50 border border-gray-100 text-gray-600 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all relative group"
                       >
                         <Mail className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        {communityUnreadCount > 0 && (
+                        {globalUnreadCount > 0 && (
                           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-h-5 min-w-5 px-1 flex items-center justify-center ring-2 ring-white">
-                            {communityUnreadCount > 99 ? "99+" : communityUnreadCount}
+                            {globalUnreadCount > 99 ? "99+" : globalUnreadCount}
                           </span>
                         )}
                       </Button>

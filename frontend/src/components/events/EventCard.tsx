@@ -19,6 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
+import { ApiService } from '@/services/api';
+import { toastAxiosError } from '@/hooks/useAxiosError';
+import { toast } from 'sonner';
 
 export interface EventItem {
   id: string;
@@ -45,6 +48,8 @@ export interface EventItem {
   ticketingStatus?: 'free' | 'paid_unsupported';
   /** Optional category label rendered as a small chip. */
   category?: string;
+  /** Optional human description used for bookmark metadata. */
+  description?: string;
 }
 
 interface EventCardProps {
@@ -95,8 +100,48 @@ export function EventCard({ event, onToggleAttend, onToggleBookmark }: EventCard
     !event.isAttending &&
     eventRequiresPayment(event) &&
     event.paymentSupported !== true;
+  const [optimisticBookmarked, setOptimisticBookmarked] = React.useState<boolean>(
+    !!event.isBookmarked,
+  );
+  const [savingBookmark, setSavingBookmark] = React.useState(false);
+
+  React.useEffect(() => {
+    setOptimisticBookmarked(!!event.isBookmarked);
+  }, [event.isBookmarked]);
 
   const navigate = () => router.push(`/dashboard/events/${event.id}`);
+
+  const handleBookmark = async () => {
+    if (savingBookmark) return;
+    // Defer to parent if a callback was provided.
+    if (onToggleBookmark) {
+      onToggleBookmark(event.id);
+      return;
+    }
+    const previous = optimisticBookmarked;
+    setOptimisticBookmarked(true);
+    setSavingBookmark(true);
+    try {
+      const res = await ApiService.bookmarks.create({
+        kind: 'event',
+        target_ref: `event:${event.id}`,
+        title: event.title,
+        description: event.description ?? '',
+        source: event.community || 'Events',
+        href: `/dashboard/events?id=${event.id}`,
+        community_id: event.communityId ?? null,
+        community_name: event.community ?? null,
+      });
+      toast.success(
+        res.data?.data?.already_saved ? 'Event already saved' : 'Event saved',
+      );
+    } catch (error) {
+      setOptimisticBookmarked(previous);
+      toastAxiosError(error, 'Failed to save event.');
+    } finally {
+      setSavingBookmark(false);
+    }
+  };
 
   return (
     <Card
@@ -297,17 +342,18 @@ export function EventCard({ event, onToggleAttend, onToggleBookmark }: EventCard
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  aria-label={event.isBookmarked ? 'Unsave event' : 'Save event'}
-                  aria-pressed={!!event.isBookmarked}
+                  aria-label={optimisticBookmarked ? 'Unsave event' : 'Save event'}
+                  aria-pressed={optimisticBookmarked}
+                  disabled={savingBookmark}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onToggleBookmark?.(event.id);
+                    void handleBookmark();
                   }}
                 >
                   <Bookmark
                     className={cn(
                       'size-4',
-                      event.isBookmarked && 'fill-primary text-primary'
+                      optimisticBookmarked && 'fill-primary text-primary',
                     )}
                     aria-hidden="true"
                   />

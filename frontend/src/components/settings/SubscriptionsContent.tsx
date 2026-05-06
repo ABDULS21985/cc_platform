@@ -9,6 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ApiService, type SubscriptionApi } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -54,6 +60,8 @@ export function SubscriptionsContent() {
       const updated = res.data?.data?.subscription;
       if (updated) {
         setSubs((prev) => prev.map((s) => (s.id === id ? updated : s)));
+      } else {
+        await load();
       }
       toast.success(
         next === 'paused'
@@ -64,6 +72,20 @@ export function SubscriptionsContent() {
       );
     } catch {
       toast.error('Could not update subscription');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    setBusyId(id);
+    try {
+      await ApiService.subscriptions.delete(id);
+      setSubs((prev) => prev.filter((s) => s.id !== id));
+      toast.success(`${name} removed`);
+      await load();
+    } catch {
+      toast.error('Could not remove subscription');
     } finally {
       setBusyId(null);
     }
@@ -179,14 +201,64 @@ export function SubscriptionsContent() {
                       </Button>
                     </>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Options for ${sub.name}`}
-                  >
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                  </Button>
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={busyId === sub.id}
+                        aria-label={`Options for ${sub.name}`}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      {sub.status !== 'cancelled' && (
+                        <>
+                          {sub.status === 'paused' ? (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                void handleSetStatus(sub.id, 'active');
+                              }}
+                            >
+                              <Play className="mr-2 size-3.5" aria-hidden="true" />
+                              Resume
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                void handleSetStatus(sub.id, 'paused');
+                              }}
+                            >
+                              <Pause className="mr-2 size-3.5" aria-hidden="true" />
+                              Pause
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => {
+                              void handleSetStatus(sub.id, 'cancelled');
+                            }}
+                          >
+                            <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                            Cancel
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {sub.status === 'cancelled' && (
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => {
+                            void handleDelete(sub.id, sub.name);
+                          }}
+                        >
+                          <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                          Remove
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </CardContent>
             </Card>

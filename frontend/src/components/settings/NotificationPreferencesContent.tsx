@@ -30,6 +30,8 @@ interface ChannelPref {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   enabled: boolean;
+  /** When true, the toggle is rendered disabled and the handler bails early. */
+  comingSoon?: boolean;
 }
 
 const CHANNELS: ChannelPref[] = [
@@ -53,6 +55,7 @@ const CHANNELS: ChannelPref[] = [
     description: 'Transaction confirmations and security codes (Nigerian numbers).',
     icon: MessageSquare,
     enabled: true,
+    comingSoon: true,
   },
   {
     id: 'push',
@@ -134,6 +137,13 @@ const DIGEST_OPTIONS: Array<{ id: DigestFrequency; label: string; description: s
 
 type ChannelKey = 'in-app' | 'email' | 'sms' | 'push';
 
+const CHANNEL_COMING_SOON: Record<ChannelKey, boolean> = {
+  'in-app': false,
+  email: !!CHANNELS.find((c) => c.id === 'email')?.comingSoon,
+  sms: !!CHANNELS.find((c) => c.id === 'sms')?.comingSoon,
+  push: !!CHANNELS.find((c) => c.id === 'push')?.comingSoon,
+};
+
 export function NotificationPreferencesContent() {
   const [prefs, setPrefs] = useState<Record<CategoryKey, boolean>>(DEFAULT_PREFS);
   const [channels, setChannels] = useState<Record<ChannelKey, boolean>>({
@@ -190,6 +200,10 @@ export function NotificationPreferencesContent() {
 
   const toggleChannel = async (id: ChannelKey, value: boolean) => {
     if (id === 'in-app') return;
+    if (CHANNEL_COMING_SOON[id]) {
+      toast.info('This channel will be available soon');
+      return;
+    }
     const prev = channels[id];
     setChannels((c) => ({ ...c, [id]: value }));
     setSavingChannel(id);
@@ -291,9 +305,12 @@ export function NotificationPreferencesContent() {
         <Card variant="default" density="compact">
           <CardContent className="divide-y divide-border px-0">
             {CHANNELS.map((c) => {
-              const channelKey = c.id as ChannelKey;
+              // The CHANNELS list uses the API-style ids (`in_app`); the local
+              // state map uses kebab `in-app`. Map between them here.
+              const channelKey = (c.id === 'in_app' ? 'in-app' : c.id) as ChannelKey;
               const checked = channels[channelKey];
               const isInApp = channelKey === 'in-app';
+              const comingSoon = !!c.comingSoon;
               return (
                 <div
                   key={c.id}
@@ -316,13 +333,18 @@ export function NotificationPreferencesContent() {
                             Always on
                           </Badge>
                         )}
+                        {comingSoon && (
+                          <Badge variant="soft" size="sm">
+                            Coming soon
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">{c.description}</p>
                     </div>
                   </div>
                   <Switch
-                    checked={checked}
-                    disabled={isInApp || savingChannel === channelKey}
+                    checked={comingSoon ? false : checked}
+                    disabled={isInApp || comingSoon || savingChannel === channelKey}
                     onCheckedChange={(v) => toggleChannel(channelKey, !!v)}
                     aria-label={`${c.label} channel`}
                   />

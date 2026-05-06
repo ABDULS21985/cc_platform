@@ -462,6 +462,11 @@ export interface UserAdminOverviewData {
   }>;
 }
 
+export interface UserBillsSummaryData {
+  bills_due_count: number;
+  bills_due_amount: number;
+}
+
 export interface MemberData {
   id: number;
   user_id: number;
@@ -1081,6 +1086,11 @@ export const ApiService = {
         "/v2/community/me/overview",
       ),
 
+    getBillsSummary: () =>
+      axiosInstance.get<ApiResponse<UserBillsSummaryData>>(
+        "/v2/community/me/bills-summary",
+      ),
+
     getOverview: (id: number) =>
       axiosInstance.get<ApiResponse<CommunityOverviewData>>(
         `/v2/community/${id}/overview`,
@@ -1112,7 +1122,15 @@ export const ApiService = {
     leave: (id: number) =>
       axiosInstance.post<ApiResponse<any>>(`/v2/community/${id}/leave`),
 
-    getMembers: (id: number, params?: { limit?: number; offset?: number }) =>
+    getMembers: (
+      id: number,
+      params?: {
+        limit?: number;
+        offset?: number;
+        q?: string;
+        mentionable?: boolean;
+      },
+    ) =>
       axiosInstance.get<MemberListResponse>(`/v2/community/${id}/members`, {
         params,
       }),
@@ -1259,7 +1277,12 @@ export const ApiService = {
     // Posts
     getPosts: (
       communityId: number,
-      params?: { limit?: number; offset?: number; pinned_only?: boolean },
+      params?: {
+        limit?: number;
+        offset?: number;
+        pinned_only?: boolean;
+        sort?: 'recent' | 'popular' | 'newest';
+      },
     ) =>
       axiosInstance.get<PostListResponse>(`/v2/community/${communityId}/posts`, {
         params,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,15 +14,14 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Calendar,
   Globe,
   Image as ImageIcon,
+  Loader2,
   Pin,
   Send,
-  Smile,
   X,
 } from 'lucide-react';
-import { ApiService } from '@/services/api';
+import { ApiService, type MemberData } from '@/services/api';
 import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import useUserData from '@/hooks/useUserData';
@@ -45,6 +44,24 @@ interface MyCommunity {
 const MAX_LENGTH = 280;
 const MAX_MEDIA_FILES = 4;
 const MAX_MEDIA_SIZE = 5 * 1024 * 1024;
+const MENTION_DEBOUNCE_MS = 200;
+const MENTION_LIMIT = 8;
+
+interface MentionableMember {
+  id: number;
+  full_name: string;
+  firstname?: string | null;
+  profile_photo?: string | null;
+}
+
+function extractMentionQuery(text: string, caret: number): { query: string; start: number } | null {
+  if (caret <= 0) return null;
+  const before = text.slice(0, caret);
+  const match = /(?:^|\s)@([\w.]*)$/.exec(before);
+  if (!match) return null;
+  const start = caret - match[1].length - 1;
+  return { query: match[1] ?? '', start };
+}
 
 export function CreatePostDialog({
   isOpen,
@@ -57,9 +74,17 @@ export function CreatePostDialog({
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<{ url: string; name: string }[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const [mentionedIds, setMentionedIds] = useState<Set<number>>(new Set());
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<MentionableMember[]>([]);
+  const [mentionLoading, setMentionLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionStartRef = useRef<number | null>(null);
   const [selectedCommunityId, setSelectedCommunityId] = useState<number | undefined>(
     communityId
   );
@@ -101,30 +126,19 @@ export function CreatePostDialog({
   }, [isOpen, communityId]);
 
   const handlePost = async () => {
-    if ((!text.trim() && mediaFiles.length === 0) || !selectedCommunityId) return;
+    if ((!text.trim() && uploadedMedia.length === 0) || !selectedCommunityId) return;
     setLoading(true);
     try {
-      let mediaUrls: string[] = [];
-      if (mediaFiles.length > 0) {
-        const uploadData = new FormData();
-        mediaFiles.forEach((file) => uploadData.append('files', file));
-        const uploadRes = await ApiService.communities.uploadPostMedia(uploadData);
-        mediaUrls = uploadRes.data.data.media.map((item) => item.url);
-      }
-
       await ApiService.communities.createPost(selectedCommunityId, {
         body: text.trim() || null,
         post_type: 'post',
         is_pinned: isPinned,
         comments_enabled: commentsEnabled,
-        media_urls: mediaUrls,
-        mentioned_user_ids: [],
+        media_urls: uploadedMedia.map((m) => m.url),
+        mentioned_user_ids: Array.from(mentionedIds),
       });
       toast.success('Post shared');
-      setText('');
-      setMediaFiles([]);
-      setIsPinned(false);
-      setCommentsEnabled(true);
+      resetForm();
       toggleDialog();
       onPostCreated?.();
     } catch (error) {
@@ -134,18 +148,34 @@ export function CreatePostDialog({
     }
   };
 
+  const resetForm = () => {
+    setText('');
+    setMediaFiles([]);
+    setUploadedMedia([]);
+    setIsPinned(false);
+    setCommentsEnabled(true);
+    setMentionedIds(new Set());
+    setMentionQuery(null);
+    setMentionResults([]);
+    mentionStartRef.current = null;
+  };
+
   const handleCancel = () => {
     if (loading) return;
     toggleDialog();
-    setText('');
-    setMediaFiles([]);
-    setIsPinned(false);
-    setCommentsEnabled(true);
+    resetForm();
   };
 
-  const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
+    e.target.value = '';
     if (selected.length === 0) return;
+
+    const remainingSlots = MAX_MEDIA_FILES - uploadedMedia.length;
+    if (remainingSlots <= 0) {
+      toast.error(`You can attach up to ${MAX_MEDIA_FILES} images`);
+      return;
+    }
 
     const accepted: File[] = [];
     for (const file of selected) {
@@ -158,15 +188,125 @@ export function CreatePostDialog({
         continue;
       }
       accepted.push(file);
+      if (accepted.length >= remainingSlots) break;
     }
+    if (accepted.length === 0) return;
 
-    setMediaFiles((prev) => [...prev, ...accepted].slice(0, MAX_MEDIA_FILES));
-    e.target.value = '';
+    setMediaFiles((prev) => [...prev, ...accepted]);
+    setUploadingMedia(true);
+    try {
+      const uploadData = new FormData();
+      accepted.forEach((file) => uploadData.append('files', file));
+      const uploadRes = await ApiService.communities.uploadPostMedia(uploadData);
+      const items = uploadRes.data.data.media.map((item, idx) => ({
+        url: item.url,
+        name: item.original_filename || accepted[idx]?.name || `image-${idx + 1}`,
+      }));
+      setUploadedMedia((prev) => [...prev, ...items]);
+    } catch (error) {
+      toastAxiosError(error, 'Failed to upload media.');
+      // Roll back local mediaFiles for the failed batch.
+      const acceptedKeys = new Set(accepted.map((f) => `${f.name}-${f.lastModified}`));
+      setMediaFiles((prev) =>
+        prev.filter((f) => !acceptedKeys.has(`${f.name}-${f.lastModified}`)),
+      );
+    } finally {
+      setUploadingMedia(false);
+    }
   };
 
   const removeMediaFile = (index: number) => {
     setMediaFiles((prev) => prev.filter((_, i) => i !== index));
+    setUploadedMedia((prev) => prev.filter((_, i) => i !== index));
   };
+
+  // Mention autocomplete: detect "@<query>" before the caret, debounce 200ms,
+  // call backend member search, and render a popover.
+  useEffect(() => {
+    if (mentionQuery === null) {
+      setMentionResults([]);
+      return;
+    }
+    if (!selectedCommunityId) {
+      setMentionResults([]);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      setMentionLoading(true);
+      try {
+        const res = await ApiService.communities.getMembers(selectedCommunityId, {
+          q: mentionQuery,
+          mentionable: true,
+          limit: MENTION_LIMIT,
+        });
+        const members = (res.data?.data?.members ?? []) as MemberData[];
+        const mapped: MentionableMember[] = members
+          .map((m) => {
+            const user = m.user ?? {};
+            return {
+              id: Number(m.user_id),
+              full_name:
+                user.full_name ||
+                [user.firstname, user.lastname].filter(Boolean).join(' ') ||
+                'Member',
+              firstname: user.firstname ?? null,
+              profile_photo: user.profile_photo ?? null,
+            };
+          })
+          .filter((m) => Number.isFinite(m.id) && m.id > 0);
+        setMentionResults(mapped);
+      } catch {
+        setMentionResults([]);
+      } finally {
+        setMentionLoading(false);
+      }
+    }, MENTION_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [mentionQuery, selectedCommunityId]);
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setText(value);
+    const caret = e.target.selectionStart ?? value.length;
+    const detected = extractMentionQuery(value, caret);
+    if (detected) {
+      mentionStartRef.current = detected.start;
+      setMentionQuery(detected.query);
+    } else {
+      mentionStartRef.current = null;
+      setMentionQuery(null);
+    }
+  };
+
+  const insertMention = (member: MentionableMember) => {
+    const start = mentionStartRef.current;
+    const ta = textareaRef.current;
+    if (start === null || !ta) return;
+    const caret = ta.selectionStart ?? text.length;
+    const before = text.slice(0, start);
+    const after = text.slice(caret);
+    const insertion = `@${member.full_name} `;
+    const next = `${before}${insertion}${after}`;
+    setText(next);
+    setMentionedIds((prev) => new Set(prev).add(member.id));
+    setMentionQuery(null);
+    mentionStartRef.current = null;
+    // Restore caret after the inserted mention.
+    requestAnimationFrame(() => {
+      const newCaret = before.length + insertion.length;
+      try {
+        ta.focus();
+        ta.setSelectionRange(newCaret, newCaret);
+      } catch {
+        // ignore
+      }
+    });
+  };
+
+  const showMentionPopover = useMemo(
+    () => mentionQuery !== null && (mentionLoading || mentionResults.length > 0),
+    [mentionQuery, mentionLoading, mentionResults.length],
+  );
 
   const remaining = MAX_LENGTH - text.length;
   const overLimit = remaining < 0;
@@ -260,15 +400,30 @@ export function CreatePostDialog({
           </div>
 
           {/* Composer */}
-          <div className="space-y-1.5">
+          <div className="relative space-y-1.5">
             <label htmlFor="post-body" className="sr-only">
               Post content
             </label>
             <textarea
+              ref={textareaRef}
               id="post-body"
-              placeholder={`What's on your mind, ${userData?.firstname || 'friend'}?`}
+              placeholder={`What's on your mind, ${userData?.firstname || 'friend'}? Tip: use @ to mention members.`}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleTextChange}
+              onKeyUp={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                const detected = extractMentionQuery(
+                  target.value,
+                  target.selectionStart ?? target.value.length,
+                );
+                if (detected) {
+                  mentionStartRef.current = detected.start;
+                  setMentionQuery(detected.query);
+                } else if (mentionQuery !== null) {
+                  mentionStartRef.current = null;
+                  setMentionQuery(null);
+                }
+              }}
               aria-invalid={overLimit ? 'true' : undefined}
               className={cn(
                 'custom-scrollbar w-full min-h-[160px] resize-none rounded-xl border border-border bg-muted/30 px-4 py-3',
@@ -277,6 +432,49 @@ export function CreatePostDialog({
               )}
               autoFocus
             />
+            {showMentionPopover && (
+              <div
+                role="listbox"
+                aria-label="Mention members"
+                className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg"
+              >
+                {mentionLoading && mentionResults.length === 0 ? (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    Searching members…
+                  </div>
+                ) : mentionResults.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">No matches</p>
+                ) : (
+                  mentionResults.map((member) => (
+                    <button
+                      key={member.id}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onMouseDown={(e) => {
+                        // Prevent textarea blur before insert.
+                        e.preventDefault();
+                        insertMention(member);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                    >
+                      <Avatar className="size-7">
+                        {member.profile_photo ? (
+                          <AvatarImage src={member.profile_photo} alt="" />
+                        ) : null}
+                        <AvatarFallback className="bg-brand-soft text-[10px] font-bold text-accent-foreground">
+                          {(member.firstname || member.full_name || 'M').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate font-medium text-foreground">
+                        {member.full_name}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           {/* Settings */}
@@ -324,39 +522,27 @@ export function CreatePostDialog({
                   aria-label="Add image"
                   title="Add image"
                   className="text-muted-foreground hover:text-primary"
-                  disabled={loading || mediaFiles.length >= MAX_MEDIA_FILES}
+                  disabled={
+                    loading || uploadingMedia || uploadedMedia.length >= MAX_MEDIA_FILES
+                  }
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <ImageIcon className="size-4" aria-hidden="true" />
+                  {uploadingMedia ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ImageIcon className="size-4" aria-hidden="true" />
+                  )}
                 </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  accept="image/*"
                   multiple
                   className="hidden"
-                  onChange={handleMediaSelect}
+                  onChange={(e) => {
+                    void handleMediaSelect(e);
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Add emoji"
-                  title="Add emoji"
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <Smile className="size-4" aria-hidden="true" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Schedule"
-                  title="Schedule"
-                  className="text-muted-foreground hover:text-primary"
-                >
-                  <Calendar className="size-4" aria-hidden="true" />
-                </Button>
               </div>
               <Badge
                 variant={overLimit ? 'destructiveSoft' : 'soft'}
@@ -367,24 +553,26 @@ export function CreatePostDialog({
               </Badge>
             </div>
 
-            {mediaFiles.length > 0 && (
+            {uploadedMedia.length > 0 && (
               <div className="grid gap-2 sm:grid-cols-2">
-                {mediaFiles.map((file, index) => (
+                {uploadedMedia.map((media, index) => (
                   <div
-                    key={`${file.name}-${file.lastModified}`}
-                    className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
+                    key={`${media.url}-${index}`}
+                    className="relative overflow-hidden rounded-xl border border-border bg-muted/30"
                   >
-                    <span className="truncate text-xs font-medium text-foreground">
-                      {file.name}
-                    </span>
+                    <img
+                      src={media.url}
+                      alt={media.name}
+                      className="h-32 w-full object-cover"
+                    />
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`Remove ${file.name}`}
+                      aria-label={`Remove ${media.name}`}
                       onClick={() => removeMediaFile(index)}
                       disabled={loading}
-                      className="size-7"
+                      className="absolute right-1.5 top-1.5 size-7 rounded-full bg-background/80 hover:bg-background"
                     >
                       <X className="size-3.5" aria-hidden="true" />
                     </Button>
@@ -399,8 +587,9 @@ export function CreatePostDialog({
               block
               loading={loading}
               disabled={
-                (!text.trim() && mediaFiles.length === 0) ||
+                (!text.trim() && uploadedMedia.length === 0) ||
                 overLimit ||
+                uploadingMedia ||
                 !selectedCommunityId
               }
               trailingIcon={!loading ? <Send className="size-4" /> : undefined}
