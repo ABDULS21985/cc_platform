@@ -18,10 +18,19 @@ const apiMocks = {
       reactivate: vi.fn(),
     },
   },
+  profile: {
+    get: vi.fn(),
+  },
 };
 
 vi.mock('@/services/api', () => ({
   ApiService: apiMocks,
+}));
+
+// useUserData is API-backed and module-cached — stub it so each test starts
+// from a clean "user is signed in as ada@example.com" state.
+vi.mock('@/hooks/useUserData', () => ({
+  default: () => ({ id: 1, email: 'ada@example.com' }),
 }));
 
 beforeEach(() => {
@@ -32,6 +41,9 @@ beforeEach(() => {
   });
   apiMocks.auth.deactivation.deactivate.mockResolvedValue({
     data: { data: { deactivated_at: new Date().toISOString() } },
+  });
+  apiMocks.profile.get.mockResolvedValue({
+    data: { data: { id: 1, email: 'ada@example.com' } },
   });
   window.localStorage.setItem(
     'user_data',

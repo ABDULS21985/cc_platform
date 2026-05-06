@@ -24,11 +24,10 @@ async function loadCurrentUser(): Promise<CurrentUserData | null> {
   inFlight = ApiService.profile
     .get()
     .then((res) => {
-      cachedUser = (res.data?.data ?? null) as CurrentUserData | null;
+      cachedUser = (res.data?.data ?? null) as unknown as CurrentUserData | null;
       return cachedUser;
     })
     .catch(() => {
-      cachedUser = null;
       return null;
     })
     .finally(() => {
