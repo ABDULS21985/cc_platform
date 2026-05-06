@@ -21,6 +21,7 @@ from modules.community.schemas.post_schema import (
     CreateCommunityPostSchema,
     CreateCommunityPostCommentSchema,
     ToggleCommunityPostReactionSchema,
+    UpdateCommunityPostCommentSchema,
     UpdateCommunityPostSchema,
 )
 from modules.community.services.post_media_service import CommunityPostMediaService
@@ -266,6 +267,37 @@ class CommunityPostCommentsResource(MethodView):
 @post_blp.route('/posts/comments/<int:comment_id>')
 class CommunityPostCommentResource(MethodView):
     """Single post comment operations."""
+
+    @token_required
+    @post_blp.arguments(UpdateCommunityPostCommentSchema)
+    @post_blp.response(200, CommunityPostCommentResponseSchema, description='Post comment updated')
+    @post_blp.alt_response(400, schema=CommunityErrorSchema, description='Invalid request')
+    @post_blp.alt_response(401, schema=CommunityErrorSchema, description='Unauthorized')
+    @post_blp.alt_response(403, schema=CommunityErrorSchema, description='Forbidden')
+    @post_blp.alt_response(404, schema=CommunityErrorSchema, description='Comment not found')
+    def patch(self, data, comment_id, current_user=None):
+        """Edit a comment body. Only the original author may edit."""
+        try:
+            comment_dict, error = post_service.update_comment(
+                comment_id=comment_id,
+                user_id=current_user.id,
+                body=data.get('body'),
+            )
+            if error == 'Comment not found':
+                return format_not_found('Comment')
+            if error == 'Not authorized to update this comment':
+                return format_error(error='forbidden', message=error, status_code=403)
+            if error:
+                return format_error(error='comment_update_failed', message=error, status_code=400)
+
+            return format_data(
+                data=comment_dict,
+                message='Post comment updated successfully',
+                status_code=200,
+            )
+        except Exception as exc:
+            logger.error("Error updating comment %s: %s", comment_id, exc, exc_info=True)
+            return format_internal_error(str(exc))
 
     @token_required
     @post_blp.response(204, description='Post comment deleted')

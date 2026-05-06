@@ -139,6 +139,63 @@ class CommunityPostService:
             db.session.rollback()
             return None, str(exc)
 
+    def update_comment(
+        self,
+        comment_id: int,
+        user_id: int,
+        body: str,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Update a comment's body.
+
+        Authorization: only the comment author can edit their comment. Admins
+        and owners cannot edit other users' comments — they must use moderation
+        actions (soft-delete) instead.
+
+        Returns:
+            ``(comment_dict, None)`` on success, or ``(None, error)`` where the
+            error string drives the resource-layer status mapping
+            (``Comment not found`` → 404, ``Not authorized`` → 403, anything
+            else → 400).
+        """
+        try:
+            comment = self.post_repo.find_comment_by_id(comment_id)
+            if not comment or comment.status != CommunityPostStatus.ACTIVE.value or not comment.post:
+                return None, 'Comment not found'
+
+            post = comment.post
+            if post.status != CommunityPostStatus.ACTIVE.value:
+                return None, 'Comment not found'
+
+            if comment.author_user_id != user_id:
+                return None, 'Not authorized to update this comment'
+
+            normalized = self._normalize_body(body)
+            if not normalized:
+                return None, 'Comment must contain body text'
+
+            comment.body = normalized
+            comment.edited_at = datetime.utcnow()
+            db.session.flush()
+            db.session.commit()
+
+            logger.info(
+                'community.post.comment.updated',
+                extra={
+                    'event': 'community.post.comment.updated',
+                    'comment_id': comment.id,
+                    'post_id': post.id,
+                    'community_id': post.community_id,
+                    'author_user_id': user_id,
+                },
+            )
+            refreshed = self.post_repo.find_comment_by_id(comment.id)
+            return refreshed.to_dict(), None
+
+        except Exception as exc:
+            logger.error("Error updating comment %s: %s", comment_id, exc, exc_info=True)
+            db.session.rollback()
+            return None, str(exc)
+
     def delete_comment(self, comment_id: int, requester_user_id: int) -> Tuple[bool, Optional[str]]:
         """Soft delete a comment as author or community admin/owner."""
         try:

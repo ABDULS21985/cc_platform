@@ -273,7 +273,8 @@ class SubscriptionService:
                 bill_payment_service=bill_payment_service,
                 withdrawal_service=withdrawal_service,
             )
-        except SubscriptionExecutionError:
+        except SubscriptionExecutionError as exc:
+            self._record_execution_failure(item, now=now, reason=str(exc))
             raise
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -281,6 +282,7 @@ class SubscriptionService:
                 extra={'subscription_id': item.id, 'error': str(exc)},
                 exc_info=True,
             )
+            self._record_execution_failure(item, now=now, reason=str(exc))
             raise SubscriptionExecutionError(str(exc), code='wallet_error') from exc
 
         next_charge_at = self._next_charge_at(item.next_charge_at, item.cadence)
@@ -382,6 +384,36 @@ class SubscriptionService:
             f'Unsupported subscription kind: {item.kind}',
             code='unsupported_kind',
         )
+
+    def _record_execution_failure(
+        self,
+        item: Subscription,
+        *,
+        now: datetime,
+        reason: str,
+    ) -> None:
+        """Persist failure metadata and defer the next retry window."""
+        update_kwargs: Dict[str, Any] = {'next_charge_at': now + timedelta(hours=1)}
+        if hasattr(Subscription, 'failure_count'):
+            raw_count = getattr(item, 'failure_count', 0) or 0
+            try:
+                raw_count = int(raw_count)
+            except (TypeError, ValueError):
+                raw_count = 0
+            update_kwargs['failure_count'] = raw_count + 1
+        if hasattr(Subscription, 'last_failure_at'):
+            update_kwargs['last_failure_at'] = now
+        if hasattr(Subscription, 'last_failure_reason'):
+            update_kwargs['last_failure_reason'] = str(reason)[:1000]
+
+        try:
+            self.repo.update(item.id, **update_kwargs)
+        except Exception:  # noqa: BLE001
+            logger.error(
+                'subscription.charge.failure_record_failed',
+                extra={'subscription_id': getattr(item, 'id', None)},
+                exc_info=True,
+            )
 
     def _default_bill_payment_service(self):
         # Imported lazily to avoid a circular import between the

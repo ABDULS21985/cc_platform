@@ -253,8 +253,11 @@ class TestChargeOne:
         with pytest.raises(SubscriptionExecutionError) as exc_info:
             svc.charge_one(item.id, bill_payment_service=bill_svc)
         assert exc_info.value.code == 'bill_payment_failed'
-        # Must NOT mark as charged or roll forward when the wallet refused.
-        svc.repo.update.assert_not_called()
+        # Must record failure metadata and defer retry, not mark as charged.
+        update_kwargs = svc.repo.update.call_args.kwargs
+        assert update_kwargs['failure_count'] == 1
+        assert update_kwargs['last_failure_reason'] == 'Insufficient wallet balance'
+        assert update_kwargs['next_charge_at'] > item.next_charge_at
 
     def test_subscription_kind_raises_when_no_source_bill(self):
         svc = _make_service()
