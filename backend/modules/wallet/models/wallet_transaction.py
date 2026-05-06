@@ -141,6 +141,14 @@ class WalletTransaction(db.Model):
             or meta.get("bank_name")
             or meta.get("destination_bank")
         )
+        # The frontend SDK declares `destination_bank_code` (api.ts:274) but
+        # the column is not stored on the row directly — withdrawals stash it
+        # in the `meta` JSONB under either `destination_bank_code` or
+        # `bank_code`. Mirror the multi-key fallback used for bank name.
+        destination_bank_code = (
+            meta.get("destination_bank_code")
+            or meta.get("bank_code")
+        )
 
         return {
             "id": self.id,
@@ -162,6 +170,7 @@ class WalletTransaction(db.Model):
             "destination_account_number": self.destination_account_number,
             "destination_account_name": self.destination_account_name,
             "destination_bank_name": destination_bank_name,
+            "destination_bank_code": destination_bank_code,
             "status": self.status,
             "community_id": self.community_id,
             "bill_id": self.bill_id,

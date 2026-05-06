@@ -19,6 +19,7 @@ const apiMocks = {
     list: vi.fn(),
     delete: vi.fn(),
     markRead: vi.fn(),
+    markUnread: vi.fn(),
     markAllRead: vi.fn(),
   },
 };
@@ -102,6 +103,9 @@ beforeEach(() => {
     data: { data: { notifications: [], pagination: { total: 0, limit: 100, offset: 0 }, unread_count: 0 } },
   });
   apiMocks.notifications.delete.mockResolvedValue({ data: { data: { deleted: true } } });
+  apiMocks.notifications.markUnread.mockResolvedValue({
+    data: { data: { notification: fakeNotification({ is_read: false }) } },
+  });
   window.localStorage.setItem('user_data', JSON.stringify({ id: 50 }));
 });
 
@@ -207,6 +211,30 @@ describe('/dashboard/inbox', () => {
 
     await waitFor(() => {
       expect(apiMocks.notifications.delete).toHaveBeenCalledWith(77);
+    });
+  });
+
+  it('More options opens backend-backed actions including mark unread', async () => {
+    apiMocks.notifications.list.mockResolvedValue({
+      data: {
+        data: {
+          notifications: [
+            fakeNotification({ id: 88, title: 'Already read', is_read: true }),
+          ],
+        },
+      },
+    });
+
+    const Page = await importPage();
+    render(<Page />);
+    await screen.findByText('Already read');
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /More options/i }));
+    await user.click(await screen.findByText(/Mark unread/i));
+
+    await waitFor(() => {
+      expect(apiMocks.notifications.markUnread).toHaveBeenCalledWith(88);
     });
   });
 

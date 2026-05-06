@@ -20,6 +20,8 @@ const apiMocks = {
     getSummary: vi.fn(),
     getDetails: vi.fn(),
     getTransactions: vi.fn(),
+    getBeneficiaries: vi.fn(),
+    saveBeneficiary: vi.fn(),
     deposit: vi.fn(),
     withdraw: vi.fn(),
   },
@@ -95,6 +97,22 @@ const fakeTx = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const fakeBeneficiary = (overrides: Record<string, unknown> = {}) => ({
+  id: 1,
+  user_id: 1,
+  name: 'Adaeze Mbakwe',
+  account_number: '0011223344',
+  account_name: 'Adaeze Mbakwe',
+  bank_code: '058',
+  bank_name: 'GTBank',
+  nickname: null,
+  is_favorite: false,
+  last_used_at: new Date().toISOString(),
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  ...overrides,
+});
+
 beforeEach(() => {
   apiMocks.wallet.getSummary.mockResolvedValue({
     data: { data: { wallet: { balance: 0, currency: 'NGN' } } },
@@ -104,6 +122,12 @@ beforeEach(() => {
   });
   apiMocks.wallet.getTransactions.mockResolvedValue({
     data: { data: { transactions: [] } },
+  });
+  apiMocks.wallet.getBeneficiaries.mockResolvedValue({
+    data: { data: { beneficiaries: [], pagination: { total: 0, limit: 50, offset: 0, has_more: false } } },
+  });
+  apiMocks.wallet.saveBeneficiary.mockResolvedValue({
+    data: { data: { beneficiary: fakeBeneficiary(), already_saved: false } },
   });
   apiMocks.communities.joined.mockResolvedValue({
     data: { data: { communities: [] } },
@@ -223,90 +247,61 @@ describe('RecentTransactions', () => {
 // Beneficiaries
 // ---------------------------------------------------------------------------
 describe('Beneficiaries', () => {
-  it('derives unique recipients from outgoing transactions, newest first', async () => {
-    apiMocks.wallet.getTransactions.mockResolvedValue({
+  it('lists saved recipients from the beneficiaries API', async () => {
+    apiMocks.wallet.getBeneficiaries.mockResolvedValue({
       data: {
         data: {
-          transactions: [
-            fakeTx({
-              destination_account_name: 'Adaeze Mbakwe',
-              destination_account_number: '0011223344',
-              completed_at: new Date(Date.now() - 1 * 86_400_000).toISOString(),
-            }),
-            fakeTx({
-              destination_account_name: 'Trinity Co-op',
-              destination_account_number: '9999000099',
-              completed_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
-            }),
-            // Duplicate of Adaeze — should be deduped (kept the newest).
-            fakeTx({
-              destination_account_name: 'Adaeze Mbakwe',
-              destination_account_number: '0011223344',
-              completed_at: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+          beneficiaries: [
+            fakeBeneficiary(),
+            fakeBeneficiary({
+              id: 2,
+              name: 'Trinity Co-op',
+              account_number: '9999000099',
+              account_name: 'Trinity Co-op',
+              bank_code: '999',
+              bank_name: 'SafeHaven',
             }),
           ],
+          pagination: { total: 2, limit: 50, offset: 0, has_more: false },
         },
       },
     });
     const { Beneficiaries } = await importComponents();
     render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
     await waitFor(() => {
-      expect(screen.getAllByText('Adaeze Mbakwe').length).toBe(1);
+      expect(apiMocks.wallet.getBeneficiaries).toHaveBeenCalledWith({ limit: 50 });
+      expect(screen.getByText('Adaeze Mbakwe')).toBeInTheDocument();
     });
     expect(screen.getByText('Trinity Co-op')).toBeInTheDocument();
-    // Account-tail rendering: ··3344 / ··0099
     expect(screen.getByText(/3344/)).toBeInTheDocument();
     expect(screen.getByText(/0099/)).toBeInTheDocument();
   });
 
-  it('falls back to seed list when there are no outgoing transactions', async () => {
-    apiMocks.wallet.getTransactions.mockResolvedValue({
-      data: { data: { transactions: [] } },
-    });
-    const { Beneficiaries } = await importComponents();
-    render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
-    // Seed beneficiary "Ada Lovelace" should appear when nothing real is available.
-    await waitFor(() => {
-      expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
-    });
-  });
-
-  it('only counts debits (signed_amount < 0), not credits', async () => {
-    apiMocks.wallet.getTransactions.mockResolvedValue({
+  it('renders a real empty state when there are no saved recipients', async () => {
+    apiMocks.wallet.getBeneficiaries.mockResolvedValue({
       data: {
         data: {
-          transactions: [
-            fakeTx({
-              signed_amount: 50000, // INCOMING — should be ignored
-              destination_account_name: 'Should not appear',
-            }),
-          ],
+          beneficiaries: [],
+          pagination: { total: 0, limit: 50, offset: 0, has_more: false },
         },
       },
     });
     const { Beneficiaries } = await importComponents();
     render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
-    // No real outflow to a recipient → seed list shows.
     await waitFor(() => {
-      expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
+      expect(screen.getByText('No saved recipients')).toBeInTheDocument();
     });
-    expect(screen.queryByText('Should not appear')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
   });
 
   it('opens real flow callbacks for new and saved recipient clicks', async () => {
     const onCreate = vi.fn();
     const onSelect = vi.fn();
-    apiMocks.wallet.getTransactions.mockResolvedValue({
+    apiMocks.wallet.getBeneficiaries.mockResolvedValue({
       data: {
         data: {
-          transactions: [
-            fakeTx({
-              destination_account_name: 'Adaeze Mbakwe',
-              destination_account_number: '0011223344',
-              destination_bank_name: 'GTBank',
-              meta: { bank_code: '058' },
-            }),
-          ],
+          beneficiaries: [fakeBeneficiary()],
+          pagination: { total: 1, limit: 50, offset: 0, has_more: false },
         },
       },
     });

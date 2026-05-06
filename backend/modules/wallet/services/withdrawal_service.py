@@ -6,12 +6,16 @@ transfer execution is not wired for this flow yet, so responses are explicit
 about the pending/provider-unavailable state.
 """
 import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
 from modules.auth_v2.extensions import db
 from modules.wallet.models.wallet import Wallet
 from modules.wallet.models.wallet_transaction import WalletTransaction
+from modules.wallet.providers.base_payment_provider import TransferRequest
+from modules.wallet.providers.payment_providers import PaymentProviderContext
+from modules.wallet.providers.provider_factory import PaymentProviderFactory
 from modules.wallet.services.pin_service import TransactionPinService
 
 logger = logging.getLogger(__name__)
@@ -91,6 +95,22 @@ class WithdrawalService:
         net_amount = amount - fee
         reference = WalletTransaction.generate_reference('WTH')
 
+        # ---------------------------------------------------------------------
+        # RECONCILIATION GAP — see backend/docs/reconciliation.md
+        #
+        # The wallet is debited synchronously below and a transaction with
+        # status='pending' is recorded. There is currently NO downstream
+        # provider call from this code path, so a pending row left in the
+        # table represents user funds held with no settlement attempt. A
+        # future reconciliation worker is required to either (a) finalize the
+        # row by calling the provider transfer endpoint, or (b) roll the
+        # debit back to the wallet on provider failure / timeout.
+        #
+        # The structured warning emitted after the commit (event key
+        # `withdrawal.reconciliation_pending`) is the trigger signal that
+        # worker should consume. Do NOT change debit semantics here without
+        # coordinating with the escrow refactor described in the doc.
+        # ---------------------------------------------------------------------
         wallet.balance = balance_before - amount
         transaction = WalletTransaction(
             wallet_id=wallet.id,
@@ -127,6 +147,36 @@ class WithdrawalService:
             logger.error("Withdrawal ledger transaction failed", exc_info=True)
             raise
 
+        # Reconciliation envelope. Structured-log consumers (future
+        # reconciliation worker, alerting, dashboards) can filter on the
+        # `event` key and operate on the rest of the payload as a complete
+        # snapshot of the pending withdrawal.
+        created_at_iso = (
+            transaction.created_at.isoformat()
+            if getattr(transaction, "created_at", None)
+            else datetime.now(timezone.utc).isoformat()
+        )
+        logger.warning(
+            "withdrawal.reconciliation_pending",
+            extra={
+                "event": "withdrawal.reconciliation_pending",
+                "transaction_id": transaction.id,
+                "reference": transaction.reference,
+                "user_id": user_id,
+                "wallet_id": wallet.id,
+                "amount": str(amount),
+                "fee": str(fee),
+                "destination_bank": bank_name,
+                "destination_bank_code": bank_code,
+                "destination_account_number": account_number,
+                "created_at": created_at_iso,
+                "status": transaction.status,
+                "provider_status": (transaction.meta or {}).get(
+                    "provider_status", "provider_unavailable"
+                ),
+            },
+        )
+
         self._notify_and_audit(
             user_id=user_id,
             amount=amount,
@@ -161,6 +211,115 @@ class WithdrawalService:
                 'Withdrawal request recorded and pending provider processing. '
                 'Provider transfer is currently unavailable.'
             ),
+        }
+
+    def initiate_scheduled_withdrawal(
+        self,
+        *,
+        user_id: int,
+        amount: Decimal,
+        bank_code: str,
+        account_number: str,
+        account_name: Optional[str] = None,
+        note: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a previously authorized standing instruction from a user wallet."""
+        bank_code = str(bank_code).strip()[:20]
+        account_number = str(account_number).strip()[:20]
+        account_name = (account_name or 'N/A').strip()[:255]
+        note = (note or '').strip()[:255]
+        stable_key = (idempotency_key or '').strip()
+
+        wallet = Wallet.query.filter_by(user_id=user_id).with_for_update().first()
+        if not wallet:
+            raise WalletWithdrawalError(
+                "wallet_not_found",
+                "Wallet not found. Please complete identity verification first.",
+                status_code=404,
+            )
+        if wallet.status != 'active':
+            raise WalletWithdrawalError("wallet_inactive", f"Wallet is {wallet.status}")
+        if not wallet.account_number:
+            raise WalletWithdrawalError("wallet_account_missing", "Wallet source account is not ready")
+
+        reference = f"SI-{user_id}-{stable_key[:40]}" if stable_key else WalletTransaction.generate_reference('SI')
+        existing = WalletTransaction.query.filter_by(reference=reference).first() if stable_key else None
+        if existing:
+            return {
+                'transaction_id': existing.id,
+                'reference': existing.reference,
+                'amount': str(existing.amount),
+                'status': existing.status,
+                'provider_reference': (existing.meta or {}).get('provider_reference'),
+                'duplicate': True,
+            }
+
+        balance_before = Decimal(wallet.balance)
+        if balance_before < amount:
+            raise WalletWithdrawalError(
+                "insufficient_balance",
+                f"Insufficient balance. Available: ₦{balance_before:,.2f}",
+                data={"available_balance": str(balance_before)},
+            )
+
+        provider = PaymentProviderFactory.get_provider(PaymentProviderContext.PERSONAL)
+        transaction = WalletTransaction(
+            wallet_id=wallet.id,
+            type='withdrawal',
+            transaction_type='standing_instruction',
+            reference=reference,
+            amount=amount,
+            signed_amount=WalletTransaction.compute_signed_amount(amount, 'withdrawal'),
+            fee=Decimal('0.00'),
+            net_amount=amount,
+            balance_before=balance_before,
+            balance_after=balance_before,
+            description=f"Standing instruction to {account_number} ({bank_code})",
+            status='pending',
+            destination_account_number=account_number,
+            destination_account_name=account_name,
+            meta={
+                'user_id': user_id,
+                'bank_code': bank_code,
+                'note': note or None,
+                'idempotency_key': stable_key or None,
+                'provider': provider.name,
+            },
+        )
+        db.session.add(transaction)
+        db.session.flush()
+
+        response = provider.transfer_to_account(
+            TransferRequest(
+                source_account_number=wallet.account_number,
+                recipient_account=account_number,
+                recipient_bank_code=bank_code,
+                recipient_name=account_name,
+                amount=amount,
+                narration=note or f"Standing instruction {reference}",
+                reference=reference,
+            )
+        )
+
+        wallet.balance = balance_before - amount
+        transaction.balance_after = wallet.balance
+        transaction.status = response.status or 'pending'
+        transaction.meta = {
+            **(transaction.meta or {}),
+            'provider_reference': response.provider_reference,
+            'provider_message': response.message,
+        }
+
+        db.session.commit()
+        db.session.refresh(transaction)
+        return {
+            'transaction_id': transaction.id,
+            'reference': transaction.reference,
+            'amount': str(amount),
+            'status': transaction.status,
+            'provider_reference': response.provider_reference,
+            'duplicate': False,
         }
 
     def calculate_fee(self, amount: Decimal) -> Decimal:

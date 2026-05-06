@@ -8,6 +8,7 @@ import {
   Calendar,
   Check,
   MoreHorizontal,
+  ExternalLink,
   Receipt,
   ShieldCheck,
   Sparkles,
@@ -18,6 +19,13 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import type { NotificationCategory, NotificationItem as Notif } from './types';
@@ -84,6 +92,7 @@ interface NotificationRowProps {
   selected: boolean;
   onSelect: (id: string, selected: boolean) => void;
   onMarkRead: (id: string) => void;
+  onMarkUnread: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
@@ -92,6 +101,7 @@ export function NotificationRow({
   selected,
   onSelect,
   onMarkRead,
+  onMarkUnread,
   onDelete,
 }: NotificationRowProps) {
   const cfg = CATEGORY_CONFIG[item.category];
@@ -277,14 +287,52 @@ export function NotificationRow({
           >
             <Trash2 className="size-3.5" aria-hidden="true" />
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label="More options"
-          >
-            <MoreHorizontal className="size-3.5" aria-hidden="true" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="More options"
+              >
+                <MoreHorizontal className="size-3.5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              {item.actionHref && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href={item.actionHref}
+                    onClick={() => {
+                      if (!item.isRead) onMarkRead(item.id);
+                    }}
+                  >
+                    <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
+                    {item.actionLabel ?? 'Open'}
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {item.isRead ? (
+                <DropdownMenuItem onClick={() => onMarkUnread(item.id)}>
+                  <Check className="mr-2 size-3.5" aria-hidden="true" />
+                  Mark unread
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => onMarkRead(item.id)}>
+                  <Check className="mr-2 size-3.5" aria-hidden="true" />
+                  Mark read
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => onDelete(item.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </motion.li>

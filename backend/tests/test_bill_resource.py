@@ -57,7 +57,7 @@ def test_get_bill_includes_progress_and_counts(monkeypatch, app):
     monkeypatch.setattr(
         resource_module.bill_service,
         "serialize_bill_data",
-        lambda current_bill: {
+        lambda current_bill, **kwargs: {
             "id": 9,
             "title": "April levy",
             "paid_member_count": 4,
@@ -74,3 +74,18 @@ def test_get_bill_includes_progress_and_counts(monkeypatch, app):
     assert payload["data"]["paid_member_count"] == 4
     assert payload["data"]["expected_member_count"] == 8
     assert payload["data"]["progress_percentage"] == 50
+
+
+def test_bill_progress_structured_not_found(monkeypatch, app):
+    monkeypatch.setattr(
+        resource_module.bill_service,
+        "get_bill_progress",
+        lambda bill_id: {"success": False, "error": "not_found", "message": "Bill not found"},
+    )
+
+    with app.test_request_context("/api/v2/community/7/bills/9/progress"):
+        response = resource_module.BillProgressResource().get(7, 9)
+        payload = response.get_json()
+
+    assert response.status_code == 404
+    assert payload["error"] == "not_found"

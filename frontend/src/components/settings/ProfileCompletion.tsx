@@ -13,7 +13,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { motion } from '@/components/ui/motion';
-import useUserData from '@/hooks/useUserData';
+import { ApiService, type ProfileData } from '@/services/api';
 import { cn } from '@/lib/utils';
 
 interface ProfileItem {
@@ -29,19 +29,15 @@ interface ProfileCompletionProps {
   onJumpTo?: (tab: string) => void;
 }
 
-interface UserShape {
+type UserShape = Partial<ProfileData> & {
   email_verified?: boolean;
   phone_number?: string | null;
   bvn_verified?: boolean;
   nin_verified?: boolean;
   profile_photo?: string | null;
+  profile_image?: string | null;
   bio?: string | null;
-}
-
-interface VerificationShape {
-  bvn_verified?: boolean;
-  nin_verified?: boolean;
-}
+};
 
 /**
  * Compact progress card that surfaces what's left for the user to complete
@@ -49,17 +45,20 @@ interface VerificationShape {
  * appropriate settings tab.
  */
 export function ProfileCompletion({ onJumpTo }: ProfileCompletionProps) {
-  const user = useUserData() as UserShape | null;
-  const [verification, setVerification] = React.useState<VerificationShape>({});
+  const [user, setUser] = React.useState<UserShape | null>(null);
 
   React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const raw = window.localStorage.getItem('verification_data');
-      if (raw) setVerification(JSON.parse(raw));
-    } catch {
-      /* ignore */
-    }
+    let cancelled = false;
+    ApiService.profile.get()
+      .then((res) => {
+        if (!cancelled) setUser(res.data?.data ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const items: ProfileItem[] = [
@@ -81,21 +80,21 @@ export function ProfileCompletion({ onJumpTo }: ProfileCompletionProps) {
       id: 'avatar',
       label: 'Profile photo',
       icon: ImageIcon,
-      done: !!user?.profile_photo,
+      done: !!(user?.profile_photo || user?.profile_image),
       tab: 'account-info',
     },
     {
       id: 'bvn',
       label: 'BVN verified',
       icon: Fingerprint,
-      done: !!verification.bvn_verified,
+      done: !!user?.bvn_verified,
       tab: 'verification',
     },
     {
       id: 'nin',
       label: 'NIN verified',
       icon: ShieldCheck,
-      done: !!verification.nin_verified,
+      done: !!user?.nin_verified,
       tab: 'verification',
     },
   ];

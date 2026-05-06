@@ -79,6 +79,9 @@ async function importPage() {
 }
 
 beforeEach(() => {
+  apiMocks.profile.get.mockResolvedValue({
+    data: { data: STABLE_USER },
+  });
   apiMocks.verification.getStatus.mockResolvedValue({
     data: { data: { id: 0, user_id: 50, verification_type: 'bvn', status: 'pending', verified: false, verified_at: null, error_message: null } },
   });
@@ -122,6 +125,9 @@ describe('/dashboard/settings', { timeout: 15000 }, () => {
         screen.getAllByRole('heading', { name: /Personal information/i })
           .length,
       ).toBeGreaterThan(0);
+    });
+    await waitFor(() => {
+      expect(apiMocks.profile.get).toHaveBeenCalled();
     });
   });
 

@@ -28,16 +28,7 @@ export function DeactivateAccountContent() {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const userEmail = React.useMemo<string>(() => {
-    try {
-      const raw = window.localStorage.getItem('user_data');
-      if (!raw) return '';
-      return (JSON.parse(raw) as { email?: string }).email || '';
-    } catch {
-      return '';
-    }
-  }, []);
+  const [userEmail, setUserEmail] = useState('');
 
   const runPreflight = async () => {
     setLoading(true);
@@ -55,7 +46,18 @@ export function DeactivateAccountContent() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    ApiService.profile.get()
+      .then((res) => {
+        if (!cancelled) setUserEmail(res.data?.data?.email ?? '');
+      })
+      .catch(() => {
+        if (!cancelled) setUserEmail('');
+      });
     runPreflight();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const emailMatches = confirmEmail.trim().toLowerCase() === userEmail.toLowerCase();

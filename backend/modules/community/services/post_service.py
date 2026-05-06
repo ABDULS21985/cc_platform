@@ -64,7 +64,7 @@ class CommunityPostService:
 
             db.session.commit()
             logger.info("Created community post %s by user %s", post.id, author_user_id)
-            self._handle_mentions(post)
+            self._handle_mentions(post, mentioned_user_ids=mentioned_user_ids)
             return self.post_repo.find_by_id(post.id), None
 
         except Exception as exc:
@@ -210,7 +210,8 @@ class CommunityPostService:
 
             body = self._normalize_body(data['body']) if 'body' in data else post.body
             media_urls = self._normalize_media_urls(data['media_urls']) if 'media_urls' in data else (post.media_urls or [])
-            mentioned_user_ids = self._normalize_mentioned_user_ids(data['mentioned_user_ids']) if 'mentioned_user_ids' in data else [mention.mentioned_user_id for mention in post.mentions]
+            previous_mentioned_user_ids = {mention.mentioned_user_id for mention in post.mentions}
+            mentioned_user_ids = self._normalize_mentioned_user_ids(data['mentioned_user_ids']) if 'mentioned_user_ids' in data else list(previous_mentioned_user_ids)
             self._validate_post_content(body, media_urls)
             self._validate_mentions(post.community_id, mentioned_user_ids)
 
@@ -229,7 +230,11 @@ class CommunityPostService:
 
             db.session.commit()
             logger.info("Updated community post %s by user %s", post.id, requester_user_id)
-            self._handle_mentions(post)
+            new_mentions = [
+                user_id for user_id in mentioned_user_ids
+                if user_id not in previous_mentioned_user_ids
+            ]
+            self._handle_mentions(post, mentioned_user_ids=new_mentions)
             return self.post_repo.find_by_id(post.id), None
 
         except Exception as exc:
@@ -299,8 +304,28 @@ class CommunityPostService:
             if not self.member_repo.is_member(community_id, user_id):
                 raise ValueError(f'User {user_id} is not an active member of this community')
 
-    def _handle_mentions(self, post: CommunityPost) -> None:
-        """Internal seam for future mention notifications."""
-        mentioned_user_ids = [mention.mentioned_user_id for mention in post.mentions]
-        if mentioned_user_ids:
-            logger.info("Post %s stored explicit mentions for users %s", post.id, mentioned_user_ids)
+    def _handle_mentions(self, post: CommunityPost, mentioned_user_ids: List[int]) -> None:
+        """Create inbox/socket notifications for newly persisted post mentions."""
+        recipients = [user_id for user_id in mentioned_user_ids if user_id != post.author_user_id]
+        if not recipients:
+            return
+
+        try:
+            from modules.notifications.services.notification_service import NotificationService
+
+            author_name = post.author.full_name if post.author else 'A member'
+            community_name = post.community.name if post.community else 'your community'
+            service = NotificationService()
+            for user_id in recipients:
+                service.create_for_user(
+                    user_id=user_id,
+                    title=f"{author_name} mentioned you",
+                    body=f"{author_name} mentioned you in {community_name}.",
+                    category='communities',
+                    source=community_name,
+                    action_href=f"/dashboard/community/{post.community_id}/posts/{post.id}",
+                    community_id=post.community_id,
+                )
+            logger.info("Post %s notified mentioned users %s", post.id, recipients)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("post mention notification failed for post %s: %s", post.id, exc)

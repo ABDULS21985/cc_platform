@@ -8,10 +8,12 @@
 import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 
 const apiMocks = {
   events: {
     list: vi.fn(),
+    attend: vi.fn(),
   },
 };
 
@@ -25,6 +27,11 @@ vi.mock('next/link', () => ({
       {children}
     </a>
   ),
+}));
+
+const pushMock = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: pushMock }),
 }));
 
 const fakeEvent = (overrides: Record<string, unknown> = {}) => ({
@@ -58,10 +65,15 @@ beforeEach(() => {
   apiMocks.events.list.mockImplementation((params: { scope?: string } = {}) =>
     Promise.resolve({ data: { data: { events: [] } } }),
   );
+  apiMocks.events.attend.mockResolvedValue({
+    data: { data: { event: fakeEvent({ is_attending: true }) } },
+  });
 });
 
 afterEach(() => {
   apiMocks.events.list.mockReset();
+  apiMocks.events.attend.mockReset();
+  pushMock.mockReset();
 });
 
 async function importComp() {
@@ -131,5 +143,30 @@ describe('EventsRightRail', () => {
       expect(screen.getByText(/Nothing live right now/i)).toBeInTheDocument();
     });
     expect(screen.getByText(/Nothing to suggest right now/i)).toBeInTheDocument();
+  });
+
+  it('Join calls the attendance API and then opens the event detail route', async () => {
+    apiMocks.events.list.mockImplementation((params: { scope?: string } = {}) => {
+      if (params.scope === 'live') {
+        return Promise.resolve({
+          data: { data: { events: [fakeEvent({ id: 8, title: 'Live class' })] } },
+        });
+      }
+      return Promise.resolve({ data: { data: { events: [] } } });
+    });
+    apiMocks.events.attend.mockResolvedValue({
+      data: { data: { event: fakeEvent({ id: 8, title: 'Live class', is_attending: true }) } },
+    });
+
+    const Comp = await importComp();
+    render(<Comp />);
+    await screen.findByText('Live class');
+
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Join$/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.events.attend).toHaveBeenCalledWith(8);
+      expect(pushMock).toHaveBeenCalledWith('/dashboard/events/8');
+    });
   });
 });

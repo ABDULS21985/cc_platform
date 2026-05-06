@@ -38,7 +38,6 @@ export default function WalletBalanceCard({
           setBalance(response.data.data.wallet.balance);
         }
       } catch (error) {
-        console.error('Failed to fetch wallet', error);
         toastAxiosError(error, 'Failed to load wallet balance.');
       } finally {
         setLoading(false);

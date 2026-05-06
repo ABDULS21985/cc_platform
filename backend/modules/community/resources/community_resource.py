@@ -282,9 +282,11 @@ class CommunityStatsResource(MethodView):
         """
         try:
             stats = community_service.get_community_stats(community_id)
-            if not stats:
+            if isinstance(stats, tuple):
+                return stats
+            if not stats or stats.get('error') == 'not_found':
                 return format_not_found('Community')
-            
+
             return format_data(
                 data=stats,
                 message='Stats retrieved successfully',

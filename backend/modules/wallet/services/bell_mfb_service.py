@@ -52,6 +52,34 @@ class BellMFBService:
         self.token_expiry = None
         
         logger.info(f"BellMFBService initialized with base_url: {self.base_url}")
+
+    def _is_sandbox(self) -> bool:
+        """
+        Detect whether this service is targeting Bell MFB sandbox.
+
+        Sandbox detection prefers the base URL (matches the deployed
+        environment we are talking to), and falls back to FLASK_ENV.
+        """
+        try:
+            from config import Config  # local import to avoid circular imports
+            base_url = getattr(Config, "BELL_MFB_BASE_URL", None) or self.base_url or ""
+            flask_env = getattr(Config, "FLASK_ENV", None) or os.getenv("FLASK_ENV", "")
+        except Exception:
+            base_url = self.base_url or ""
+            flask_env = os.getenv("FLASK_ENV", "")
+
+        base_url_l = (base_url or "").lower()
+        if "sandbox" in base_url_l or "staging" in base_url_l or "test" in base_url_l:
+            return True
+        if (flask_env or "").lower() in ("development", "dev", "testing", "test", "staging"):
+            return True
+        return False
+
+    def _timeout_message(self) -> str:
+        """Environment-aware timeout copy used in surfaced exceptions."""
+        if self._is_sandbox():
+            return "Bell MFB sandbox returned a timeout — typical for sandbox load."
+        return "Bell MFB API timed out. Please retry shortly."
     
     def generate_token(self, validity_minutes: int = 60) -> str:
         """
@@ -169,7 +197,7 @@ class BellMFBService:
                 
         except requests.Timeout:
             logger.error("Bell MFB client creation timed out (30s)")
-            raise Exception("Client creation timed out. This is expected for Bell MFB sandbox.")
+            raise Exception(self._timeout_message())
         except requests.RequestException as e:
             logger.error(f"Bell MFB API error during client creation: {str(e)}")
             raise

@@ -113,6 +113,12 @@ class NotificationService:
             return {'error': 'Notification not found', 'code': 'NOT_FOUND'}, 404
         return {'notification': notif.to_dict()}, 200
 
+    def mark_unread(self, notification_id: int, user_id: int) -> Tuple[Dict[str, Any], int]:
+        notif = self.repo.mark_unread(notification_id, user_id)
+        if not notif:
+            return {'error': 'Notification not found', 'code': 'NOT_FOUND'}, 404
+        return {'notification': notif.to_dict()}, 200
+
     def mark_all_read(self, user_id: int) -> Tuple[Dict[str, Any], int]:
         n = self.repo.mark_all_read(user_id)
         return {'updated': n}, 200

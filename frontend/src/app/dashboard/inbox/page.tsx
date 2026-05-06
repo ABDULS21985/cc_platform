@@ -454,6 +454,17 @@ export default function InboxPage() {
       }
     }
   };
+  const markUnread = (ids: string[]) => {
+    setItems((prev) =>
+      prev.map((it) => (ids.includes(it.id) ? { ...it, isRead: false } : it))
+    );
+    if (usingMock) return;
+    for (const id of ids) {
+      if (isServerId(id)) {
+        ApiService.notifications.markUnread(serverIdNum(id)).catch(() => {});
+      }
+    }
+  };
   const removeMany = (ids: string[]) => {
     setItems((prev) => prev.filter((it) => !ids.includes(it.id)));
     if (usingMock) return;
@@ -709,6 +720,7 @@ export default function InboxPage() {
                               selected={selected.has(it.id)}
                               onSelect={toggleSelect}
                               onMarkRead={(id) => markRead([id])}
+                              onMarkUnread={(id) => markUnread([id])}
                               onDelete={(id) => {
                                 removeMany([id]);
                                 toast.success('Notification deleted');

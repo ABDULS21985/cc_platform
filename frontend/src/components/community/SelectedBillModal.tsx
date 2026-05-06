@@ -1,6 +1,6 @@
 "use client";
 
-import { X, ChevronDown, Loader2 } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ApiService, BillData, PayBillPayload } from "@/services/api";
 import useCurrency from "@/hooks/useCurrency";
@@ -24,18 +24,16 @@ export function SelectedBillModal({
 }: SelectedBillProps) {
   const [isPaying, setIsPaying] = useState(false);
   const { formatCurrency } = useCurrency();
-  const progressPercentage = 50;
-  // const progressPercentage =
-  //   (parseInt(progressAmount.replace(/[₦,]/g, '')) /
-  //     parseInt(progressTotal.replace(/[₦,]/g, ''))) *
-  //   100;
-
-  const members = [
-    { name: "Alice johnson", status: "paid" },
-    { name: "Alice johnson", status: "pending" },
-    { name: "Alice johnson", status: "pending" },
-    { name: "Alice johnson", status: "pending" },
-  ];
+  const progressPercentage =
+    typeof bill.progress_percentage === "number"
+      ? bill.progress_percentage
+      : bill.amount > 0
+        ? Math.min(100, (bill.collected_amount / bill.amount) * 100)
+        : 0;
+  const members = bill.member_payment_statuses ?? [];
+  const transactions = bill.recent_transactions ?? [];
+  const toAmount = (value: string | number) =>
+    typeof value === "number" ? value : Number(value.replace(/[^\d.-]/g, ""));
 
   const payBill = async () => {
     setIsPaying(true);
@@ -102,27 +100,28 @@ export function SelectedBillModal({
                 </div>
               </div>
 
-              {/* <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
                 <span className="text-sm text-[#000000]">
-                  <span className="font-[600]">{progressAmount}</span> of{' '}
-                  <span className="text-[#a3a3a3]">{progressTotal}</span>
+                  <span className="font-[600]">{formatCurrency(bill.collected_amount)}</span> of{" "}
+                  <span className="text-[#a3a3a3]">{formatCurrency(bill.amount)}</span>
                 </span>
                 <span className="text-sm text-[#525252]">
-                  {paidCount}/{totalCount} paid
+                  {bill.paid_member_count ?? 0}/{bill.expected_member_count ?? 0} paid
                 </span>
-              </div> */}
+              </div>
             </div>
 
             <div>
               <h5 className="font-semibold text-[#000000] mb-3">Members :</h5>
-              <div className="space-y-3">
-                {members.map((member, index) => (
+              {members.length > 0 ? (
+                <div className="space-y-3">
+                  {members.map((member) => (
                   <div
-                    key={index}
+                    key={member.member_id}
                     className="flex items-center bg-[#f5f5f5]  p-2 rounded-lg justify-between"
                   >
                     <span className="text-sm text-[#000000]">
-                      {member.name}
+                      {member.user?.full_name || member.user?.firstname || `Member ${member.user_id}`}
                     </span>
                     <span
                       className={`text-sm py-1 px-2 rounded-full ${
@@ -134,15 +133,43 @@ export function SelectedBillModal({
                       • {member.status === "paid" ? "Paid" : "Pending"}
                     </span>
                   </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[#525252] bg-[#f5f5f5] p-3 rounded-lg">
+                  No member payment records yet
+                </p>
+              )}
+            </div>
 
-              {/* <div className="mt-4 text-center">
-                <button className="text-sm text-[#000000] flex items-center justify-center gap-1 mx-auto hover:underline font-[500]">
-                  See more
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </div> */}
+            <div>
+              <h5 className="font-semibold text-[#000000] mb-3">Payment history :</h5>
+              {transactions.length > 0 ? (
+                <div className="space-y-3">
+                  {transactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center bg-[#f5f5f5] p-2 rounded-lg justify-between"
+                    >
+                      <div>
+                        <p className="text-sm text-[#000000]">
+                          {transaction.payer_name || transaction.payer?.full_name || "Member payment"}
+                        </p>
+                        <p className="text-xs text-[#525252]">
+                          {new Date(transaction.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-[#000000]">
+                        {formatCurrency(toAmount(transaction.amount))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[#525252] bg-[#f5f5f5] p-3 rounded-lg">
+                  No payments recorded yet
+                </p>
+              )}
             </div>
           </div>
         </div>

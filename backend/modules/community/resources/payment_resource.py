@@ -25,6 +25,7 @@ from modules.core.response_formatter import (
     format_data,
     format_error,
     format_internal_error,
+    format_not_found,
     format_unauthorized,
 )
 
@@ -112,7 +113,7 @@ class CommunityBalanceResource(MethodView):
                 return format_unauthorized('Only admins/owners can view balance')
             
             balance_info = wallet_service.get_community_balance(community_id)
-            if not balance_info:
+            if not balance_info or balance_info.get('error') == 'not_found':
                 return format_error(
                     error='not_found',
                     message='Community wallet not found',

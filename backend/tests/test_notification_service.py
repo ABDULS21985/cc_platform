@@ -137,6 +137,19 @@ def test_unread_by_category_returns_all_keys():
     assert result['total'] == 4
 
 
+def test_mark_unread_delegates_to_repo():
+    svc = NotificationService()
+    svc.repo = MagicMock()
+    notif = MagicMock(to_dict=lambda: {'id': 10, 'is_read': False})
+    svc.repo.mark_unread.return_value = notif
+
+    result, status = svc.mark_unread(notification_id=10, user_id=1)
+
+    assert status == 200
+    assert result == {'notification': {'id': 10, 'is_read': False}}
+    svc.repo.mark_unread.assert_called_once_with(10, 1)
+
+
 def test_unread_for_community_delegates_to_repo():
     svc = NotificationService()
     svc.repo = MagicMock()

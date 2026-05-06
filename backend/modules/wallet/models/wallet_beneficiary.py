@@ -3,7 +3,6 @@ Wallet beneficiary model.
 Stores user-saved bank recipients for wallet transfers.
 """
 from datetime import datetime
-from typing import Optional
 
 from modules.auth_v2.extensions import db
 

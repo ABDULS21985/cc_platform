@@ -15,14 +15,13 @@ import {
   Save,
   User,
 } from 'lucide-react';
-import useUserData from '@/hooks/useUserData';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { motion, AnimatePresence } from '@/components/ui/motion';
-import { ApiService } from '@/services/api';
+import { ApiService, type ProfileData } from '@/services/api';
 import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import { cn } from '@/lib/utils';
@@ -41,7 +40,7 @@ const EMPTY_FORM: FormData = {
   bio: '',
 };
 
-interface UserShape {
+type UserShape = Partial<ProfileData> & {
   email?: string;
   full_name?: string;
   firstname?: string;
@@ -52,10 +51,10 @@ interface UserShape {
   profile_photo?: string | null;
   created_at?: string;
   email_verified?: boolean;
-}
+};
 
 export function AccountInformationForm() {
-  const userData = useUserData() as UserShape | null;
+  const [userData, setUserData] = useState<UserShape | null>(null);
   const [loading, setLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -63,6 +62,21 @@ export function AccountInformationForm() {
 
   const initialRef = useRef<FormData>(EMPTY_FORM);
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ApiService.profile.get();
+        if (!cancelled) setUserData(res.data?.data ?? null);
+      } catch (err) {
+        if (!cancelled) toastAxiosError(err, 'Failed to load profile');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (userData) {
@@ -180,7 +194,7 @@ export function AccountInformationForm() {
           <div className="relative shrink-0">
             <Avatar className="size-24 rounded-3xl border-4 border-card shadow-xl ring-1 ring-border">
               <AvatarImage
-                src={userData?.profile_photo || undefined}
+                src={userData?.profile_photo || userData?.profile_image || undefined}
                 className="object-cover"
                 alt=""
               />

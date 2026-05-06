@@ -53,6 +53,10 @@ class Subscription(db.Model):
     end_at = db.Column(db.DateTime, nullable=True)
     next_charge_at = db.Column(db.DateTime, nullable=True, index=True)
     last_charged_at = db.Column(db.DateTime, nullable=True)
+    failure_count = db.Column(db.Integer, nullable=False, default=0)
+    last_failure_at = db.Column(db.DateTime, nullable=True)
+    last_failure_reason = db.Column(db.Text, nullable=True)
+    last_execution_reference = db.Column(db.String(120), nullable=True)
 
     status = db.Column(db.String(16), nullable=False, default=SubscriptionStatus.ACTIVE, index=True)
 
@@ -92,6 +96,10 @@ class Subscription(db.Model):
             'end_at': self.end_at.isoformat() if self.end_at else None,
             'next_charge_at': self.next_charge_at.isoformat() if self.next_charge_at else None,
             'last_charged_at': self.last_charged_at.isoformat() if self.last_charged_at else None,
+            'failure_count': self.failure_count or 0,
+            'last_failure_at': self.last_failure_at.isoformat() if self.last_failure_at else None,
+            'last_failure_reason': self.last_failure_reason,
+            'last_execution_reference': self.last_execution_reference,
             'status': self.status,
             'counterparty_type': self.counterparty_type,
             'counterparty_id': self.counterparty_id,

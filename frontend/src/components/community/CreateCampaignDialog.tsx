@@ -4,37 +4,72 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Calendar, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
+import type { CreateBillPayload } from '@/services/api';
 
 interface CreateCampaignDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onCreate: (payload: CreateBillPayload) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export function CreateCampaignDialog({
   isOpen,
   onClose,
+  onCreate,
+  isSubmitting = false,
 }: CreateCampaignDialogProps) {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState('');
-  const [splitEqually, setSplitEqually] = useState(true);
+  const [minAmount, setMinAmount] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleCreate = () => {
-    onClose();
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+    if (!title.trim()) nextErrors.title = 'Title is required';
+    if (!amount.trim() || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+      nextErrors.amount = 'Valid target amount is required';
+    }
+    if (minAmount.trim() && (Number.isNaN(Number(minAmount)) || Number(minAmount) < 0)) {
+      nextErrors.minAmount = 'Minimum amount must be 0 or more';
+    }
+    if (!endDate) nextErrors.endDate = 'End date is required';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const reset = () => {
+    setTitle('');
+    setAmount('');
+    setEndDate('');
+    setDescription('');
+    setMinAmount('');
+    setErrors({});
+  };
+
+  const handleCreate = async () => {
+    if (!validate()) return;
+
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim() || null,
+        amount: Number(amount),
+        type: 'free_will',
+        min_amount: minAmount.trim() ? Number(minAmount) : 0,
+        due_date: new Date(`${endDate}T23:59:59`).toISOString(),
+      });
+      reset();
+    } catch {
+      // Error toast is handled by the parent API flow.
+    }
   };
 
   const handleCancel = () => {
+    reset();
     onClose();
   };
 
@@ -57,8 +92,10 @@ export function CreateCampaignDialog({
               placeholder="Enter your campaign title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-full"
+              className={`w-full rounded-full ${errors.title ? 'border-red-500' : ''}`}
+              disabled={isSubmitting}
             />
+            {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -67,35 +104,26 @@ export function CreateCampaignDialog({
                 Amount
               </label>
               <Input
-                placeholder="Enter event location"
+                placeholder="Enter target amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-full"
+                className={`w-full rounded-full ${errors.amount ? 'border-red-500' : ''}`}
+                disabled={isSubmitting}
               />
+              {errors.amount && <p className="text-xs text-red-500 mt-1">{errors.amount}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-[#000000] mb-2">
                 End date
               </label>
-              <Select value={endDate} onValueChange={setEndDate}>
-                <SelectTrigger className="w-full h-9 rounded-full border border-gray-200 focus:border-[#4ab5ba] focus:ring-1 focus:ring-[#4ab5ba]">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-md">
-                  <SelectItem
-                    value="2024-12-31"
-                    className="text-sm cursor-pointer hover:bg-gray-50"
-                  >
-                    December 31, 2024
-                  </SelectItem>
-                  <SelectItem
-                    value="2025-01-15"
-                    className="text-sm cursor-pointer hover:bg-gray-50"
-                  >
-                    January 15, 2025
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className={`w-full rounded-full ${errors.endDate ? 'border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.endDate && <p className="text-xs text-red-500 mt-1">{errors.endDate}</p>}
             </div>
           </div>
 
@@ -108,44 +136,46 @@ export function CreateCampaignDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full rounded-full"
+              disabled={isSubmitting}
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-[#000000] mb-2">
-              Select members
+              Minimum contribution
             </label>
             <Input
-              placeholder="Enter members names"
-              value={selectedMembers}
-              onChange={(e) => setSelectedMembers(e.target.value)}
-              className="w-full rounded-full"
+              placeholder="Optional minimum amount"
+              value={minAmount}
+              onChange={(e) => setMinAmount(e.target.value)}
+              className={`w-full rounded-full ${errors.minAmount ? 'border-red-500' : ''}`}
+              disabled={isSubmitting}
             />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="block text-sm font-medium text-[#000000] mb-1">
-                Split equally
-              </label>
-              <p className="text-xs text-[#525252]">Share among your team</p>
-            </div>
-            <Switch checked={splitEqually} onCheckedChange={setSplitEqually} />
+            {errors.minAmount && <p className="text-xs text-red-500 mt-1">{errors.minAmount}</p>}
           </div>
 
           <div className="flex gap-3 pt-4">
             <Button
               variant="ghost"
               onClick={handleCancel}
+              disabled={isSubmitting}
               className="flex-1 h-12 rounded-2xl text-gray-500 font-bold hover:bg-gray-50 transition-all"
             >
               Cancel
             </Button>
             <Button
               onClick={handleCreate}
+              disabled={isSubmitting}
               className="flex-1 h-12 rounded-2xl bg-[#0E9DA5] hover:bg-[#0a7a80] text-white font-bold shadow-glow hover:shadow-lg transition-all"
             >
-              Create Campaign
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating
+                </span>
+              ) : (
+                'Create Campaign'
+              )}
             </Button>
           </div>
         </div>

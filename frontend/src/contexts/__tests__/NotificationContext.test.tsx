@@ -71,6 +71,7 @@ function renderWithProvider() {
 const fakeNotif = (overrides: Partial<NotificationApi> = {}): NotificationApi => ({
   id: 99,
   user_id: 1,
+  community_id: null,
   category: 'bills',
   title: 'New bill',
   body: 'Test body',

@@ -1,60 +1,81 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
+import type { CreateBillPayload } from '@/services/api';
 
 interface CreateSplitPaymentDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onCreate: (payload: CreateBillPayload) => Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export function CreateSplitPaymentDialog({
   isOpen,
   onClose,
+  onCreate,
+  isSubmitting = false,
 }: CreateSplitPaymentDialogProps) {
   const [eventTitle, setEventTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
-  const [searchMembers, setSearchMembers] = useState('');
-  const [splitEqually, setSplitEqually] = useState(false);
-  const [memberAmounts, setMemberAmounts] = useState({
-    'Abdulrahman ado': '',
-    'Gimba Umar': '',
-  });
+  const [splitEqually, setSplitEqually] = useState(true);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleCreate = () => {
-    onClose();
+  const validate = () => {
+    const nextErrors: Record<string, string> = {};
+    if (!eventTitle.trim()) nextErrors.eventTitle = 'Title is required';
+    if (!amount.trim() || Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+      nextErrors.amount = 'Valid amount is required';
+    }
+    if (!endDate) nextErrors.endDate = 'End date is required';
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const reset = () => {
+    setEventTitle('');
+    setAmount('');
+    setEndDate('');
+    setDescription('');
+    setSplitEqually(true);
+    setErrors({});
+  };
+
+  const handleCreate = async () => {
+    if (!validate()) return;
+    try {
+      await onCreate({
+        title: eventTitle.trim(),
+        description: description.trim() || null,
+        amount: Number(amount),
+        type: 'fixed',
+        due_date: new Date(`${endDate}T23:59:59`).toISOString(),
+      });
+      reset();
+    } catch {
+      // Error toast is handled by the parent API flow.
+    }
   };
 
   const handleCancel = () => {
+    reset();
     onClose();
-  };
-
-  const handleMemberAmountChange = (memberName: string, value: string) => {
-    setMemberAmounts((prev) => ({
-      ...prev,
-      [memberName]: value,
-    }));
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="p-0 bg-white rounded-lg w-full max-w-md overflow-hidden">
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-[#000000]">
+          <DialogTitle className="text-lg font-bold text-[#000000]">
             Create split payment
-          </h2>
+          </DialogTitle>
         </div>
 
         <div className="p-4 space-y-4">
@@ -66,8 +87,10 @@ export function CreateSplitPaymentDialog({
               placeholder="Enter event title"
               value={eventTitle}
               onChange={(e) => setEventTitle(e.target.value)}
-              className="w-full rounded-full"
+              className={`w-full rounded-full ${errors.eventTitle ? 'border-red-500' : ''}`}
+              disabled={isSubmitting}
             />
+            {errors.eventTitle && <p className="text-xs text-red-500 mt-1">{errors.eventTitle}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -76,35 +99,26 @@ export function CreateSplitPaymentDialog({
                 Amount
               </label>
               <Input
-                placeholder="Enter event location"
+                placeholder="Enter amount"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-full"
+                className={`w-full rounded-full ${errors.amount ? 'border-red-500' : ''}`}
+                disabled={isSubmitting}
               />
+              {errors.amount && <p className="text-xs text-red-500 mt-1">{errors.amount}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-[#000000] mb-2">
                 End date
               </label>
-              <Select value={endDate} onValueChange={setEndDate}>
-                <SelectTrigger className="w-full h-9 rounded-full border border-gray-200 focus:border-[#4ab5ba] focus:ring-1 focus:ring-[#4ab5ba]">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-md">
-                  <SelectItem
-                    value="2024-12-31"
-                    className="text-sm cursor-pointer hover:bg-gray-50"
-                  >
-                    December 31, 2024
-                  </SelectItem>
-                  <SelectItem
-                    value="2025-01-15"
-                    className="text-sm cursor-pointer hover:bg-gray-50"
-                  >
-                    January 15, 2025
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className={`w-full rounded-full ${errors.endDate ? 'border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.endDate && <p className="text-xs text-red-500 mt-1">{errors.endDate}</p>}
             </div>
           </div>
 
@@ -117,18 +131,7 @@ export function CreateSplitPaymentDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full rounded-full"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
-              Select members
-            </label>
-            <Input
-              placeholder="Search members"
-              value={searchMembers}
-              onChange={(e) => setSearchMembers(e.target.value)}
-              className="w-full rounded-full"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -141,39 +144,28 @@ export function CreateSplitPaymentDialog({
                 Share amount among your members
               </p>
             </div>
-            <Switch checked={splitEqually} onCheckedChange={setSplitEqually} />
+            <Switch checked={splitEqually} onCheckedChange={setSplitEqually} disabled />
           </div>
-
-          {!splitEqually && (
-            <div className="grid grid-cols-2 gap-4">
-              {Object.entries(memberAmounts).map(([memberName, amount]) => (
-                <div key={memberName}>
-                  <label className="block text-sm font-medium text-[#000000] mb-2">
-                    {memberName}
-                  </label>
-                  <Input
-                    placeholder="Enter amount for this member"
-                    value={amount}
-                    onChange={(e) =>
-                      handleMemberAmountChange(memberName, e.target.value)
-                    }
-                    className="w-full "
-                  />
-                </div>
-              ))}
-            </div>
-          )}
 
           <div className="flex gap-3 pt-4">
             <Button
               onClick={handleCreate}
+              disabled={isSubmitting}
               className="flex-1 bg-gray-300 text-[#000000] hover:bg-gray-400"
             >
-              Create
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Creating
+                </span>
+              ) : (
+                'Create'
+              )}
             </Button>
             <Button
               onClick={handleCancel}
               variant="outline"
+              disabled={isSubmitting}
               className="flex-1 bg-gray-300 text-[#000000] hover:bg-gray-400 border-gray-300"
             >
               Cancel

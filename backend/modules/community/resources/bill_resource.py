@@ -21,6 +21,7 @@ from modules.core.response_formatter import (
     format_data,
     format_error,
     format_internal_error,
+    format_not_found,
     format_unauthorized,
 )
 
@@ -207,4 +208,29 @@ class BillResource(MethodView):
             
         except Exception as e:
             logger.error(f"Error deleting bill: {str(e)}", exc_info=True)
+            return format_internal_error(str(e))
+
+
+@bill_blp.route('/<int:community_id>/bills/<int:bill_id>/progress')
+class BillProgressResource(MethodView):
+    """Bill progress endpoint"""
+
+    @bill_blp.response(200, description='Bill progress retrieved')
+    @bill_blp.alt_response(404, schema=CommunityErrorSchema, description='Bill not found')
+    def get(self, community_id, bill_id):
+        try:
+            progress = bill_service.get_bill_progress(bill_id)
+            # Service returns a (response, status) tuple from format_not_found
+            # when the bill is missing — propagate it as-is.
+            if isinstance(progress, tuple):
+                return progress
+            if not progress or progress.get('bill_id') != bill_id:
+                return format_not_found('Bill')
+            return format_data(
+                data=progress,
+                message='Bill progress retrieved successfully',
+                status_code=200,
+            )
+        except Exception as e:
+            logger.error(f"Error getting bill progress: {str(e)}", exc_info=True)
             return format_internal_error(str(e))

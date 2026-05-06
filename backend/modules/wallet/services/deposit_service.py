@@ -4,6 +4,7 @@ Deposit Service - Orchestrates wallet deposit flow via payment providers.
 Single Responsibility: Handle deposit logic including on-demand virtual account provisioning.
 """
 import logging
+import os
 from typing import Dict, Any, Optional
 from decimal import Decimal
 from datetime import datetime
@@ -11,9 +12,11 @@ from datetime import datetime
 from modules.wallet.providers import (
     PaymentProviderContext,
     PaymentProviderFactory,
+    PaymentProviderType,
     VirtualAccountRequest,
 )
 from modules.wallet.providers.bell_mfb_provider import BellMFBProvider
+from modules.wallet.providers.safehaven_provider import SafeHavenProvider
 from modules.wallet.repositories.wallet_repository import WalletRepository
 from modules.wallet.repositories.wallet_transaction_repository import WalletTransactionRepository
 from modules.wallet.models.wallet_transaction import WalletTransaction
@@ -50,9 +53,33 @@ class DepositService:
         self.personal_provider = PaymentProviderFactory.get_provider(
             PaymentProviderContext.PERSONAL
         )
-        # Fallback provider for personal deposits.
-        # We want SafeHaven first (PERSONAL_PAYMENT_PROVIDER=safehaven) and Bell MFB as fallback.
-        self.fallback_provider = BellMFBProvider()
+
+        # Resolve the fallback provider as the *opposite* of the configured primary.
+        # The previous implementation hardcoded BellMFBProvider() as fallback, which
+        # meant that when PERSONAL_PAYMENT_PROVIDER=bell_mfb (the default), the
+        # primary and fallback paths used the same provider — so the fallback in
+        # initiate_deposit was effectively a no-op. We now read the primary id once
+        # from config and pick the opposing provider.
+        primary_id = os.getenv(
+            "PERSONAL_PAYMENT_PROVIDER", PaymentProviderType.BELL_MFB.value
+        ).lower()
+
+        if primary_id == PaymentProviderType.SAFEHAVEN.value:
+            self.fallback_provider = BellMFBProvider()
+            fallback_id = PaymentProviderType.BELL_MFB.value
+        else:
+            # Default branch: primary is bell_mfb (or any unrecognized value falls
+            # back to the documented default), so fallback to SafeHaven.
+            self.fallback_provider = SafeHavenProvider()
+            fallback_id = PaymentProviderType.SAFEHAVEN.value
+
+        logger.info(
+            "DepositService providers wired",
+            extra={
+                "primary_provider": primary_id,
+                "fallback_provider": fallback_id,
+            },
+        )
     
     def initiate_deposit(
         self,

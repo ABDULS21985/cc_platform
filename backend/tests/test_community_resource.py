@@ -126,6 +126,26 @@ def test_community_stats_success(monkeypatch, app):
     assert payload["data"]["member_count"] == 3
 
 
+def test_community_stats_structured_not_found(monkeypatch, app):
+    """Stats endpoint maps structured service not-found to 404."""
+    monkeypatch.setattr(
+        resource_module.community_service,
+        "get_community_stats",
+        lambda community_id: {
+            "success": False,
+            "error": "not_found",
+            "message": "Community not found",
+        },
+    )
+
+    with app.test_request_context("/api/v2/community/100/stats"):
+        response = resource_module.CommunityStatsResource().get(100)
+        payload = response.get_json()
+
+    assert response.status_code == 404
+    assert payload["error"] == "not_found"
+
+
 def test_user_communities_authenticated_success(monkeypatch, app):
     """Authenticated /me endpoint returns user communities payload."""
     user = Mock(id=11)

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   Calendar,
@@ -17,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiService, type EventApi } from '@/services/api';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 
 function minsAgo(iso: string | null): number {
   if (!iso) return 0;
@@ -44,9 +46,11 @@ function escapeIcs(value: string): string {
 }
 
 export function EventsRightRail() {
+  const router = useRouter();
   const [live, setLive] = useState<EventApi[]>([]);
   const [suggested, setSuggested] = useState<EventApi[]>([]);
   const [loading, setLoading] = useState(true);
+  const [joiningId, setJoiningId] = useState<number | null>(null);
   const calendarEvents = useMemo(() => {
     const seen = new Set<number>();
     return [...live, ...suggested].filter((event) => {
@@ -117,6 +121,26 @@ export function EventsRightRail() {
     };
   }, []);
 
+  const joinLiveEvent = async (event: EventApi) => {
+    if (event.is_attending) {
+      router.push(`/dashboard/events/${event.id}`);
+      return;
+    }
+    setJoiningId(event.id);
+    try {
+      const res = await ApiService.events.attend(event.id);
+      const updated = res.data?.data?.event;
+      if (updated) {
+        setLive((prev) => prev.map((e) => (e.id === event.id ? updated : e)));
+      }
+      router.push(`/dashboard/events/${event.id}`);
+    } catch (error) {
+      toastAxiosError(error, 'Failed to join event.');
+    } finally {
+      setJoiningId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -164,19 +188,19 @@ export function EventsRightRail() {
             <ul role="list" className="space-y-3">
               {live.map((e) => (
                 <li key={e.id}>
-                  <Link
-                    href={`/dashboard/events/${e.id}`}
-                    className="flex items-start gap-3 rounded-xl border border-transparent p-2 -mx-2 transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
+                  <div className="flex items-start gap-3 rounded-xl border border-transparent p-2 -mx-2 transition-colors hover:border-border hover:bg-accent/40">
                     <Avatar className="size-9 shrink-0">
                       <AvatarFallback className="bg-success/15 text-xs font-bold text-success">
                         {e.community_initial || e.title.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+                      <Link
+                        href={`/dashboard/events/${e.id}`}
+                        className="block truncate text-sm font-semibold tracking-tight text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                         {e.title}
-                      </p>
+                      </Link>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         {e.community_name || 'Public'} ·{' '}
                         <span className="inline-flex items-center gap-0.5">
@@ -185,10 +209,16 @@ export function EventsRightRail() {
                         </span>
                       </p>
                     </div>
-                    <Button type="button" size="sm" variant="success" tabIndex={-1}>
-                      Join
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="success"
+                      loading={joiningId === e.id}
+                      onClick={() => joinLiveEvent(e)}
+                    >
+                      {e.is_attending ? 'Open' : 'Join'}
                     </Button>
-                  </Link>
+                  </div>
                 </li>
               ))}
             </ul>

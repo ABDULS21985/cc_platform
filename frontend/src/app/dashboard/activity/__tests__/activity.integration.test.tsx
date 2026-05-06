@@ -11,6 +11,7 @@
 import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -18,6 +19,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 const apiMocks = {
   wallet: {
     getTransactions: vi.fn(),
+    getTransaction: vi.fn(),
   },
   communities: {
     joined: vi.fn(),
@@ -100,6 +102,9 @@ const fakeCommunity = (id: number, name: string) => ({
 beforeEach(() => {
   apiMocks.wallet.getTransactions.mockResolvedValue({
     data: { data: { transactions: [] } },
+  });
+  apiMocks.wallet.getTransaction.mockResolvedValue({
+    data: { data: { transaction: fakeTx() } },
   });
   apiMocks.communities.joined.mockResolvedValue({
     data: { data: { communities: [] } },
@@ -251,5 +256,50 @@ describe('/dashboard/activity', () => {
       expect(screen.getAllByText(/50,000/).length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText(/20,000/).length).toBeGreaterThan(0);
+  });
+
+  it('opens a transaction detail dialog backed by the selected API row', async () => {
+    apiMocks.wallet.getTransactions.mockResolvedValue({
+      data: {
+        data: {
+          transactions: [
+            fakeTx({
+              id: 33,
+              description: 'Detailed estate dues',
+              reference: 'TX-DETAIL',
+              balance_before: '10000',
+              balance_after: '5000',
+            }),
+          ],
+        },
+      },
+    });
+    apiMocks.wallet.getTransaction.mockResolvedValue({
+      data: {
+        data: {
+          transaction: fakeTx({
+            id: 33,
+            description: 'Detailed estate dues',
+            reference: 'TX-DETAIL',
+            bell_mfb_reference: 'BELL-33',
+            balance_before: '10000',
+            balance_after: '5000',
+          }),
+        },
+      },
+    });
+
+    const Page = await importPage();
+    render(<Page />);
+    await screen.findByText('Detailed estate dues');
+
+    await userEvent.setup().click(screen.getByText('Detailed estate dues'));
+
+    await waitFor(() => {
+      expect(apiMocks.wallet.getTransaction).toHaveBeenCalledWith(33);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+    expect(screen.getByText('TX-DETAIL')).toBeInTheDocument();
+    expect(screen.getByText('BELL-33')).toBeInTheDocument();
   });
 });

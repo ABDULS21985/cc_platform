@@ -57,6 +57,7 @@ export default function CommunityDetailsClient({
   const [joiningCommunity, setJoiningCommunity] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [hasCopiedLink, setHasCopiedLink] = useState(false);
+  const [communityUnreadCount, setCommunityUnreadCount] = useState(0);
 
   const { getActiveTabFor, setActiveTabFor } = useCommunityTabStore();
   const activeTab = getActiveTabFor(String(communityId));
@@ -94,11 +95,10 @@ export default function CommunityDetailsClient({
           status: c.status,
           slug: c.slug,
           created_at: c.created_at,
-          avatar: "/images/image.png",
-          cover: "/images/get-started1.png",
+          avatar: c.community_profile_picture || null,
+          cover: c.community_cover_photo || c.banner_url || null,
         });
       } catch (error) {
-        console.error("Error fetching community", error);
         toastAxiosError(error, "Failed to load community.");
       } finally {
         setLoading(false);
@@ -114,13 +114,27 @@ export default function CommunityDetailsClient({
         const response = await ApiService.communities.getMembers(communityId);
         setMembers(response.data.data.members);
       } catch (error) {
-        console.error("Error fetching members", error);
         toastAxiosError(error, "Failed to load members.");
       } finally {
         setMembersLoading(false);
       }
     };
     fetchMembers();
+  }, [communityId]);
+
+  useEffect(() => {
+    if (!communityId) return;
+
+    const fetchCommunityUnread = async () => {
+      try {
+        const response = await ApiService.notifications.unreadByCommunity(communityId);
+        setCommunityUnreadCount(response.data.data.unread_count ?? 0);
+      } catch (error) {
+        toastAxiosError(error, "Failed to load community notifications.");
+      }
+    };
+
+    void fetchCommunityUnread();
   }, [communityId]);
 
   const handleRemoveMember = async (userId: number) => {
@@ -215,14 +229,14 @@ export default function CommunityDetailsClient({
           <div className="bg-white rounded-3xl overflow-hidden shadow-soft border border-gray-100">
             <div className="relative group">
               <div className="h-48 sm:h-64 bg-gray-200 overflow-hidden relative">
-                <div
-                  className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
-                  style={{
-                    backgroundImage: `url(${
-                      (community as any).cover || "/images/get-started1.png"
-                    })`,
-                  }}
-                />
+                {community.cover ? (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
+                    style={{ backgroundImage: `url(${community.cover})` }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(14,157,165,0.16),_transparent_32%),linear-gradient(135deg,_#eef2f3,_#dbe6e8_55%,_#f7f9fa)]" />
+                )}
                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/5 transition-colors duration-500" />
               </div>
               
@@ -231,7 +245,7 @@ export default function CommunityDetailsClient({
                 <div className="flex items-end gap-5">
                    <div className="relative">
                       <Avatar className="w-24 h-24 sm:w-32 sm:h-32 border-4 border-white shadow-elevated rounded-3xl overflow-hidden">
-                        <AvatarImage src={community.avatar} className="object-cover" />
+                        <AvatarImage src={community.avatar || undefined} className="object-cover" />
                         <AvatarFallback className="bg-teal-50 text-[#0E9DA5] text-4xl font-bold rounded-3xl">
                           {community.name.charAt(0)}
                         </AvatarFallback>
@@ -279,9 +293,11 @@ export default function CommunityDetailsClient({
                         className="w-11 h-11 rounded-2xl bg-gray-50 border border-gray-100 text-gray-600 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all relative group"
                       >
                         <Mail className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full h-5 w-5 flex items-center justify-center ring-2 ring-white">
-                          12
-                        </span>
+                        {communityUnreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-h-5 min-w-5 px-1 flex items-center justify-center ring-2 ring-white">
+                            {communityUnreadCount > 99 ? "99+" : communityUnreadCount}
+                          </span>
+                        )}
                       </Button>
                     )}
                     <Button
@@ -379,7 +395,7 @@ export default function CommunityDetailsClient({
                   </div>
                 )}
                 {activeTab === 'wallet' && <WalletTab communityName={community.name} communityId={community.id} />}
-                {activeTab === 'expenses' && <ExpensesTab communityName={community.name} />}
+                {activeTab === 'expenses' && <ExpensesTab communityName={community.name} communityId={community.id} />}
                 {activeTab === 'events' && (
                   <EventsTab
                     communityId={community.id}

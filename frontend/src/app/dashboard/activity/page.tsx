@@ -644,7 +644,7 @@ export default function ActivityPage() {
     setDetailLoading(true);
     try {
       const res = await ApiService.wallet.getTransaction(numericId);
-      const tx = (res.data?.data?.transaction ?? null) as Record<string, unknown> | null;
+      const tx = (res.data?.data?.transaction ?? null) as unknown as Record<string, unknown> | null;
       if (tx) {
         setSelectedActivity((current) =>
           current?.id === item.id

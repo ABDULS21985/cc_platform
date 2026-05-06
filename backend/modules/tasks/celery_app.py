@@ -42,7 +42,8 @@ def make_celery() -> Celery:
         backend=redis_url,
         include=[
             'modules.tasks.verification_tasks',
-            'modules.tasks.notification_tasks'
+            'modules.tasks.notification_tasks',
+            'modules.tasks.subscription_tasks',
         ]
     )
     
@@ -81,6 +82,14 @@ def make_celery() -> Celery:
         # Logging
         worker_log_format='[%(asctime)s: %(levelname)s/%(processName)s] %(message)s',
         worker_task_log_format='[%(asctime)s: %(levelname)s/%(processName)s] [%(task_name)s(%(task_id)s)] %(message)s',
+
+        beat_schedule={
+            'execute-due-subscriptions-every-5-minutes': {
+                'task': 'modules.tasks.subscription_tasks.execute_due_subscriptions',
+                'schedule': 300.0,
+                'args': (100,),
+            },
+        },
     )
     
     return celery_app

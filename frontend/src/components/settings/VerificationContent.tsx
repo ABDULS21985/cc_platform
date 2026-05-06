@@ -35,22 +35,17 @@ export function VerificationContent() {
 
   const loadStatus = React.useCallback(async () => {
     try {
-      const res = await ApiService.verification.getStatus();
-      if (res.data.success && res.data.data) {
-        const s = res.data.data;
-        const next: VerificationState = {
-          bvn_verified: s.verification_type === 'bvn' && s.verified,
-          nin_verified: s.verification_type === 'nin' && s.verified,
-          status: s.status,
-        };
-        setData(next);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(
-            'verification_data',
-            JSON.stringify(next)
-          );
-        }
-      }
+      const [profileRes, statusRes] = await Promise.all([
+        ApiService.profile.get(),
+        ApiService.verification.getStatus(),
+      ]);
+      const profile = profileRes.data?.data;
+      const status = statusRes.data?.data;
+      setData({
+        bvn_verified: !!profile?.bvn_verified,
+        nin_verified: !!profile?.nin_verified,
+        status: profile?.verification_status || status?.status,
+      });
     } catch (error) {
       console.error('Failed to load verification status', error);
     } finally {

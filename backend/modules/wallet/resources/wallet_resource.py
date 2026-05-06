@@ -181,7 +181,7 @@ class WalletSummaryResource(MethodView):
             service = WalletService()
             summary = service.get_wallet_summary(current_user.id)
             
-            if not summary['wallet']:
+            if summary.get('error') == 'not_found' or not summary['wallet']:
                 response, status = format_error(
                     error="wallet_not_found",
                     message="Wallet not found. Please complete identity verification first.",
@@ -195,6 +195,90 @@ class WalletSummaryResource(MethodView):
         except Exception as e:
             logger.error(f"Error getting wallet summary for user {current_user.id}: {str(e)}", exc_info=True)
             response, status = format_internal_error("An error occurred while fetching wallet summary")
+            return response, status
+
+
+@wallet_blp.route('/beneficiaries')
+class WalletBeneficiariesResource(MethodView):
+    """List and save wallet transfer recipients."""
+
+    @wallet_blp.arguments(BeneficiaryQuerySchema, location='query')
+    @wallet_blp.response(200, BeneficiaryListResponseSchema, description='Beneficiaries retrieved successfully')
+    @wallet_blp.alt_response(400, schema=WalletErrorSchema, description='Invalid parameters')
+    @token_required
+    def get(self, args, current_user=None):
+        try:
+            result = WalletBeneficiaryService().list_beneficiaries(
+                current_user.id,
+                limit=args.get('limit', 50),
+                offset=args.get('offset', 0),
+            )
+            response, status = format_data(
+                data=result,
+                message="Beneficiaries retrieved successfully",
+                status_code=200,
+            )
+            return response, status
+        except Exception:
+            logger.error("Error getting wallet beneficiaries", exc_info=True)
+            response, status = format_internal_error("An error occurred while fetching beneficiaries")
+            return response, status
+
+    @wallet_blp.arguments(BeneficiaryCreateSchema)
+    @wallet_blp.response(200, BeneficiarySaveResponseSchema, description='Beneficiary saved successfully')
+    @wallet_blp.alt_response(400, schema=WalletErrorSchema, description='Validation error')
+    @token_required
+    def post(self, data, current_user=None):
+        try:
+            result = WalletBeneficiaryService().save_beneficiary(current_user.id, data)
+            response, status = format_data(
+                data=result,
+                message="Beneficiary saved successfully",
+                status_code=200,
+            )
+            return response, status
+        except ValueError as e:
+            response, status = format_error(error="beneficiary_save_failed", message=str(e), status_code=400)
+            return response, status
+        except Exception:
+            try:
+                from modules.auth_v2.extensions import db
+                db.session.rollback()
+            except Exception:
+                pass
+
+            logger.error("Error saving wallet beneficiary", exc_info=True)
+            response, status = format_internal_error("An error occurred while saving beneficiary")
+            return response, status
+
+
+@wallet_blp.route('/beneficiaries/<int:beneficiary_id>')
+class WalletBeneficiaryResource(MethodView):
+    """Manage a saved wallet recipient."""
+
+    @wallet_blp.response(200, WalletErrorSchema, description='Beneficiary deleted successfully')
+    @wallet_blp.alt_response(404, schema=WalletErrorSchema, description='Beneficiary not found')
+    @token_required
+    def delete(self, beneficiary_id, current_user=None):
+        try:
+            deleted = WalletBeneficiaryService().delete_beneficiary(current_user.id, beneficiary_id)
+            if not deleted:
+                response, status = format_error(
+                    error="beneficiary_not_found",
+                    message="Beneficiary not found",
+                    status_code=404,
+                )
+                return response, status
+
+            response, status = format_data(
+                data={},
+                message="Beneficiary deleted successfully",
+                status_code=200,
+            )
+            return response, status
+        except Exception:
+            logger.error("Error deleting wallet beneficiary", exc_info=True)
+            response, status = format_internal_error("An error occurred while deleting beneficiary")
             return response, status
 
 

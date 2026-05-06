@@ -66,6 +66,16 @@ class NotificationRepository:
             db.session.commit()
         return notif
 
+    def mark_unread(self, notification_id: int, user_id: int) -> Optional[Notification]:
+        notif = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+        if not notif:
+            return None
+        if notif.is_read:
+            notif.is_read = False
+            notif.read_at = None
+            db.session.commit()
+        return notif
+
     def mark_all_read(self, user_id: int) -> int:
         now = datetime.utcnow()
         rows = (

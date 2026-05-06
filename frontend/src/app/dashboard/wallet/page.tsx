@@ -70,6 +70,7 @@ export default function WalletPage() {
   const [fundLoading, setFundLoading] = React.useState(false);
   const [transferLoading, setTransferLoading] = React.useState(false);
   const [walletRefreshKey, setWalletRefreshKey] = React.useState(0);
+  const [beneficiaryRefreshKey, setBeneficiaryRefreshKey] = React.useState(0);
   const [accountDetails, setAccountDetails] = React.useState<WalletAccountDetails | null>(null);
   const [sendPrefill, setSendPrefill] = React.useState<WalletTransferPrefill | null>(null);
   const [pendingTransfer, setPendingTransfer] = React.useState<PendingTransfer | null>(null);
@@ -134,11 +135,24 @@ export default function WalletPage() {
   }, []);
 
   const handleTransferDraft = React.useCallback(
-    (mode: PendingTransfer['mode']) => (draft: WalletTransferDraft) => {
+    (mode: PendingTransfer['mode']) => async (draft: WalletTransferDraft) => {
       const amount = parseMoney(draft.amount);
       if (amount < 100) {
         toast.error('Minimum withdrawal amount is ₦100.');
         return;
+      }
+      if (mode === 'send') {
+        try {
+          await ApiService.wallet.saveBeneficiary({
+            account_number: draft.account_number,
+            account_name: draft.account_name || draft.account_number,
+            bank_code: draft.bank_code,
+            bank_name: draft.bank_name,
+          });
+          setBeneficiaryRefreshKey((key) => key + 1);
+        } catch (error) {
+          toastAxiosError(error, 'Could not save recipient. You can still continue this transfer.');
+        }
       }
       setPendingTransfer({ mode, draft });
       setSendOpen(false);
@@ -202,6 +216,7 @@ export default function WalletPage() {
             <Beneficiaries
               onCreate={() => openSend()}
               onSelect={handleBeneficiarySelect}
+              refreshKey={beneficiaryRefreshKey}
             />
           </div>
           <div>

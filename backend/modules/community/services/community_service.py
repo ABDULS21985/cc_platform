@@ -21,6 +21,7 @@ from modules.community.constants import CommunityStatus, MemberRole, MemberStatu
 from modules.community.utils import generate_slug
 from modules.community.repositories import OrganizationRepository, InstitutionMemberRepository
 from modules.community.services.organization_service import OrganizationService
+from modules.core.response_formatter import format_not_found
 from modules.auth_v2.extensions import db
 from sqlalchemy import func, case
 
@@ -310,12 +311,18 @@ class CommunityService:
         _, total = self.member_repo.find_by_community(community_id, status='active')
         return total
     
-    def get_community_stats(self, community_id: int) -> Dict[str, Any]:
-        """Get community statistics"""
+    def get_community_stats(self, community_id: int):
+        """Get community statistics.
+
+        Returns the stats dict on success, or a ``(response, status)`` tuple
+        produced by :func:`format_not_found` when the community is missing so
+        callers can ``return community_service.get_community_stats(...)``
+        directly and propagate the 404.
+        """
         community = self.repo.find_by_id(community_id)
         if not community:
-            return {}
-        
+            return format_not_found("Community")
+
         wallet = self.wallet_repo.find_by_community_id(community_id)
         active_members, total_members = self.member_repo.find_by_community(community_id, status='active')
         

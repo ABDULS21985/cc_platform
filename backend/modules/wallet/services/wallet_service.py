@@ -168,6 +168,9 @@ class WalletService:
         
         if not wallet:
             return {
+                'success': False,
+                'error': 'not_found',
+                'message': 'Wallet not found',
                 'wallet': None,
                 'recent_transactions': [],
                 'summary': {

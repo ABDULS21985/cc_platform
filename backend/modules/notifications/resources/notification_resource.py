@@ -242,3 +242,20 @@ class NotificationItemResource(MethodView):
         except Exception as exc:
             logger.error('Error deleting notification: %s', exc, exc_info=True)
             return format_internal_error(str(exc))
+
+
+@notification_blp.route('/<int:notification_id>/unread')
+class NotificationMarkUnreadResource(MethodView):
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    @notification_blp.alt_response(404, schema=NotificationErrorSchema)
+    def post(self, notification_id, current_user=None):
+        """Mark a single notification as unread."""
+        try:
+            result, status = notification_service.mark_unread(notification_id, current_user.id)
+            if status == 404:
+                return format_not_found('Notification')
+            return format_data(data=result, message='Notification updated', status_code=status)
+        except Exception as exc:
+            logger.error('Error marking notification unread: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))

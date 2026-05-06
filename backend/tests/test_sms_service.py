@@ -128,3 +128,61 @@ class TestSendTransactional:
         result = svc.send_transactional(_user(uid=5), 'will fail')
         assert result['success'] is False
         assert result['reason'] == 'provider_error'
+
+    def test_redis_limiter_and_dedupe_used_when_available(self, monkeypatch):
+        class FakePipeline:
+            def __init__(self, client):
+                self.client = client
+
+            def zremrangebyscore(self, key, min_score, max_score):
+                self.client.zsets.setdefault(key, {})
+                return self
+
+            def zcard(self, key):
+                self.key = key
+                return self
+
+            def execute(self):
+                return [0, len(self.client.zsets.get(self.key, {}))]
+
+        class FakeRedis:
+            def __init__(self):
+                self.values = {}
+                self.zsets = {}
+
+            def exists(self, key):
+                return key in self.values
+
+            def setex(self, key, ttl, value):
+                self.values[key] = value
+
+            def pipeline(self):
+                return FakePipeline(self)
+
+            def zadd(self, key, mapping):
+                self.zsets.setdefault(key, {}).update(mapping)
+
+            def expire(self, key, ttl):
+                return True
+
+            def get(self, key):
+                return self.values.get(key)
+
+            def incrbyfloat(self, key, amount):
+                self.values[key] = str(float(self.values.get(key, 0)) + float(amount))
+
+        fake_redis = FakeRedis()
+        monkeypatch.setattr(sms_module, "_get_redis_client", lambda: fake_redis)
+
+        svc = SmsService()
+        svc.client = MagicMock()
+        svc.client.enabled = True
+        svc.client.send_transactional.return_value = {'ok': True}
+
+        first = svc.send_transactional(_user(uid=6), 'redis-backed')
+        second = svc.send_transactional(_user(uid=6), 'redis-backed')
+
+        assert first['success'] is True
+        assert second['note'] == 'deduped'
+        assert svc.client.send_transactional.call_count == 1
+        assert _user_send_log == {}

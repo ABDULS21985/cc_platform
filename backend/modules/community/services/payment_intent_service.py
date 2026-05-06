@@ -41,7 +41,9 @@ class PaymentIntentService:
         user_id: int,
         amount: Decimal,
         *,
-        pin: str,
+        pin: Optional[str] = None,
+        require_pin: bool = True,
+        idempotency_key: Optional[str] = None,
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """
         Pay bill using user's wallet
@@ -55,13 +57,15 @@ class PaymentIntentService:
             Tuple of (transaction_data, error) - one will be None
         """
         try:
-            # Enforce transaction PIN for wallet debits
-            try:
-                from modules.wallet.services.pin_service import TransactionPinService
+            # Enforce transaction PIN for interactive wallet debits. Scheduled
+            # mandates are authorized when created and run without a plaintext PIN.
+            if require_pin:
+                try:
+                    from modules.wallet.services.pin_service import TransactionPinService
 
-                TransactionPinService().verify_pin(user_id=user_id, pin=str(pin))
-            except ValueError as pin_err:
-                return None, str(pin_err)
+                    TransactionPinService().verify_pin(user_id=user_id, pin=str(pin or ""))
+                except ValueError as pin_err:
+                    return None, str(pin_err)
 
             # Validate bill
             bill = self.bill_repo.find_by_id(bill_id)
@@ -88,7 +92,7 @@ class PaymentIntentService:
 
             # Idempotency: if we already processed a successful payment for this bill by this user,
             # do not debit again (common on retries / double-clicks).
-            existing_success = (
+            existing_query = (
                 WalletTransaction.query.filter(
                     WalletTransaction.wallet_id == user_wallet.id,
                     WalletTransaction.bill_id == bill_id,
@@ -97,8 +101,17 @@ class PaymentIntentService:
                     WalletTransaction.status.in_(["successful", "completed"]),
                 )
                 .order_by(WalletTransaction.created_at.desc())
-                .first()
             )
+            existing_success = None
+            for candidate in existing_query.limit(25).all():
+                meta = candidate.meta or {}
+                if idempotency_key:
+                    if meta.get("idempotency_key") == idempotency_key:
+                        existing_success = candidate
+                        break
+                elif meta.get("user_id") == user_id:
+                    existing_success = candidate
+                    break
             if existing_success and (existing_success.meta or {}).get("user_id") == user_id:
                 return {
                     'transaction_id': existing_success.id,
@@ -142,6 +155,7 @@ class PaymentIntentService:
                 description=f'Payment for bill: {bill.title}',
                 meta={
                     'user_id': user_id,
+                    'idempotency_key': idempotency_key,
                     'bill_title': bill.title,
                     'community_wallet_credited': str(amount),
                     'community_wallet_balance_before': str(community_balance_before),
@@ -214,6 +228,8 @@ class PaymentIntentService:
         payment_method: str = 'wallet',
         *,
         pin: Optional[str] = None,
+        require_pin: bool = True,
+        idempotency_key: Optional[str] = None,
     ) -> Tuple[Optional[Dict], Optional[str]]:
         """
         Process community bill payment
@@ -228,9 +244,16 @@ class PaymentIntentService:
             Tuple of (payment_info, error) - one will be None
         """
         if payment_method == 'wallet':
-            if not pin:
+            if require_pin and not pin:
                 return None, "PIN is required for wallet payments"
-            return self.pay_bill_from_wallet(bill_id, user_id, amount, pin=str(pin))
+            return self.pay_bill_from_wallet(
+                bill_id,
+                user_id,
+                amount,
+                pin=str(pin or ""),
+                require_pin=require_pin,
+                idempotency_key=idempotency_key,
+            )
         elif payment_method == 'transfer':
             return None, 'Direct transfer not yet implemented'
         elif payment_method == 'card':
@@ -274,7 +297,12 @@ class PaymentIntentService:
         """Get payment status for bill"""
         bill = self.bill_repo.find_by_id(bill_id)
         if not bill:
-            return {}
+            return {
+                'success': False,
+                'error': 'not_found',
+                'message': 'Bill not found',
+                'bill_id': bill_id,
+            }
         
         return {
             'bill_id': bill_id,

@@ -81,7 +81,6 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
       });
       setPosts(response.data.data.posts);
     } catch (error) {
-      console.error('Error fetching posts:', error);
       toastAxiosError(error, 'Failed to load posts.');
     } finally {
       setLoading(false);

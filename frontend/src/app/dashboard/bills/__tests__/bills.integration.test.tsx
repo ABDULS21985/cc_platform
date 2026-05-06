@@ -19,6 +19,9 @@ import { userEvent } from '@testing-library/user-event';
 // Mocks
 // ---------------------------------------------------------------------------
 const apiMocks = {
+  profile: {
+    get: vi.fn(),
+  },
   communities: {
     joined: vi.fn(),
     getBills: vi.fn(),
@@ -115,10 +118,14 @@ beforeEach(() => {
   apiMocks.communities.payBill.mockResolvedValue({
     data: { data: { transaction_id: 1, reference: 'TX-1' } },
   });
+  apiMocks.profile.get.mockResolvedValue({
+    data: { data: { id: 50, email: 'ada@example.com' } },
+  });
   window.localStorage.setItem('user_data', JSON.stringify({ id: 50 }));
 });
 
 afterEach(() => {
+  apiMocks.profile.get.mockReset();
   for (const fn of Object.values(apiMocks.communities)) {
     (fn as ReturnType<typeof vi.fn>).mockReset();
   }
@@ -144,6 +151,30 @@ describe('/dashboard/bills', () => {
     });
     expect(apiMocks.communities.getBills).toHaveBeenCalledWith(10, expect.any(Object));
     expect(apiMocks.communities.getBills).toHaveBeenCalledWith(11, expect.any(Object));
+  });
+
+  it('uses profile.get for current user attribution instead of localStorage.user_data', async () => {
+    window.localStorage.setItem('user_data', JSON.stringify({ id: 999 }));
+    apiMocks.profile.get.mockResolvedValue({
+      data: { data: { id: 50, email: 'ada@example.com' } },
+    });
+    apiMocks.communities.joined.mockResolvedValue({
+      data: { data: { communities: [fakeCommunity(10, 'Lekki HOA')] } },
+    });
+    apiMocks.communities.getBills.mockResolvedValue({
+      data: {
+        data: {
+          bills: [fakeBill({ creator_id: 50, creator: { id: 50, full_name: 'Ada M' } })],
+        },
+      },
+    });
+    const Page = await importPage();
+    render(<Page />);
+    await waitFor(() => {
+      expect(screen.getByText('Estate dues')).toBeInTheDocument();
+    });
+    expect(apiMocks.profile.get).toHaveBeenCalled();
+    expect(screen.getByText(/You created this/)).toBeInTheDocument();
   });
 
   it('uses bill.creator.full_name (not "User #N" fallback) when API supplies it', async () => {

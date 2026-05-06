@@ -19,6 +19,7 @@ from modules.community.repositories import (
     MemberRepository, CommunityWalletRepository
 )
 from modules.community.models.bill import Bill, BillSession
+from modules.core.response_formatter import format_not_found
 from modules.auth_v2.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -392,12 +393,17 @@ class BillService:
         
         return defaulters
     
-    def get_bill_progress(self, bill_id: int) -> Dict[str, Any]:
-        """Get bill payment progress"""
+    def get_bill_progress(self, bill_id: int):
+        """Get bill payment progress.
+
+        Returns the progress dict on success, or a ``(response, status)`` tuple
+        produced by :func:`format_not_found` when the bill does not exist so
+        the resource layer can propagate the 404 directly.
+        """
         bill = self.bill_repo.find_by_id(bill_id)
         if not bill:
-            return {}
-        
+            return format_not_found("Bill")
+
         percentage = 0
         expected_member_count = self.member_repo.count_non_owner_members(
             bill.community_id,

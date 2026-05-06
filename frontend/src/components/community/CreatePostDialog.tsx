@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +43,8 @@ interface MyCommunity {
 }
 
 const MAX_LENGTH = 280;
+const MAX_MEDIA_FILES = 4;
+const MAX_MEDIA_SIZE = 5 * 1024 * 1024;
 
 export function CreatePostDialog({
   isOpen,
@@ -54,8 +56,10 @@ export function CreatePostDialog({
 }: CreatePostDialogProps) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [isPinned, setIsPinned] = useState(false);
   const [commentsEnabled, setCommentsEnabled] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedCommunityId, setSelectedCommunityId] = useState<number | undefined>(
     communityId
   );
@@ -97,19 +101,28 @@ export function CreatePostDialog({
   }, [isOpen, communityId]);
 
   const handlePost = async () => {
-    if (!text.trim() || !selectedCommunityId) return;
+    if ((!text.trim() && mediaFiles.length === 0) || !selectedCommunityId) return;
     setLoading(true);
     try {
+      let mediaUrls: string[] = [];
+      if (mediaFiles.length > 0) {
+        const uploadData = new FormData();
+        mediaFiles.forEach((file) => uploadData.append('files', file));
+        const uploadRes = await ApiService.communities.uploadPostMedia(uploadData);
+        mediaUrls = uploadRes.data.data.media.map((item) => item.url);
+      }
+
       await ApiService.communities.createPost(selectedCommunityId, {
-        body: text,
+        body: text.trim() || null,
         post_type: 'post',
         is_pinned: isPinned,
         comments_enabled: commentsEnabled,
-        media_urls: [],
+        media_urls: mediaUrls,
         mentioned_user_ids: [],
       });
       toast.success('Post shared');
       setText('');
+      setMediaFiles([]);
       setIsPinned(false);
       setCommentsEnabled(true);
       toggleDialog();
@@ -125,8 +138,34 @@ export function CreatePostDialog({
     if (loading) return;
     toggleDialog();
     setText('');
+    setMediaFiles([]);
     setIsPinned(false);
     setCommentsEnabled(true);
+  };
+
+  const handleMediaSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    if (selected.length === 0) return;
+
+    const accepted: File[] = [];
+    for (const file of selected) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Only image uploads are supported');
+        continue;
+      }
+      if (file.size > MAX_MEDIA_SIZE) {
+        toast.error(`${file.name} must be 5MB or smaller`);
+        continue;
+      }
+      accepted.push(file);
+    }
+
+    setMediaFiles((prev) => [...prev, ...accepted].slice(0, MAX_MEDIA_FILES));
+    e.target.value = '';
+  };
+
+  const removeMediaFile = (index: number) => {
+    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const remaining = MAX_LENGTH - text.length;
@@ -286,9 +325,19 @@ export function CreatePostDialog({
                   aria-label="Add image"
                   title="Add image"
                   className="text-muted-foreground hover:text-primary"
+                  disabled={loading || mediaFiles.length >= MAX_MEDIA_FILES}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <ImageIcon className="size-4" aria-hidden="true" />
                 </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  className="hidden"
+                  onChange={handleMediaSelect}
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -319,12 +368,42 @@ export function CreatePostDialog({
               </Badge>
             </div>
 
+            {mediaFiles.length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {mediaFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.lastModified}`}
+                    className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
+                  >
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {file.name}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => removeMediaFile(index)}
+                      disabled={loading}
+                      className="size-7"
+                    >
+                      <X className="size-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <Button
               type="button"
               size="xl"
               block
               loading={loading}
-              disabled={!text.trim() || overLimit || !selectedCommunityId}
+              disabled={
+                (!text.trim() && mediaFiles.length === 0) ||
+                overLimit ||
+                !selectedCommunityId
+              }
               trailingIcon={!loading ? <Send className="size-4" /> : undefined}
               onClick={handlePost}
               className="h-12 text-base"

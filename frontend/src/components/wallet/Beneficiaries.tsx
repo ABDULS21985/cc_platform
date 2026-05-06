@@ -15,9 +15,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
-import { ApiService } from '@/services/api';
+import { ApiService, type WalletBeneficiary } from '@/services/api';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 
 export interface Beneficiary {
   id: string;
@@ -62,179 +64,54 @@ function relativeAge(iso: string): string {
   return `${Math.floor(days / 30)} months ago`;
 }
 
-interface ApiTx {
-  signed_amount?: number | string;
-  status?: string;
-  transaction_type?: string;
-  destination_account_name?: string | null;
-  destination_account_number?: string | null;
-  destination_bank_name?: string | null;
-  meta?: {
-    bank_code?: string | null;
-    bank_name?: string | null;
-    destination_bank_name?: string | null;
-  } | null;
-  community_id?: number | null;
-  completed_at?: string;
-  created_at?: string;
+function mapBeneficiary(item: WalletBeneficiary, index: number): Beneficiary {
+  const display = item.name || item.account_name || `Account ${item.account_number.slice(-4)}`;
+  return {
+    id: String(item.id),
+    name: display,
+    bank: item.bank_name,
+    accountTail: item.account_number.slice(-4),
+    accountNumber: item.account_number,
+    accountName: item.account_name,
+    bankCode: item.bank_code,
+    initials: initialsFor(display),
+    tone: TONES[index % TONES.length],
+    lastSent: item.last_used_at ? relativeAge(item.last_used_at) : undefined,
+    isFavorite: item.is_favorite,
+  };
 }
-
-/**
- * Walk the user's transaction history and pull out unique recipients of
- * outgoing money (debits). We key by destination_account_number when we
- * have one, falling back to recipient name. Most-recent transfers come
- * first; we cap at 12 entries.
- */
-function deriveBeneficiaries(items: ApiTx[]): Beneficiary[] {
-  const sorted = [...items].sort((a, b) => {
-    const aTs = new Date(a.completed_at ?? a.created_at ?? '').getTime() || 0;
-    const bTs = new Date(b.completed_at ?? b.created_at ?? '').getTime() || 0;
-    return bTs - aTs; // newest first
-  });
-
-  const seen = new Map<string, Beneficiary>();
-  for (const t of sorted) {
-    const status = String(t.status ?? '').toLowerCase();
-    if (status && status !== 'successful' && status !== 'completed') continue;
-    const signed = Number(t.signed_amount ?? 0);
-    if (signed >= 0) continue; // only outgoing
-    const name = (t.destination_account_name ?? '').trim();
-    const acct = (t.destination_account_number ?? '').trim();
-    if (!name && !acct) continue;
-    const key = acct || name.toLowerCase();
-    if (seen.has(key)) continue;
-    const tail = acct ? acct.slice(-4) : '••••';
-    const display = name || `Account ··${tail}`;
-    const bankName =
-      (t.destination_bank_name ?? '').trim() ||
-      (t.meta?.destination_bank_name ?? '').trim() ||
-      (t.meta?.bank_name ?? '').trim() ||
-      'Bank';
-    seen.set(key, {
-      id: key,
-      name: display,
-      bank: bankName,
-      accountTail: tail,
-      accountNumber: acct || undefined,
-      accountName: name || undefined,
-      bankCode: (t.meta?.bank_code ?? '').trim() || undefined,
-      initials: initialsFor(display),
-      tone: TONES[seen.size % TONES.length],
-      lastSent: relativeAge(t.completed_at ?? t.created_at ?? ''),
-    });
-    if (seen.size >= 12) break;
-  }
-  return [...seen.values()];
-}
-
-// Fallback used only when the user has no outgoing transactions yet, so the
-// UI demonstrates what this card will show.
-const SEED_BENEFICIARIES: Beneficiary[] = [
-  {
-    id: 'b1',
-    name: 'Ada Lovelace',
-    bank: 'Bell MFB',
-    accountTail: '1234',
-    initials: 'AL',
-    tone: 'bg-brand text-primary-foreground',
-    lastSent: '2 days ago',
-    isFavorite: true,
-  },
-  {
-    id: 'b2',
-    name: 'Kunle Adeyemi',
-    bank: 'GTBank',
-    accountTail: '5871',
-    initials: 'KA',
-    tone: 'bg-info/30 text-info',
-    lastSent: '5 days ago',
-    isFavorite: true,
-  },
-  {
-    id: 'b3',
-    name: 'Trinity Co-op',
-    bank: 'SafeHaven',
-    accountTail: '0418',
-    initials: 'TC',
-    tone: 'bg-warning/30 text-warning',
-    lastSent: '1 week ago',
-  },
-  {
-    id: 'b4',
-    name: 'Funmi Ojo',
-    bank: 'Access',
-    accountTail: '6629',
-    initials: 'FO',
-    tone: 'bg-success/30 text-success',
-    lastSent: '2 weeks ago',
-  },
-  {
-    id: 'b5',
-    name: 'Lekki Block 3',
-    bank: 'Bell MFB',
-    accountTail: '2245',
-    initials: 'LB',
-    tone: 'bg-brand-bright/30 text-primary',
-    lastSent: '3 weeks ago',
-  },
-  {
-    id: 'b6',
-    name: 'Bisi Ojo',
-    bank: 'Zenith',
-    accountTail: '8841',
-    initials: 'BO',
-    tone: 'bg-info/30 text-info',
-  },
-  {
-    id: 'b7',
-    name: 'Marathon vendor',
-    bank: 'UBA',
-    accountTail: '4422',
-    initials: 'MV',
-    tone: 'bg-warning/30 text-warning',
-  },
-];
 
 interface BeneficiariesProps {
   onCreate: () => void;
   onSelect: (b: Beneficiary) => void;
+  refreshKey?: number;
 }
 
-export function Beneficiaries({ onCreate, onSelect }: BeneficiariesProps) {
+export function Beneficiaries({ onCreate, onSelect, refreshKey = 0 }: BeneficiariesProps) {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const [allOpen, setAllOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [items, setItems] = React.useState<Beneficiary[] | null>(null);
-  const [usingSeed, setUsingSeed] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await ApiService.wallet.getTransactions({ limit: 200 });
-        const txs =
-          ((res.data?.data as { transactions?: ApiTx[] })?.transactions ?? []) ||
-          [];
-        const derived = deriveBeneficiaries(txs);
+        const res = await ApiService.wallet.getBeneficiaries({ limit: 50 });
+        const beneficiaries = res.data.data.beneficiaries ?? [];
         if (cancelled) return;
-        if (derived.length === 0) {
-          setItems(SEED_BENEFICIARIES);
-          setUsingSeed(true);
-        } else {
-          setItems(derived);
-          setUsingSeed(false);
-        }
-      } catch {
+        setItems(beneficiaries.map(mapBeneficiary));
+      } catch (error) {
         if (!cancelled) {
-          setItems(SEED_BENEFICIARIES);
-          setUsingSeed(true);
+          setItems([]);
+          toastAxiosError(error, 'Failed to load saved recipients.');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const list = items ?? [];
   const filtered = React.useMemo(() => {
@@ -386,6 +263,14 @@ export function Beneficiaries({ onCreate, onSelect }: BeneficiariesProps) {
             </motion.button>
           ))}
         </div>
+
+        {items !== null && list.length === 0 ? (
+          <EmptyState
+            icon={<Users className="size-5" aria-hidden="true" />}
+            title="No saved recipients"
+            description="Add a recipient to keep their bank details ready for your next transfer."
+          />
+        ) : null}
       </CardContent>
 
       {/* All recipients sheet */}
@@ -413,7 +298,7 @@ export function Beneficiaries({ onCreate, onSelect }: BeneficiariesProps) {
             <ul role="list" className="space-y-2">
               {filtered.length === 0 ? (
                 <li className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-                  No matches.
+                  {list.length === 0 ? 'No saved recipients yet.' : 'No matches.'}
                 </li>
               ) : (
                 filtered.map((b) => (

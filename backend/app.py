@@ -180,6 +180,7 @@ def create_app():
             from modules.verification.models.verification import UserVerification
             from modules.wallet.models.wallet import Wallet
             from modules.wallet.models.wallet_transaction import WalletTransaction
+            from modules.wallet.models.wallet_beneficiary import WalletBeneficiary
             from modules.community.models import (
                 Community,
                 CommunityMember,

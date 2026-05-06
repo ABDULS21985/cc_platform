@@ -81,7 +81,6 @@ export default function RecentTransactions() {
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('Failed to fetch transactions', error);
           toastAxiosError(error, 'Failed to load transactions.');
         }
       } finally {

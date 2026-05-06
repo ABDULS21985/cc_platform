@@ -4,6 +4,7 @@ Handles one-time virtual account creation for community deposits.
 """
 import logging
 import os
+import random
 import requests
 import hmac
 import hashlib
@@ -180,11 +181,35 @@ class SafeHavenProvider(PaymentProvider):
             last_error: Exception | None = None
             last_details: str | None = None
 
-            for attempt_name, payload in attempts:
+            # Jittered exponential backoff between retry attempts. The first
+            # attempt fires immediately; each subsequent attempt sleeps
+            # base_delay seconds (+/- 50ms jitter) to avoid hammering the
+            # provider on transient errors. Sequence: 0.25s, 0.5s, 1.0s
+            # (capped at 1.0s).
+            backoff_schedule = [0.25, 0.5, 1.0]
+
+            for attempt_index, (attempt_name, payload) in enumerate(attempts):
+                if attempt_index > 0:
+                    base_delay = backoff_schedule[
+                        min(attempt_index - 1, len(backoff_schedule) - 1)
+                    ]
+                    jitter = random.uniform(-0.05, 0.05)
+                    sleep_seconds = max(0.0, base_delay + jitter)
+                    logger.info(
+                        "SafeHaven retrying with backoff",
+                        extra={
+                            "attempt": attempt_name,
+                            "attempt_index": attempt_index + 1,
+                            "sleep_seconds": round(sleep_seconds, 4),
+                        },
+                    )
+                    time.sleep(sleep_seconds)
+
                 logger.info(
                     "SafeHaven /virtual-accounts request payload",
                     extra={
                         "attempt": attempt_name,
+                        "attempt_index": attempt_index + 1,
                         "validFor": payload.get("validFor"),
                         "callbackUrl": payload.get("callbackUrl"),
                         "amountControl": payload.get("amountControl"),
@@ -303,6 +328,14 @@ class SafeHavenProvider(PaymentProvider):
                     last_error = ValueError("SafeHaven did not return account details")
                     continue
 
+                logger.info(
+                    "SafeHaven virtual account created",
+                    extra={
+                        "attempt": attempt_name,
+                        "attempt_index": attempt_index + 1,
+                        "payload_variant": attempt_name,
+                    },
+                )
                 return VirtualAccountResponse(
                     account_number=str(account_number),
                     account_name=str(account_name),

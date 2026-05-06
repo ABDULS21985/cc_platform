@@ -287,6 +287,56 @@ export interface WithdrawResponse {
   data: WithdrawData;
 }
 
+export interface WalletBeneficiary {
+  id: number;
+  user_id: number;
+  name: string;
+  account_number: string;
+  account_name: string;
+  bank_code: string;
+  bank_name: string;
+  nickname?: string | null;
+  is_favorite: boolean;
+  last_used_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WalletBeneficiaryList {
+  beneficiaries: WalletBeneficiary[];
+  pagination: Pagination;
+}
+
+export interface WalletBeneficiaryPayload {
+  account_number: string;
+  account_name: string;
+  bank_code: string;
+  bank_name: string;
+  nickname?: string | null;
+  is_favorite?: boolean;
+}
+
+export interface WalletBeneficiarySave {
+  beneficiary: WalletBeneficiary;
+  already_saved: boolean;
+}
+
+export type WalletPinResponse = ApiResponse<Record<string, never>>;
+
+export interface SetWalletPinPayload {
+  pin: string;
+}
+
+export interface ChangeWalletPinPayload {
+  old_pin: string;
+  new_pin: string;
+}
+
+export interface ResetWalletPinConfirmPayload {
+  otp: string;
+  new_pin: string;
+}
+
 // Profile Types
 export interface ProfileData extends UserResponse {
   firebase_uid: string;
@@ -367,6 +417,49 @@ export interface CommunityResponse {
   success: boolean;
   message: string;
   data: CommunityData;
+}
+
+export type CommunitySearchParams = {
+  query?: string;
+  interest_id?: number;
+  visibility?: string;
+  sort?: 'recent' | 'popular' | 'newest';
+  limit?: number;
+  offset?: number;
+};
+
+export interface CommunityOverviewMetrics {
+  total: number;
+  deposits_volume: number;
+  payments_volume: number;
+  transfers_volume: number;
+  withdrawals_volume: number;
+}
+
+export interface CommunityOverviewData {
+  community: CommunityData;
+  wallet: Partial<CommunityBalanceData>;
+  members: {
+    active: number;
+    total: number;
+    owners_active: number;
+    admins_active: number;
+    joined_last_month: number;
+  };
+  transactions: CommunityOverviewMetrics;
+}
+
+export interface UserAdminOverviewData {
+  communities: { count: number };
+  wallets: { total_balance: number; currency: string };
+  members: { active_total: number };
+  transactions: CommunityOverviewMetrics;
+  per_community: Array<{
+    community: Pick<CommunityData, 'id' | 'name' | 'slug' | 'status'>;
+    wallet: Partial<CommunityBalanceData>;
+    members: { active: number };
+    transactions: CommunityOverviewMetrics;
+  }>;
 }
 
 export interface MemberData {
@@ -694,6 +787,66 @@ export interface OrganizationResponse {
   data: OrganizationData;
 }
 
+export interface InstitutionData {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InstitutionListResponse {
+  success: boolean;
+  message: string;
+  data: {
+    institutions: InstitutionData[];
+    pagination: any;
+  };
+}
+
+export interface CreateInstitutionPayload {
+  name: string;
+  description?: string | null;
+}
+
+export interface InstitutionResponse {
+  success: boolean;
+  message: string;
+  data: InstitutionData;
+}
+
+export interface PostUpdatePayload {
+  body?: string | null;
+  media_urls?: string[];
+  mentioned_user_ids?: number[];
+  post_type?: string;
+  is_pinned?: boolean;
+  comments_enabled?: boolean;
+}
+
+export interface CommunityMediaUpdatePayload {
+  url: string;
+}
+
+export interface CommunityTransferStatusData
+  extends Omit<WithdrawData, 'destination_bank' | 'destination_account' | 'message'> {
+  recipient_account: string | null;
+  recipient_name: string | null;
+  recipient_bank_code: string | null;
+  provider_reference: string | null;
+  provider: string | null;
+  duplicate?: boolean;
+}
+
+export interface CommunityTransferStatusResponse {
+  success: boolean;
+  message: string;
+  data: CommunityTransferStatusData;
+}
+
 // --- API Service Object ---
 
 export const ApiService = {
@@ -795,6 +948,35 @@ export const ApiService = {
     withdraw: (data: WithdrawPayload) =>
       axiosInstance.post<WithdrawResponse>("/v2/wallet/withdraw", data),
 
+    getBeneficiaries: (params?: { limit?: number; offset?: number }) =>
+      axiosInstance.get<ApiResponse<WalletBeneficiaryList>>(
+        "/v2/wallet/beneficiaries",
+        { params },
+      ),
+
+    saveBeneficiary: (data: WalletBeneficiaryPayload) =>
+      axiosInstance.post<ApiResponse<WalletBeneficiarySave>>(
+        "/v2/wallet/beneficiaries",
+        data,
+      ),
+
+    deleteBeneficiary: (beneficiaryId: number) =>
+      axiosInstance.delete<WalletPinResponse>(
+        `/v2/wallet/beneficiaries/${beneficiaryId}`,
+      ),
+
+    setPin: (data: SetWalletPinPayload) =>
+      axiosInstance.post<WalletPinResponse>("/v2/wallet/pin/set", data),
+
+    changePin: (data: ChangeWalletPinPayload) =>
+      axiosInstance.post<WalletPinResponse>("/v2/wallet/pin/change", data),
+
+    requestPinReset: () =>
+      axiosInstance.post<WalletPinResponse>("/v2/wallet/pin/reset/request"),
+
+    confirmPinReset: (data: ResetWalletPinConfirmPayload) =>
+      axiosInstance.post<WalletPinResponse>("/v2/wallet/pin/reset/confirm", data),
+
     getTransactions: (params?: {
       limit?: number;
       offset?: number;
@@ -844,36 +1026,21 @@ export const ApiService = {
   // =========================================================================
   communities: {
     // Basic CRUD
-    list: (params?: {
-      query?: string;
-      interest_id?: number;
-      visibility?: string;
-      sort?: 'recent' | 'popular' | 'newest';
-      limit?: number;
-      offset?: number;
-    }) => axiosInstance.get<CommunityListResponse>("/v2/community", { params }),
+    list: (params?: CommunitySearchParams) =>
+      axiosInstance.get<CommunityListResponse>("/v2/community", { params }),
 
-    mine: (params?: {
-      query?: string;
-      interest_id?: number;
-      visibility?: string;
-      sort?: 'recent' | 'popular' | 'newest';
-      limit?: number;
-      offset?: number;
-    }) =>
+    mine: (params?: CommunitySearchParams) =>
       axiosInstance.get<CommunityListResponse>("/v2/community/me/owned", {
         params,
       }),
 
-    joined: (params?: {
-      query?: string;
-      interest_id?: number;
-      visibility?: string;
-      sort?: 'recent' | 'popular' | 'newest';
-      limit?: number;
-      offset?: number;
-    }) =>
+    joined: (params?: CommunitySearchParams) =>
       axiosInstance.get<CommunityListResponse>("/v2/community/me", { params }),
+
+    admin: (params?: CommunitySearchParams) =>
+      axiosInstance.get<CommunityListResponse>("/v2/community/me/admin", {
+        params,
+      }),
 
     create: (data: CreateCommunityPayload) =>
       axiosInstance.post<CommunityResponse>("/v2/community", data),
@@ -888,6 +1055,28 @@ export const ApiService = {
 
     getStats: (id: number) =>
       axiosInstance.get<ApiResponse<any>>(`/v2/community/${id}/stats`),
+
+    getAdminOverview: () =>
+      axiosInstance.get<ApiResponse<UserAdminOverviewData>>(
+        "/v2/community/me/overview",
+      ),
+
+    getOverview: (id: number) =>
+      axiosInstance.get<ApiResponse<CommunityOverviewData>>(
+        `/v2/community/${id}/overview`,
+      ),
+
+    updateCoverPhoto: (id: number, data: CommunityMediaUpdatePayload) =>
+      axiosInstance.put<CommunityResponse>(
+        `/v2/community/${id}/cover-photo`,
+        data,
+      ),
+
+    updateProfilePicture: (id: number, data: CommunityMediaUpdatePayload) =>
+      axiosInstance.put<CommunityResponse>(
+        `/v2/community/${id}/profile-picture`,
+        data,
+      ),
 
     /** Aggregate community counts per Discover-page category label. */
     categoryCounts: (labels: string[]) =>
@@ -917,6 +1106,11 @@ export const ApiService = {
       axiosInstance.put<MemberResponse>(
         `/v2/community/${communityId}/members/${userId}/role`,
         { role },
+      ),
+
+    suspendMember: (communityId: number, userId: number) =>
+      axiosInstance.post<MemberResponse>(
+        `/v2/community/${communityId}/members/${userId}/suspend`,
       ),
 
     removeMember: (communityId: number, userId: number) =>
@@ -989,6 +1183,11 @@ export const ApiService = {
         data,
       ),
 
+    getTransferStatus: (id: number, reference: string) =>
+      axiosInstance.get<CommunityTransferStatusResponse>(
+        `/v2/community/${id}/transfer/${reference}`,
+      ),
+
     // Bills
     getBills: (id: number, params?: { limit?: number; offset?: number }) =>
       axiosInstance.get<BillListResponse>(`/v2/community/${id}/bills`, {
@@ -1033,19 +1232,20 @@ export const ApiService = {
         params,
       }),
 
-    createPost: (
-      communityId: number,
-      data: {
-        body: string | null;
-        media_urls?: string[];
-        mentioned_user_ids?: number[];
-        post_type?: string;
-        is_pinned?: boolean;
-        comments_enabled?: boolean;
-      },
-    ) =>
+    createPost: (communityId: number, data: PostUpdatePayload) =>
       axiosInstance.post<ApiResponse<PostData>>(
         `/v2/community/${communityId}/posts`,
+        data,
+      ),
+
+    getPost: (postId: number) =>
+      axiosInstance.get<ApiResponse<PostData>>(
+        `/v2/community/posts/${postId}`,
+      ),
+
+    updatePost: (postId: number, data: PostUpdatePayload) =>
+      axiosInstance.put<ApiResponse<PostData>>(
+        `/v2/community/posts/${postId}`,
         data,
       ),
 
@@ -1083,6 +1283,11 @@ export const ApiService = {
         data,
       ),
 
+    deletePostComment: (commentId: number) =>
+      axiosInstance.delete<ApiResponse<any>>(
+        `/v2/community/posts/comments/${commentId}`,
+      ),
+
     togglePostReaction: (
       postId: number,
       data?: { reaction_type?: "like" },
@@ -1111,6 +1316,19 @@ export const ApiService = {
 
     get: (id: number) =>
       axiosInstance.get<OrganizationResponse>(`/v2/organizations/${id}`),
+  },
+
+  institutions: {
+    list: (params?: { limit?: number; offset?: number }) =>
+      axiosInstance.get<InstitutionListResponse>("/v2/institutions", {
+        params,
+      }),
+
+    create: (data: CreateInstitutionPayload) =>
+      axiosInstance.post<InstitutionResponse>("/v2/institutions", data),
+
+    get: (id: number) =>
+      axiosInstance.get<InstitutionResponse>(`/v2/institutions/${id}`),
   },
 
   // =========================================================================
@@ -1151,6 +1369,11 @@ export const ApiService = {
     markRead: (id: number) =>
       axiosInstance.patch<ApiResponse<{ notification: NotificationApi }>>(
         `/v2/notifications/${id}`,
+      ),
+
+    markUnread: (id: number) =>
+      axiosInstance.post<ApiResponse<{ notification: NotificationApi }>>(
+        `/v2/notifications/${id}/unread`,
       ),
 
     markAllRead: () =>

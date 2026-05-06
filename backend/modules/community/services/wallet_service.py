@@ -22,6 +22,7 @@ from modules.wallet.providers.base_payment_provider import TransferRequest, Virt
 from modules.wallet.providers.payment_providers import PaymentProviderContext
 from modules.wallet.models.wallet import Wallet
 from modules.wallet.models.wallet_transaction import WalletTransaction
+from modules.core.response_formatter import format_not_found
 from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
@@ -484,12 +485,17 @@ class CommunityWalletService:
             db.session.rollback()
             return None, str(e)
     
-    def get_wallet_summary(self, community_id: int) -> Dict[str, Any]:
-        """Get wallet summary"""
+    def get_wallet_summary(self, community_id: int):
+        """Get wallet summary.
+
+        Returns the summary dict on success, or a ``(response, status)`` tuple
+        produced by :func:`format_not_found` when no community wallet exists,
+        so the resource can propagate the 404 directly.
+        """
         wallet = self.wallet_repo.find_by_community_id(community_id)
         if not wallet:
-            return {}
-        
+            return format_not_found("Wallet")
+
         return {
             'community_id': community_id,
             'balance': float(wallet.balance),
