@@ -23,7 +23,6 @@ import { NotificationPreferencesContent } from '@/components/settings/Notificati
 import { VerificationContent } from '@/components/settings/VerificationContent';
 import { RoleAccessContent } from '@/components/settings/RoleAccessContent';
 import { DeactivateAccountContent } from '@/components/settings/DeactivateAccountContent';
-import { PlaceholderContent } from '@/components/settings/PlaceholderContent';
 
 export const dynamic = 'force-dynamic';
 

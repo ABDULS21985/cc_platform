@@ -201,6 +201,25 @@ export function NotificationPreferencesContent() {
       push: 'channel_push',
     };
     try {
+      // Push toggle has a permission/SW step before we save the preference.
+      if (id === 'push' && value) {
+        const fcm = await import('@/lib/fcm');
+        const result = await fcm.registerForPush();
+        if (!result.ok) {
+          setChannels((c) => ({ ...c, push: false }));
+          if (result.reason === 'denied') {
+            toast.error('Browser notifications were denied');
+          } else if (result.reason === 'no_config') {
+            toast.error('Push notifications are not configured for this build');
+          } else if (result.reason === 'unsupported') {
+            toast.error('Your browser does not support push notifications');
+          } else {
+            toast.error('Could not enable push');
+          }
+          return;
+        }
+      }
+
       await ApiService.notifications.updatePreferences({
         [fieldMap[id]]: value,
       } as Partial<Omit<NotificationPreferencesApi, 'user_id' | 'updated_at' | 'security'>>);
