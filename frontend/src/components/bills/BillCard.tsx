@@ -7,7 +7,6 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  MoreHorizontal,
   Receipt,
   Repeat,
   Users,
@@ -73,8 +72,10 @@ export function BillCard({ bill, onPay }: BillCardProps) {
   );
   const isPayable = bill.status === 'pending' || bill.status === 'overdue';
 
-  // Detail page lives under the community route per the existing app structure.
-  const detailHref = `/dashboard/community/${bill.community.id}/bill/${bill.id}`;
+  // The dedicated bill detail page doesn't exist yet — route to the community
+  // detail with a `bill` query param so the row click lands somewhere real
+  // instead of 404'ing.
+  const detailHref = `/dashboard/community/${bill.community.id}?bill=${bill.id}`;
 
   return (
     <motion.div
@@ -278,14 +279,6 @@ export function BillCard({ bill, onPay }: BillCardProps) {
                     </Link>
                   </Button>
                 )}
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Bill options"
-                >
-                  <MoreHorizontal className="size-4" aria-hidden="true" />
-                </Button>
               </div>
             </div>
           </div>

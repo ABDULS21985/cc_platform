@@ -8,7 +8,6 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
@@ -24,10 +23,9 @@ interface MembersHeroProps {
   stats: MembersHeroStats;
   /** Number of communities the user is in. */
   circleCount: number;
-  onInvite: () => void;
 }
 
-export function MembersHero({ stats, circleCount, onInvite }: MembersHeroProps) {
+export function MembersHero({ stats, circleCount }: MembersHeroProps) {
   const items = [
     {
       label: 'Online now',
@@ -63,7 +61,7 @@ export function MembersHero({ stats, circleCount, onInvite }: MembersHeroProps) 
         className="pointer-events-none absolute -bottom-32 -left-16 h-56 w-56 rounded-full bg-info/10 blur-3xl"
       />
 
-      <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="relative">
         <FadeIn>
           <div>
             <Badge variant="soft" size="lg" className="gap-1.5">
@@ -85,17 +83,6 @@ export function MembersHero({ stats, circleCount, onInvite }: MembersHeroProps) 
             </p>
           </div>
         </FadeIn>
-
-        <SlideUp delay={0.05}>
-          <Button
-            type="button"
-            size="default"
-            onClick={onInvite}
-            leadingIcon={<UserPlus className="size-4" />}
-          >
-            Invite someone
-          </Button>
-        </SlideUp>
       </div>
 
       <SlideUp delay={0.1}>

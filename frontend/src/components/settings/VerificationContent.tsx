@@ -46,8 +46,8 @@ export function VerificationContent() {
         nin_verified: !!profile?.nin_verified,
         status: profile?.verification_status || status?.status,
       });
-    } catch (error) {
-      console.error('Failed to load verification status', error);
+    } catch (err) {
+      toastAxiosError(err, 'Failed to load verification status.');
     } finally {
       setLoading(false);
     }

@@ -441,6 +441,19 @@ function formatDayHeader(iso: string): string {
   });
 }
 
+/**
+ * Escape a single CSV cell — quote-doubling per RFC 4180, plus literal newlines
+ * and carriage returns turned into their escape sequences so a single bad row
+ * can't break a downstream parser.
+ */
+function csvCell(value: string | number | null | undefined): string {
+  const s = value == null ? '' : String(value);
+  return s
+    .replace(/"/g, '""')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n');
+}
+
 function exportCsv(items: ActivityItem[]): void {
   const header = [
     'date',
@@ -469,14 +482,14 @@ function exportCsv(items: ActivityItem[]): void {
       time,
       it.type,
       it.direction,
-      it.title.replace(/"/g, '""'),
-      it.description.replace(/"/g, '""'),
-      it.community?.name ?? '',
-      it.counterparty?.name ?? '',
+      csvCell(it.title),
+      csvCell(it.description),
+      csvCell(it.community?.name ?? ''),
+      csvCell(it.counterparty?.name ?? ''),
       it.amount.toString(),
       (it.fee ?? 0).toString(),
       it.status,
-      it.reference ?? '',
+      csvCell(it.reference ?? ''),
     ];
   });
   const csv = [
@@ -491,7 +504,8 @@ function exportCsv(items: ActivityItem[]): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Defer revoke so the browser has time to write the blob to disk.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export default function ActivityPage() {

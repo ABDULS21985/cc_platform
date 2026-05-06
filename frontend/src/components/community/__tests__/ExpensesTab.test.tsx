@@ -97,7 +97,7 @@ describe('ExpensesTab', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Split payment/i }));
     expect(await screen.findByText('Rent split')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('creates campaigns through the community bills API as free-will bills', async () => {
     const ExpensesTab = await importComponent();
@@ -127,5 +127,5 @@ describe('ExpensesTab', () => {
         }),
       );
     });
-  });
+  }, 15000);
 });

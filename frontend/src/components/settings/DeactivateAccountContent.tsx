@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiService } from '@/services/api';
+import useUserData from '@/hooks/useUserData';
 import { toast } from 'sonner';
 
 interface Blocker {
@@ -17,7 +18,14 @@ interface Blocker {
   [key: string]: unknown;
 }
 
+interface UserShape {
+  email?: string;
+}
+
 export function DeactivateAccountContent() {
+  const user = useUserData() as UserShape | null;
+  const userEmail = user?.email ?? '';
+
   const [loading, setLoading] = useState(true);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
   const [canDeactivate, setCanDeactivate] = useState(false);
@@ -28,7 +36,6 @@ export function DeactivateAccountContent() {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
 
   const runPreflight = async () => {
     setLoading(true);
@@ -46,18 +53,7 @@ export function DeactivateAccountContent() {
   };
 
   useEffect(() => {
-    let cancelled = false;
-    ApiService.profile.get()
-      .then((res) => {
-        if (!cancelled) setUserEmail(res.data?.data?.email ?? '');
-      })
-      .catch(() => {
-        if (!cancelled) setUserEmail('');
-      });
     runPreflight();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const emailMatches = confirmEmail.trim().toLowerCase() === userEmail.toLowerCase();
@@ -190,7 +186,7 @@ export function DeactivateAccountContent() {
             <Input
               id="confirm-email"
               autoComplete="off"
-              placeholder={userEmail || 'you@example.com'}
+              placeholder={userEmail}
               value={confirmEmail}
               onChange={(e) => setConfirmEmail(e.target.value)}
               className="mt-2"

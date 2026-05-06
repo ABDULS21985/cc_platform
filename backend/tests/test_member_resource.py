@@ -52,6 +52,14 @@ def test_member_filter_mentionable_pins_status_to_active(monkeypatch):
     assert captured_status == ['active']
 
 
+def _unwrap(handler):
+    """Peel decorators (token_required, Smorest @arguments, @response)."""
+    inner = handler
+    while hasattr(inner, '__wrapped__'):
+        inner = inner.__wrapped__
+    return inner
+
+
 def test_members_resource_requires_active_membership(monkeypatch, app):
     """Non-members get 403 from the listing endpoint."""
     from modules.community.resources import member_resource as resource_module
@@ -68,8 +76,10 @@ def test_members_resource_requires_active_membership(monkeypatch, app):
     )
 
     current_user = MagicMock(id=42)
+    inner = _unwrap(resource_module.CommunityMembersResource.get)
     with app.test_request_context('/api/v2/community/1/members'):
-        response, status = resource_module.CommunityMembersResource().get(
+        response, status = inner(
+            resource_module.CommunityMembersResource(),
             {'limit': 50, 'offset': 0, 'status': 'active'},
             1,
             current_user=current_user,
@@ -81,8 +91,14 @@ def test_members_resource_requires_active_membership(monkeypatch, app):
 
 
 def test_members_resource_returns_payload_for_member(monkeypatch, app):
-    """An active member receives the filtered payload and pagination meta."""
+    """An active member receives the filtered payload and pagination meta.
+
+    The resource also batches a posts-per-user count via a direct
+    ``db.session.query(...).filter(...).group_by(...).all()`` call. We stub
+    the chain so the test doesn't require a live SQLAlchemy app context.
+    """
     from modules.community.resources import member_resource as resource_module
+    from modules.auth_v2 import extensions as auth_extensions
 
     monkeypatch.setattr(
         resource_module.community_service,
@@ -116,9 +132,18 @@ def test_members_resource_returns_payload_for_member(monkeypatch, app):
         lambda community_id, args, limit, offset: ([member], 1),
     )
 
+    # Stub the batched posts-count query.
+    chain = MagicMock()
+    chain.filter.return_value = chain
+    chain.group_by.return_value = chain
+    chain.all.return_value = [(99, 4)]
+    monkeypatch.setattr(auth_extensions.db.session, 'query', lambda *a, **kw: chain)
+
     current_user = MagicMock(id=42)
+    inner = _unwrap(resource_module.CommunityMembersResource.get)
     with app.test_request_context('/api/v2/community/1/members?q=sa&mentionable=true'):
-        response, status = resource_module.CommunityMembersResource().get(
+        response, status = inner(
+            resource_module.CommunityMembersResource(),
             {'limit': 50, 'offset': 0, 'q': 'sa', 'mentionable': True, 'status': 'active'},
             1,
             current_user=current_user,
@@ -129,3 +154,5 @@ def test_members_resource_returns_payload_for_member(monkeypatch, app):
     assert response['data']['pagination']['total'] == 1
     assert response['data']['pagination']['has_more'] is False
     assert response['data']['members'][0]['user']['firstname'] == 'Sam'
+    # The batched posts_count gets attached to the user payload by the resource.
+    assert response['data']['members'][0]['user']['posts_count'] == 4

@@ -14,16 +14,23 @@ def app():
 
 
 def _patch_with_user(app, comment_id, body='updated', user_id=42):
-    """Invoke the PATCH MethodView bypassing token decorator."""
+    """Invoke the PATCH MethodView bypassing the token decorator.
+
+    The patch method is wrapped by ``token_required`` (uses functools.wraps,
+    exposes ``__wrapped__``) followed by Smorest's ``arguments`` decorator
+    (also wraps). Two ``__wrapped__`` hops give us the underlying handler.
+    """
     current_user = MagicMock(id=user_id)
+    inner = resource_module.CommunityPostCommentResource.patch
+    while hasattr(inner, '__wrapped__'):
+        inner = inner.__wrapped__
     with app.test_request_context(
         f'/api/v2/community/posts/comments/{comment_id}',
         method='PATCH',
         json={'body': body},
     ):
-        # Call the underlying patch method directly so we bypass
-        # token_required and Smorest's @arguments unwrapping.
-        return resource_module.CommunityPostCommentResource().patch(
+        return inner(
+            resource_module.CommunityPostCommentResource(),
             {'body': body},
             comment_id,
             current_user=current_user,

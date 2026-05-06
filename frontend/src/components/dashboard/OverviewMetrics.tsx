@@ -83,15 +83,24 @@ export function OverviewMetrics() {
         }
       }
 
-      // Bills due across joined communities
+      // Bills due across joined communities. We cap parallel calls at 25 so a
+      // power user in 100+ circles doesn't fan out an unbounded burst on every
+      // dashboard render — the count is then suffixed with "+" in the UI.
+      // TODO: replace with a /v2/me/bills aggregate endpoint when the backend
+      // ships one.
+      const COMMUNITY_CAP = 25;
       let billsDueCount = 0;
       let billsDueAmount = 0;
       if (joinedRes.status === 'fulfilled') {
         const joined = joinedRes.value.data?.data?.communities ?? [];
+        const sliced = joined.slice(0, COMMUNITY_CAP);
         const billLists = await Promise.allSettled(
-          joined.map((c) => ApiService.communities.getBills(c.id, { limit: 100 })),
+          sliced.map((c) =>
+            ApiService.communities.getBills(c.id, { limit: 100 }),
+          ),
         );
         for (const b of billLists) {
+          // One community failing must not abort the whole metric.
           if (b.status !== 'fulfilled') continue;
           const items = ((b.value.data?.data as { bills?: unknown[] })?.bills ?? []) as Array<
             Record<string, unknown>

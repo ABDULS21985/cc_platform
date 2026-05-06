@@ -444,7 +444,9 @@ function mapApiAudit(a: AuditApi): AuditEvent {
 }
 
 export default function AuditPage() {
-  const [events, setEvents] = useState<AuditEvent[]>(useDemoData() ? MOCK : []);
+  // Initial render starts empty — demo seed (if any) gets applied inside the
+  // effect below so the first paint never shows MOCK rows in production.
+  const [events, setEvents] = useState<AuditEvent[]>([]);
   const [tab, setTab] = useState<TabValue>('all');
   const [period, setPeriod] = useState<Period>('7d');
   const [search, setSearch] = useState('');

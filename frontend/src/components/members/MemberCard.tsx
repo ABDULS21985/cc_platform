@@ -5,7 +5,6 @@ import {
   Calendar,
   MapPin,
   MessageCircle,
-  MoreHorizontal,
   Star,
   UserPlus,
   Users,
@@ -224,36 +223,35 @@ export function MemberCard({
             </ul>
           </div>
 
-          {/* Actions */}
-          <div className="mt-auto flex items-center gap-2 border-t border-border pt-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              block
-              leadingIcon={<MessageCircle className="size-3.5" />}
-              onClick={() => onMessage?.(item.id)}
-            >
-              Message
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              leadingIcon={<UserPlus className="size-3.5" />}
-              onClick={() => onInvite?.(item.id)}
-            >
-              Invite
-            </Button>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="More options"
-            >
-              <MoreHorizontal className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+          {/* Actions — only render when the parent wires real handlers, so
+              we don't surface dead buttons that lead nowhere. */}
+          {(onMessage || onInvite) && (
+            <div className="mt-auto flex items-center gap-2 border-t border-border pt-3">
+              {onMessage && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  block
+                  leadingIcon={<MessageCircle className="size-3.5" />}
+                  onClick={() => onMessage(item.id)}
+                >
+                  Message
+                </Button>
+              )}
+              {onInvite && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  leadingIcon={<UserPlus className="size-3.5" />}
+                  onClick={() => onInvite(item.id)}
+                >
+                  Invite
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

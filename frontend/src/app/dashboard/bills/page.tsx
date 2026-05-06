@@ -6,6 +6,7 @@ import { ApiService, type CommunityData } from '@/services/api';
 import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toastAxiosError } from '@/hooks/useAxiosError';
+import useUserData from '@/hooks/useUserData';
 import {
   AlertCircle,
   CalendarPlus,
@@ -346,7 +347,13 @@ async function fetchAggregatedBills(currentUserId?: number): Promise<BillItem[]>
   });
 }
 
+interface UserShape {
+  id?: number;
+}
+
 export default function BillsPage() {
+  const user = useUserData() as UserShape | null;
+  const currentUserId = user?.id;
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
@@ -360,13 +367,6 @@ export default function BillsPage() {
     (async () => {
       setLoading(true);
       try {
-        let currentUserId: number | undefined;
-        try {
-          const profileRes = await ApiService.profile.get();
-          currentUserId = profileRes.data?.data?.id;
-        } catch {
-          currentUserId = undefined;
-        }
         const real = await fetchAggregatedBills(currentUserId);
         if (cancelled) return;
         if (real.length === 0) {
@@ -388,7 +388,7 @@ export default function BillsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [currentUserId]);
 
   const stats = useMemo(() => {
     const outstanding = bills.filter(

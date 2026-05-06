@@ -446,13 +446,13 @@ export default function InboxPage() {
       prev.map((it) => (ids.includes(it.id) ? { ...it, isRead: true } : it))
     );
     if (usingMock) return;
-    for (const it of newlyRead) {
-      if (isServerId(it.id)) {
-        // Context wraps the API call AND decrements the bell badge count
-        // for the specific category, keeping sidebar badges in sync.
-        ctxMarkRead(serverIdNum(it.id), it.category);
-      }
-    }
+    // Fan out in parallel — each ctxMarkRead wraps the API call and
+    // decrements the bell badge for the specific category.
+    void Promise.allSettled(
+      newlyRead
+        .filter((it) => isServerId(it.id))
+        .map((it) => ctxMarkRead(serverIdNum(it.id), it.category)),
+    );
   };
   const markUnread = (ids: string[]) => {
     setItems((prev) =>

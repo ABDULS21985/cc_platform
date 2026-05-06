@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { ApiService, type CommunityData } from '@/services/api';
 import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -462,7 +461,6 @@ function applyMemberBookmarks(
 }
 
 export default function MembersPage() {
-  const router = useRouter();
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
@@ -656,50 +654,10 @@ export default function MembersPage() {
     }
   };
 
-  const handleInvite = async (id: string) => {
-    const m = members.find((m) => m.id === id);
-    if (!m) {
-      router.push('/dashboard/community');
-      return;
-    }
-
-    const community = m.communities[0];
-    const communityId = community ? Number(community.id) : NaN;
-    if (!community || !Number.isFinite(communityId)) {
-      router.push('/dashboard/community');
-      return;
-    }
-    if (usingMock) {
-      router.push(`/dashboard/community/${communityId}`);
-      return;
-    }
-    try {
-      const res = await ApiService.communities.createInvite(communityId, {
-        expires_in_days: 7,
-        max_uses: 1,
-      });
-      const inviteCode = res.data?.data?.invite_code;
-      if (inviteCode && navigator.clipboard) {
-        await navigator.clipboard.writeText(`${window.location.origin}/join/${inviteCode}`);
-      }
-      toast.success(`Invite link created for ${community.name}`);
-    } catch (err) {
-      toastAxiosError(err, 'Failed to create invite link.');
-    }
-  };
-
-  const handleMessage = (id: string) => {
-    router.push(`/dashboard/inbox?member=${id}`);
-  };
-
   return (
     <DashboardLayout pageTitle="Members">
       <div className="space-y-6">
-        <MembersHero
-          stats={stats}
-          circleCount={communities.length}
-          onInvite={() => router.push('/dashboard/community')}
-        />
+        <MembersHero stats={stats} circleCount={communities.length} />
 
         {/* Tabs */}
         <div
@@ -851,8 +809,6 @@ export default function MembersPage() {
                   <li key={m.id}>
                     <MemberCard
                       item={m}
-                      onMessage={handleMessage}
-                      onInvite={handleInvite}
                       onToggleFavorite={toggleFavorite}
                     />
                   </li>

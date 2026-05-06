@@ -40,6 +40,7 @@ import {
   SlideUp,
 } from '@/components/ui/motion';
 import { toast } from 'sonner';
+import { toastAxiosError } from '@/hooks/useAxiosError';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -301,22 +302,43 @@ export default function SavedPage() {
 
   const remove = (id: string) => {
     const item = items.find((i) => i.id === id);
+    if (!item) return;
+    // Optimistic remove — rollback on server failure so the user doesn't lose
+    // the row to a silent error.
     setItems((prev) => prev.filter((i) => i.id !== id));
     if (!usingMock && isServerId(id)) {
-      ApiService.bookmarks.delete(serverIdNum(id)).catch(() => {});
+      ApiService.bookmarks.delete(serverIdNum(id)).then(
+        () => {
+          toast.success(`Removed "${item.title}"`);
+        },
+        (err) => {
+          setItems((prev) => {
+            if (prev.some((i) => i.id === id)) return prev;
+            return [item, ...prev];
+          });
+          toastAxiosError(err, 'Could not unsave');
+        },
+      );
+      return;
     }
-    toast.success(`Removed "${item?.title}"`);
+    toast.success(`Removed "${item.title}"`);
   };
 
   const clearAll = () => {
     if (filtered.length === 0) return;
     const filteredIds = new Set(filtered.map((f) => f.id));
+    const removed = items.filter((i) => filteredIds.has(i.id));
     setItems((prev) => prev.filter((i) => !filteredIds.has(i.id)));
     if (!usingMock) {
-      for (const id of filteredIds) {
-        if (isServerId(id)) {
-          ApiService.bookmarks.delete(serverIdNum(id)).catch(() => {});
-        }
+      for (const item of removed) {
+        if (!isServerId(item.id)) continue;
+        ApiService.bookmarks.delete(serverIdNum(item.id)).catch((err) => {
+          setItems((prev) => {
+            if (prev.some((i) => i.id === item.id)) return prev;
+            return [item, ...prev];
+          });
+          toastAxiosError(err, 'Could not unsave');
+        });
       }
     }
     toast.success(`Removed ${filtered.length} bookmarks`);
