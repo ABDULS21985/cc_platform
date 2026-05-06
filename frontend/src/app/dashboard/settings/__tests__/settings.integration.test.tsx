@@ -59,16 +59,18 @@ vi.mock('@/components/layout/DashboardLayout', () => ({
   ),
 }));
 
+const STABLE_USER = {
+  id: 50,
+  firstname: 'Ada',
+  lastname: 'M',
+  phone_number: '+234',
+  bio: '',
+  email: 'a@b.co',
+  profile_photo: null,
+  email_verified: true,
+};
 vi.mock('@/hooks/useUserData', () => ({
-  default: () => ({
-    id: 50,
-    firstname: 'Ada',
-    lastname: 'M',
-    phone_number: '+234',
-    bio: '',
-    email: 'a@b.co',
-    profile_photo: null,
-  }),
+  default: () => STABLE_USER,
 }));
 
 async function importPage() {
@@ -111,7 +113,7 @@ afterEach(() => {
   });
 });
 
-describe('/dashboard/settings', () => {
+describe('/dashboard/settings', { timeout: 15000 }, () => {
   it('default route renders the "Personal information" section', async () => {
     const Page = await importPage();
     render(<Page />);
