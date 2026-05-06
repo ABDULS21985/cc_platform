@@ -92,7 +92,7 @@ export function CreatePostDialog({
             setSelectedCommunityName(list[0].name);
           }
         } catch (error) {
-          console.error('Error fetching joined communities', error);
+          toastAxiosError(error, 'Failed to load communities.');
         }
       };
       fetchMyCommunities();
@@ -201,10 +201,9 @@ export function CreatePostDialog({
           {/* Author */}
           <div className="flex items-center gap-3">
             <Avatar className="size-10">
-              <AvatarImage
-                src={userData?.profile_photo || '/images/image.png'}
-                alt=""
-              />
+              {userData?.profile_photo ? (
+                <AvatarImage src={userData.profile_photo} alt="" />
+              ) : null}
               <AvatarFallback className="bg-brand-soft text-accent-foreground font-bold">
                 {userData?.firstname?.charAt(0)?.toUpperCase() || 'U'}
               </AvatarFallback>

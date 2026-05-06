@@ -1,7 +1,7 @@
 """add expense_kind to bills
 
-Revision ID: 025_bill_expense_kind
-Revises: 024_notification_community_id
+Revision ID: 026_bill_expense_kind
+Revises: 025_subscription_execution_fields
 Create Date: 2026-05-06 17:45:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '025_bill_expense_kind'
-down_revision = '024_notification_community_id'
+revision = '026_bill_expense_kind'
+down_revision = '025_subscription_execution_fields'
 branch_labels = None
 depends_on = None
 

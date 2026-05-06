@@ -29,7 +29,7 @@ interface PostComment {
 interface Post {
   id: number;
   communityId: number;
-  author: { name: string; avatar: string; fallback: string };
+  author: { name: string; avatar?: string | null; fallback: string };
   group: string;
   content: string;
   timeAgo: string;
@@ -88,7 +88,7 @@ function mapApiPost(p: ApiPost, communityName: string): Post {
     communityId: p.community_id,
     author: {
       name: `@${(p.author?.firstname ?? authorName).toLowerCase().replace(/\s+/g, '')}`,
-      avatar: p.author?.profile_photo ?? '/images/image.png',
+      avatar: p.author?.profile_photo ?? null,
       fallback: initial,
     },
     group: communityName,
@@ -242,7 +242,9 @@ function PostCard({
         {/* Header */}
         <header className="flex items-center gap-3">
           <Avatar className="size-10">
-            <AvatarImage src={post.author.avatar} alt="" />
+            {post.author.avatar ? (
+              <AvatarImage src={post.author.avatar} alt="" />
+            ) : null}
             <AvatarFallback>{post.author.fallback}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
@@ -390,7 +392,6 @@ function PostCard({
           aria-label="Add a comment"
         >
           <Avatar className="size-8">
-            <AvatarImage src="/images/image.png" alt="" />
             <AvatarFallback className="text-[10px]">Me</AvatarFallback>
           </Avatar>
           <div className="relative flex-1">

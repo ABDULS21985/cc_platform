@@ -16,7 +16,6 @@ export default function Protected({ children }: { children: React.ReactNode }) {
     try {
       await ApiService.auth.logout();
     } catch (error) {
-      console.error("Logout failed", error);
       toastAxiosError(error);
     } finally {
       localStorage.removeItem("access_token");

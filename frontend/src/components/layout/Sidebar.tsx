@@ -51,8 +51,6 @@ interface NavItem {
   badge?: string;
   /** Visual tone for the badge. */
   badgeTone?: BadgeTone;
-  /** When true, the link is shown but not yet wired to a real route. */
-  comingSoon?: boolean;
   /**
    * If set, the badge shows the live unread count for this notification
    * category from `useNotifications()`. The literal `total` shows the
@@ -374,7 +372,6 @@ export function Sidebar({ isOpen, onToggle, onCloseMobile, user, onLogout }: Sid
                       active
                         ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
                         : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                      item.comingSoon && 'opacity-80',
                       !isOpen && 'justify-center'
                     );
 
@@ -481,14 +478,7 @@ export function Sidebar({ isOpen, onToggle, onCloseMobile, user, onLogout }: Sid
                           <Link
                             href={item.href}
                             aria-current={active ? 'page' : undefined}
-                            aria-disabled={item.comingSoon || undefined}
-                            title={
-                              !isOpen
-                                ? `${item.label}${
-                                    item.comingSoon ? ' (coming soon)' : ''
-                                  }`
-                                : undefined
-                            }
+                            title={!isOpen ? item.label : undefined}
                             className={linkClasses}
                           >
                             {iconNode}

@@ -268,7 +268,9 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
       <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-white/20 shadow-soft transition-all hover:shadow-lg">
         <div className="flex items-start gap-4">
           <Avatar className="h-12 w-12 border-2 border-white shadow-soft rounded-2xl overflow-hidden">
-            <AvatarImage src={userData?.profile_photo || "/images/image.png"} className="object-cover" />
+            {userData?.profile_photo ? (
+              <AvatarImage src={userData.profile_photo} className="object-cover" />
+            ) : null}
             <AvatarFallback className="bg-teal-50 text-[#0E9DA5] font-bold">
               {userData?.firstname?.charAt(0) || "U"}
             </AvatarFallback>
@@ -384,7 +386,9 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 border-2 border-white shadow-soft rounded-2xl overflow-hidden transition-transform group-hover:scale-105">
-                    <AvatarImage src={post.author?.profile_photo || "/images/image.png"} className="object-cover" />
+                    {post.author?.profile_photo ? (
+                      <AvatarImage src={post.author.profile_photo} className="object-cover" />
+                    ) : null}
                     <AvatarFallback className="bg-teal-50 text-[#0E9DA5] font-bold">
                       {(post.author?.firstname || post.author?.full_name || 'M').charAt(0)}
                     </AvatarFallback>

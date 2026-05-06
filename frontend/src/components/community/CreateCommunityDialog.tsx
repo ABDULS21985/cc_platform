@@ -100,7 +100,6 @@ export function CreateCommunityDialog({
       toggleDialog();
     } catch (error: any) {
       toastAxiosError(error, "Failed to create community.");
-      console.error("Create Community Error:", error);
     } finally {
       setIsSubmitting(false);
     }

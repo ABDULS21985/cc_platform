@@ -6,9 +6,8 @@ SMS service — wraps TermiiClient with:
   * idempotency (60s dedupe on user_id + message hash)
   * dry-run mode when SMS_ENABLED is False
 
-The rate limiter uses an in-memory bucket as a fallback when Redis isn't
-configured — fine for dev / single-instance prod. Multi-instance prod
-should set REDIS_URL so the limiter is shared across workers.
+Redis backs the limiter, idempotency window, and budget counter whenever SMS is
+enabled in production. The in-memory bucket is only a dev/test fallback.
 """
 import hashlib
 import logging
@@ -181,6 +180,9 @@ class SmsService:
         # Idempotency
         now = time.time()
         redis_client = _get_redis_client()
+        if redis_client is None and bool(getattr(Config, 'PRODUCTION', False)):
+            logger.error("SMS skipped: REDIS_URL is required when SMS is enabled in production")
+            return {'success': False, 'reason': 'redis_required'}
         msg_hash = hashlib.sha1(message.encode('utf-8')).hexdigest()
         if _check_dedup(user.id, msg_hash, redis_client=redis_client):
             return {'success': True, 'note': 'deduped'}

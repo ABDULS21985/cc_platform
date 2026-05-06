@@ -140,11 +140,17 @@ export function EventsTab({ communityId, communityName }: EventsTabProps) {
               >
                 <div className="flex">
                   <div className="w-1/3 p-4">
-                    <img
-                      src={event.cover_image || '/images/event.svg'}
-                      alt=""
-                      className="h-full w-full rounded object-cover"
-                    />
+                    {event.cover_image ? (
+                      <img
+                        src={event.cover_image}
+                        alt=""
+                        className="h-full w-full rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full min-h-24 w-full items-center justify-center rounded bg-[#eef8f8] text-[#0E9DA5]">
+                        <Calendar className="size-8" aria-hidden="true" />
+                      </div>
+                    )}
                   </div>
 
                   <div className="w-full p-4 sm:p-3">

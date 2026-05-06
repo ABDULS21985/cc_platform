@@ -86,10 +86,9 @@ export default function BillDetailsClient({
       const response = await ApiService.communities.getBill(
         parseInt(communityId),
         parseInt(id),
-      );
+    );
       setBill(response.data.data);
     } catch (error: any) {
-      console.error("Failed to fetch bill details: ", error);
       toastAxiosError(error, "Failed to load bill details.");
     } finally {
       setLoading(false);

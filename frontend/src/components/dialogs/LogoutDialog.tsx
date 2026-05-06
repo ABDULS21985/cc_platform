@@ -13,6 +13,7 @@ import { ApiService } from "@/services/api";
 import { useRouter } from "next/navigation";
 import { toast } from 'sonner';
 import { Loader2, LogOut } from "lucide-react";
+import { toastAxiosError } from "@/hooks/useAxiosError";
 
 interface LogoutDialogProps {
   isOpen: boolean;
@@ -32,7 +33,7 @@ const LogoutDialog = ({ isOpen, toggleDialog }: LogoutDialogProps) => {
     try {
       await ApiService.auth.logout();
     } catch (error) {
-      console.error("Logout failed", error);
+      toastAxiosError(error, "Logout failed.");
     } finally {
       setIsLoggingOut(false);
       localStorage.removeItem("access_token");

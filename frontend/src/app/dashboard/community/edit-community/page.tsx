@@ -45,7 +45,6 @@ function EditCommunityContent({ communityId }: { communityId: string | null }) {
           setMemberCost(String(cost));
         }
       } catch (error) {
-        console.error('Error fetching community', error);
         toastAxiosError(error, "Failed to load community.");
       } finally {
         setLoading(false);

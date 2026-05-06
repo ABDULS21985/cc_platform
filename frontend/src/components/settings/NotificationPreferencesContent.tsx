@@ -30,8 +30,6 @@ interface ChannelPref {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   enabled: boolean;
-  /** Channels other than `in_app` are not yet wired to the backend. */
-  comingSoon?: boolean;
 }
 
 const CHANNELS: ChannelPref[] = [

@@ -214,7 +214,7 @@ describe('/dashboard/inbox', () => {
     });
   });
 
-  it('More options opens backend-backed actions including mark unread', async () => {
+  it('Mark unread action calls the backend', async () => {
     apiMocks.notifications.list.mockResolvedValue({
       data: {
         data: {
@@ -230,8 +230,7 @@ describe('/dashboard/inbox', () => {
     await screen.findByText('Already read');
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /More options/i }));
-    await user.click(await screen.findByText(/Mark unread/i));
+    await user.click(screen.getByRole('button', { name: /Mark unread/i }));
 
     await waitFor(() => {
       expect(apiMocks.notifications.markUnread).toHaveBeenCalledWith(88);

@@ -1,7 +1,7 @@
 """add subscription execution failure tracking
 
-Revision ID: 024_subscription_execution_fields
-Revises: 023_standing_instruction_fields
+Revision ID: 025_subscription_execution_fields
+Revises: 024_notification_community_id
 Create Date: 2026-05-06 17:30:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '024_subscription_execution_fields'
-down_revision = '023_standing_instruction_fields'
+revision = '025_subscription_execution_fields'
+down_revision = '024_notification_community_id'
 branch_labels = None
 depends_on = None
 

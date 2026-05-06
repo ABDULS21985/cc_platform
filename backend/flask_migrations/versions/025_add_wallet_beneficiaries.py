@@ -1,7 +1,7 @@
 """add wallet beneficiaries
 
-Revision ID: 025_wallet_beneficiaries
-Revises: 024_subscription_execution_fields
+Revision ID: 027_wallet_beneficiaries
+Revises: 026_bill_expense_kind
 Create Date: 2026-05-06 18:30:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '025_wallet_beneficiaries'
-down_revision = '024_subscription_execution_fields'
+revision = '027_wallet_beneficiaries'
+down_revision = '026_bill_expense_kind'
 branch_labels = None
 depends_on = None
 
