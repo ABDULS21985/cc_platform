@@ -37,6 +37,7 @@ import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ApiService, type CommunityData } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -316,16 +317,16 @@ export default function RecurringPage() {
         const real = await fetchAggregatedRecurring(readCurrentUserId());
         if (cancelled) return;
         if (real.length === 0) {
-          setRules(MOCK);
-          setUsingMock(true);
+          setRules(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         } else {
           setRules(real);
           setUsingMock(false);
         }
       } catch {
         if (!cancelled) {
-          setRules(MOCK);
-          setUsingMock(true);
+          setRules(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         }
       } finally {
         if (!cancelled) setLoading(false);

@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -14,76 +15,61 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ApiService, type EventApi } from '@/services/api';
 
-interface LiveEvent {
-  id: string;
-  title: string;
-  community: string;
-  initial: string;
-  startedMinsAgo: number;
-  attendees: number;
+function minsAgo(iso: string | null): number {
+  if (!iso) return 0;
+  return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
 }
 
-interface SuggestedEvent {
-  id: string;
-  title: string;
-  community: string;
-  initial: string;
-  date: { day: number; month: string };
-  location: string;
-  isOnline: boolean;
+function dateChip(iso: string): { day: number; month: string } {
+  const d = new Date(iso);
+  return {
+    day: d.getDate(),
+    month: d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
+  };
 }
-
-const LIVE: LiveEvent[] = [
-  {
-    id: 'live-1',
-    title: 'Crypto academy · Week 4 — Live',
-    community: 'Cryptos NG',
-    initial: 'C',
-    startedMinsAgo: 8,
-    attendees: 124,
-  },
-  {
-    id: 'live-2',
-    title: 'AGM streaming · Q&A',
-    community: 'Lekki Block 3 HOA',
-    initial: 'L',
-    startedMinsAgo: 22,
-    attendees: 38,
-  },
-];
-
-const SUGGESTED: SuggestedEvent[] = [
-  {
-    id: 's-1',
-    title: 'Designers networking mixer',
-    community: 'UI/UX Africa',
-    initial: 'U',
-    date: { day: 21, month: 'Jun' },
-    location: 'Yaba, Lagos',
-    isOnline: false,
-  },
-  {
-    id: 's-2',
-    title: 'Tech meetup 2026',
-    community: 'Lagos Devs',
-    initial: 'L',
-    date: { day: 28, month: 'Jun' },
-    location: 'Co-Creation Hub',
-    isOnline: false,
-  },
-  {
-    id: 's-3',
-    title: 'Faith finance Q&A',
-    community: 'Grace Assembly',
-    initial: 'G',
-    date: { day: 30, month: 'Jun' },
-    location: 'Online',
-    isOnline: true,
-  },
-];
 
 export function EventsRightRail() {
+  const [live, setLive] = useState<EventApi[]>([]);
+  const [suggested, setSuggested] = useState<EventApi[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [liveRes, suggestedRes] = await Promise.all([
+          ApiService.events.list({ scope: 'live', limit: 5 }),
+          ApiService.events.list({ scope: 'suggested', limit: 5 }),
+        ]);
+        if (cancelled) return;
+        setLive(liveRes.data?.data?.events ?? []);
+        setSuggested(suggestedRes.data?.data?.events ?? []);
+      } catch {
+        if (!cancelled) {
+          setLive([]);
+          setSuggested([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-40 rounded-2xl" />
+        <Skeleton className="h-40 rounded-2xl" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Live now */}
@@ -102,7 +88,7 @@ export function EventsRightRail() {
               </span>
               Live now
               <Badge variant="successSoft" size="sm" className="ml-1 tabular-nums">
-                {LIVE.length}
+                {live.length}
               </Badge>
             </h3>
             <Link
@@ -114,13 +100,13 @@ export function EventsRightRail() {
             </Link>
           </header>
 
-          {LIVE.length === 0 ? (
+          {live.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               Nothing live right now.
             </p>
           ) : (
             <ul role="list" className="space-y-3">
-              {LIVE.map((e) => (
+              {live.map((e) => (
                 <li key={e.id}>
                   <Link
                     href={`/dashboard/events/${e.id}`}
@@ -128,7 +114,7 @@ export function EventsRightRail() {
                   >
                     <Avatar className="size-9 shrink-0">
                       <AvatarFallback className="bg-success/15 text-xs font-bold text-success">
-                        {e.initial}
+                        {e.community_initial || e.title.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
@@ -136,13 +122,10 @@ export function EventsRightRail() {
                         {e.title}
                       </p>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {e.community} ·{' '}
+                        {e.community_name || 'Public'} ·{' '}
                         <span className="inline-flex items-center gap-0.5">
-                          <Clock
-                            className="size-2.5"
-                            aria-hidden="true"
-                          />{' '}
-                          {e.startedMinsAgo}m ago
+                          <Clock className="size-2.5" aria-hidden="true" />{' '}
+                          {minsAgo(e.starts_at)}m ago
                         </span>
                       </p>
                     </div>
@@ -179,42 +162,51 @@ export function EventsRightRail() {
             </Link>
           </header>
 
-          <ul role="list" className="space-y-3">
-            {SUGGESTED.map((e) => (
-              <li key={e.id}>
-                <Link
-                  href={`/dashboard/events/${e.id}`}
-                  className="flex items-start gap-3 rounded-xl border border-transparent p-2 -mx-2 transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <div
-                    className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-soft to-card border border-border text-foreground"
-                    aria-hidden="true"
-                  >
-                    <div className="text-center leading-tight">
-                      <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground">
-                        {e.date.month}
-                      </p>
-                      <p className="text-sm font-black tabular-nums">
-                        {e.date.day}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-                      {e.title}
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {e.community}
-                    </p>
-                    <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <MapPin className="size-2.5" aria-hidden="true" />
-                      {e.location}
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          {suggested.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nothing to suggest right now — explore communities to discover events.
+            </p>
+          ) : (
+            <ul role="list" className="space-y-3">
+              {suggested.map((e) => {
+                const chip = dateChip(e.starts_at);
+                return (
+                  <li key={e.id}>
+                    <Link
+                      href={`/dashboard/events/${e.id}`}
+                      className="flex items-start gap-3 rounded-xl border border-transparent p-2 -mx-2 transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div
+                        className="grid size-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-soft to-card border border-border text-foreground"
+                        aria-hidden="true"
+                      >
+                        <div className="text-center leading-tight">
+                          <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground">
+                            {chip.month}
+                          </p>
+                          <p className="text-sm font-black tabular-nums">
+                            {chip.day}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+                          {e.title}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {e.community_name || 'Public'}
+                        </p>
+                        <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <MapPin className="size-2.5" aria-hidden="true" />
+                          {e.location || (e.is_online ? 'Online' : '')}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

@@ -110,6 +110,21 @@ class LoginService:
                 "error": "Account is inactive. Please contact support.",
                 "code": "ACCOUNT_INACTIVE",
             }, 403
+
+        # Honor account deactivation. We allow login during the grace
+        # window — Flask-Login session creation is also the natural
+        # reactivation trigger handled by /v2/auth/reactivate.
+        if getattr(user, 'pii_scrubbed_at', None):
+            return {
+                "error": "Account no longer exists",
+                "code": "ACCOUNT_SCRUBBED",
+            }, 410
+        if getattr(user, 'deactivated_at', None):
+            return {
+                "error": "Account is deactivated. Sign in again to reactivate within 30 days.",
+                "code": "ACCOUNT_DEACTIVATED",
+                "deactivated_at": user.deactivated_at.isoformat(),
+            }, 403
         
         # Check if email is verified
         if not user.email_verified:
@@ -141,6 +156,13 @@ class LoginService:
                 ip=ip,
                 device=device,
             )
+        except Exception:
+            pass
+
+        # Record this device/browser as an auth_session row (best-effort).
+        try:
+            from modules.auth_v2.services.session_service import SessionService
+            SessionService().record_login(user.id)
         except Exception:
             pass
         
@@ -195,10 +217,17 @@ class LoginService:
         
         # Create Flask-Login session
         login_user(user, remember=remember)
-        
+
         # Generate tokens for mobile/API access
         tokens = self.token_service.generate_tokens(user.id, user.email)
-        
+
+        # Record this device/browser as an auth_session row (best-effort).
+        try:
+            from modules.auth_v2.services.session_service import SessionService
+            SessionService().record_login(user.id)
+        except Exception:
+            pass
+
         return {
             "message": "Login successful",
             "user": {

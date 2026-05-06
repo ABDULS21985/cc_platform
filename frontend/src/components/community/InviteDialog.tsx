@@ -35,7 +35,6 @@ export function InviteDialog({
     setLoading(true);
     try {
       const response = await ApiService.communities.createInvite(communityId);
-      console.log("Generate Invite Response:", response);
       if (response.data.success) {
         setInviteCode(response.data.data.invite_code);
       } else {
@@ -43,7 +42,6 @@ export function InviteDialog({
       }
     } catch (error) {
       toastAxiosError(error, "Failed to generate invite link.");
-      console.error("Generate Invite Error:", error);
     } finally {
       setLoading(false);
     }

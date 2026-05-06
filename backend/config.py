@@ -165,6 +165,12 @@ class Config:
     COMMUNITY_POST_MEDIA_MAX_FILES = _int(os.getenv("COMMUNITY_POST_MEDIA_MAX_FILES"), 10)
     COMMUNITY_POST_MEDIA_MAX_FILE_SIZE_MB = _int(os.getenv("COMMUNITY_POST_MEDIA_MAX_FILE_SIZE_MB"), 10)
     
+    # === SMS (Termii) ===
+    TERMII_API_KEY = os.getenv("TERMII_API_KEY")
+    TERMII_SENDER_ID = os.getenv("TERMII_SENDER_ID", "CCPay")
+    SMS_ENABLED = os.getenv("SMS_ENABLED", "false").lower() == "true"
+    MAX_DAILY_SMS_NAIRA = _int(os.getenv("MAX_DAILY_SMS_NAIRA"), 5000)
+
     # === FIREBASE ===
     FIREBASE_CREDENTIALS = os.getenv(
         "FIREBASE_CREDENTIALS", "/secrets/firebase_credentials.json"

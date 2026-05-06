@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiService, type EventApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import {
   Calendar as CalendarIcon,
   Compass,
@@ -302,16 +303,16 @@ export default function EventsPage() {
         const list = res.data?.data?.events ?? [];
         if (cancelled) return;
         if (list.length === 0) {
-          setEvents(MOCK_EVENTS);
-          setUsingMock(true);
+          setEvents(useDemoData() ? MOCK_EVENTS : []);
+          setUsingMock(useDemoData());
         } else {
           setEvents(list.map(mapApiEvent));
           setUsingMock(false);
         }
       } catch {
         if (!cancelled) {
-          setEvents(MOCK_EVENTS);
-          setUsingMock(true);
+          setEvents(useDemoData() ? MOCK_EVENTS : []);
+          setUsingMock(useDemoData());
         }
       }
     })();

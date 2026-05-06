@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiService, type AuditApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import {
   Activity,
   AlertTriangle,
@@ -443,7 +444,7 @@ function mapApiAudit(a: AuditApi): AuditEvent {
 }
 
 export default function AuditPage() {
-  const [events, setEvents] = useState<AuditEvent[]>(MOCK);
+  const [events, setEvents] = useState<AuditEvent[]>(useDemoData() ? MOCK : []);
   const [tab, setTab] = useState<TabValue>('all');
   const [period, setPeriod] = useState<Period>('7d');
   const [search, setSearch] = useState('');
@@ -457,12 +458,12 @@ export default function AuditPage() {
         const list = res.data?.data?.events ?? [];
         if (cancelled) return;
         if (list.length === 0) {
-          setEvents(MOCK);
+          setEvents(useDemoData() ? MOCK : []);
         } else {
           setEvents(list.map(mapApiAudit));
         }
       } catch {
-        if (!cancelled) setEvents(MOCK);
+        if (!cancelled) setEvents(useDemoData() ? MOCK : []);
       }
     })();
     return () => {

@@ -219,9 +219,8 @@ class NotificationService:
         return {'success': False, 'error': 'Push delivery not implemented'}
 
     def _send_transaction_email(self, user, transaction) -> Dict:
-        """Send transaction email notification using HTML template"""
-        from flask_mail import Message
-        from extension.extensions import mail
+        """Send transaction email notification through the central dispatcher."""
+        from modules.notifications.services.email_dispatcher import EmailDispatcher
 
         try:
             template = self._load_template('transaction_credit.html')
@@ -238,25 +237,32 @@ class NotificationService:
 
             subject = f"₦{transaction.amount:,.2f} Received in Your Wallet"
 
-            msg = Message(
+            # Money-category email — respects channel_email + money mute.
+            result = EmailDispatcher().dispatch(
+                user_id=user.id,
+                category='money',
                 subject=subject,
-                recipients=[user.email],
-                html=html_content
+                html=html_content,
             )
-
-            mail.send(msg)
-            logger.info(f"Transaction email sent to {user.email}")
-            return {'success': True, 'recipient': user.email}
+            if result.get('sent'):
+                logger.info(f"Transaction email sent to {user.email}")
+            return {'success': bool(result.get('sent')), 'recipient': user.email, 'detail': result}
 
         except Exception as e:
             logger.error(f"Transaction email send failed: {str(e)}")
             raise
 
     def _send_sms(self, user, verification_type: str, status: str) -> Dict:
-        """
-        Send SMS notification
+        """Send transactional verification SMS via the Termii-backed SmsService."""
+        from modules.notifications.services.sms_service import SmsService
 
-        TODO: Integrate SMS provider (Twilio, Africa's Talking, Termii, etc.)
-        """
-        logger.info(f"SMS notification would be sent to {user.phone_number if hasattr(user, 'phone_number') else 'N/A'}")
-        return {'success': True, 'note': 'SMS not yet implemented'}
+        verb = 'verified successfully' if status == 'verified' else f'failed ({status})'
+        message = (
+            f"Your {verification_type.upper()} verification has {verb}. "
+            f"— CCPay"
+        )
+        try:
+            return SmsService().send_transactional(user, message)
+        except Exception as exc:
+            logger.error(f"Verification SMS send failed: {exc}", exc_info=True)
+            return {'success': False, 'reason': 'send_failed'}

@@ -64,7 +64,6 @@ export function CreateCommunityDialog({
       const res = await ApiService.organizations.list();
       setOrganizations(res.data.data.organizations);
     } catch (error: any) {
-      console.log('Failed to load organizations', error.response);
       toastAxiosError(error, "Failed to load organizations.");
     } finally {
       setIsLoadingOrganizations(false);

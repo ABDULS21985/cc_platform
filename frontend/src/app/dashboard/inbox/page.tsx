@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { ApiService, type NotificationApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import { useNotifications } from '@/contexts/NotificationContext';
 import {
   Select,
@@ -311,16 +312,16 @@ export default function InboxPage() {
         const list = res.data?.data?.notifications ?? [];
         if (cancelled) return;
         if (list.length === 0) {
-          setItems(MOCK);
-          setUsingMock(true);
+          setItems(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         } else {
           setItems(list.map(mapApiNotification));
           setUsingMock(false);
         }
       } catch {
         if (!cancelled) {
-          setItems(MOCK);
-          setUsingMock(true);
+          setItems(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         }
       }
     })();

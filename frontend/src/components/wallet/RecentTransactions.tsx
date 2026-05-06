@@ -31,12 +31,12 @@ export default function RecentTransactions() {
   const [filtered, setFiltered] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const handlePeriodChange = (period: string) => {
-    console.debug('period changed', period);
+  const handlePeriodChange = (_period: string) => {
+    // no-op: filtering is local-only on the rendered list
   };
 
-  const handleDateRangeChange = (range: string) => {
-    console.debug('date range changed', range);
+  const handleDateRangeChange = (_range: string) => {
+    // no-op: filtering is local-only on the rendered list
   };
 
   const handleSearch = (query: string) => {

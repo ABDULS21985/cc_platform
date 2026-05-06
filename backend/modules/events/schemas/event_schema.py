@@ -27,7 +27,7 @@ class EventCreateSchema(Schema):
 class EventListQuerySchema(Schema):
     scope = fields.String(
         load_default='upcoming',
-        validate=validate.OneOf(['upcoming', 'live', 'hosting', 'past', 'all']),
+        validate=validate.OneOf(['upcoming', 'live', 'hosting', 'past', 'all', 'suggested']),
     )
     limit = fields.Integer(load_default=100, validate=validate.Range(min=1, max=200))
     offset = fields.Integer(load_default=0, validate=validate.Range(min=0))

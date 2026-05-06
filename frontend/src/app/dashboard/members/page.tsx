@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiService, type CommunityData } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import {
@@ -449,10 +450,8 @@ export default function MembersPage() {
         const real = await fetchAggregatedMembers();
         if (cancelled) return;
         if (real.length === 0) {
-          // No joined communities yet — show mock so the layout demonstrates,
-          // and surface a small notice.
-          setMembers(MOCK_MEMBERS);
-          setUsingMock(true);
+          setMembers(useDemoData() ? MOCK_MEMBERS : []);
+          setUsingMock(useDemoData());
         } else {
           setMembers(real);
           setUsingMock(false);
@@ -460,8 +459,8 @@ export default function MembersPage() {
       } catch (err) {
         if (cancelled) return;
         toastAxiosError(err, 'Failed to load members.');
-        setMembers(MOCK_MEMBERS);
-        setUsingMock(true);
+        setMembers(useDemoData() ? MOCK_MEMBERS : []);
+        setUsingMock(useDemoData());
       } finally {
         if (!cancelled) setLoading(false);
       }

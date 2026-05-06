@@ -48,6 +48,13 @@ class User(db.Model, UserMixin):
     # per minute by the middleware so we don't hammer the DB).
     last_seen_at = db.Column(db.DateTime, nullable=True, index=True)
 
+    # Account deactivation. Soft-delete with a 30-day grace window:
+    # `deactivated_at` set when the user requests deactivation; login is
+    # blocked while non-null. After 30 days, the scrub job sets
+    # `pii_scrubbed_at` and zeroes name/phone/NIN/profile_photo.
+    deactivated_at = db.Column(db.DateTime, nullable=True, index=True)
+    pii_scrubbed_at = db.Column(db.DateTime, nullable=True)
+
     def __repr__(self):
         """String representation"""
         return f"<User(id={self.id}, email='{self.email}', name='{self.full_name}')>"

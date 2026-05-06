@@ -562,6 +562,42 @@ export const ApiService = {
       axiosInstance.post<AuthSuccess>("/v2/auth/reset-password", data),
 
     logout: () => axiosInstance.post<AuthSuccess>("/v2/auth/logout"),
+
+    sessions: {
+      list: () =>
+        axiosInstance.get<ApiResponse<{
+          sessions: AuthSessionApi[];
+          total: number;
+        }>>("/v2/auth/sessions"),
+
+      revoke: (id: number) =>
+        axiosInstance.delete<ApiResponse<{ session: AuthSessionApi }>>(
+          `/v2/auth/sessions/${id}`,
+        ),
+
+      revokeAllOthers: () =>
+        axiosInstance.delete<ApiResponse<{ revoked_count: number }>>(
+          "/v2/auth/sessions",
+        ),
+    },
+
+    deactivation: {
+      preflight: () =>
+        axiosInstance.get<ApiResponse<{
+          blockers: Array<{ kind: string; message: string; [key: string]: unknown }>;
+          can_deactivate: boolean;
+          grace_days: number;
+        }>>("/v2/auth/deactivate/preflight"),
+
+      deactivate: (data: { password: string; reason?: string }) =>
+        axiosInstance.post<ApiResponse<{ deactivated_at: string }>>(
+          "/v2/auth/deactivate",
+          data,
+        ),
+
+      reactivate: () =>
+        axiosInstance.post<ApiResponse<{}>>("/v2/auth/reactivate"),
+    },
   },
 
   // =========================================================================
@@ -943,6 +979,20 @@ export const ApiService = {
       axiosInstance.delete<ApiResponse<{ muted: boolean; community_id: number }>>(
         `/v2/notifications/community-mutes/${communityId}`,
       ),
+
+    deviceTokens: {
+      register: (data: { fcm_token: string; platform?: 'web' | 'ios' | 'android' }) =>
+        axiosInstance.post<ApiResponse<{ token: { id: number; platform: string } }>>(
+          "/v2/notifications/device-tokens/",
+          data,
+        ),
+
+      revoke: (data: { fcm_token: string }) =>
+        axiosInstance.delete<ApiResponse<{}>>(
+          "/v2/notifications/device-tokens/",
+          { data },
+        ),
+    },
   },
 
   // =========================================================================
@@ -982,7 +1032,7 @@ export const ApiService = {
   // =========================================================================
   events: {
     list: (params?: {
-      scope?: "upcoming" | "live" | "hosting" | "past" | "all";
+      scope?: "upcoming" | "live" | "hosting" | "past" | "all" | "suggested";
       limit?: number;
       offset?: number;
     }) =>
@@ -1035,6 +1085,58 @@ export const ApiService = {
         events: AuditApi[];
         pagination: { total: number; limit: number; offset: number };
       }>>("/v2/audit/", { params }),
+  },
+
+  // =========================================================================
+  // Subscriptions (recurring user-scoped outflows)
+  // =========================================================================
+  subscriptions: {
+    list: (params?: { status?: 'active' | 'paused' | 'cancelled'; limit?: number; offset?: number }) =>
+      axiosInstance.get<ApiResponse<{
+        subscriptions: SubscriptionApi[];
+        total: number;
+      }>>("/v2/subscriptions/", { params }),
+
+    create: (data: SubscriptionCreatePayload) =>
+      axiosInstance.post<ApiResponse<{ subscription: SubscriptionApi }>>(
+        "/v2/subscriptions/",
+        data,
+      ),
+
+    setStatus: (id: number, status: 'active' | 'paused' | 'cancelled') =>
+      axiosInstance.patch<ApiResponse<{ subscription: SubscriptionApi }>>(
+        `/v2/subscriptions/${id}`,
+        { status },
+      ),
+
+    delete: (id: number) =>
+      axiosInstance.delete<ApiResponse<{}>>(`/v2/subscriptions/${id}`),
+  },
+
+  // =========================================================================
+  // Standing instructions (kind=standing_instruction view of subscriptions)
+  // =========================================================================
+  standingInstructions: {
+    list: (params?: { status?: 'active' | 'paused' | 'cancelled'; limit?: number; offset?: number }) =>
+      axiosInstance.get<ApiResponse<{
+        subscriptions: SubscriptionApi[];
+        total: number;
+      }>>("/v2/standing-instructions/", { params }),
+
+    create: (data: StandingInstructionCreatePayload) =>
+      axiosInstance.post<ApiResponse<{ subscription: SubscriptionApi }>>(
+        "/v2/standing-instructions/",
+        data,
+      ),
+
+    setStatus: (id: number, status: 'active' | 'paused' | 'cancelled') =>
+      axiosInstance.patch<ApiResponse<{ subscription: SubscriptionApi }>>(
+        `/v2/standing-instructions/${id}`,
+        { status },
+      ),
+
+    delete: (id: number) =>
+      axiosInstance.delete<ApiResponse<{}>>(`/v2/standing-instructions/${id}`),
   },
 
   // =========================================================================
@@ -1127,6 +1229,61 @@ export interface NotificationPreferencesApi {
   digest_frequency: 'off' | 'daily' | 'weekly';
   last_digest_at: string | null;
   updated_at: string | null;
+}
+
+export interface SubscriptionApi {
+  id: number;
+  user_id: number;
+  kind: 'subscription' | 'standing_instruction';
+  name: string;
+  description: string | null;
+  amount: number;
+  currency: string;
+  cadence: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  next_charge_at: string | null;
+  last_charged_at: string | null;
+  status: 'active' | 'paused' | 'cancelled';
+  counterparty_type: string | null;
+  counterparty_id: number | null;
+  source_bill_id: number | null;
+  destination_account_number: string | null;
+  destination_bank_code: string | null;
+  destination_account_name: string | null;
+  pin_required: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SubscriptionCreatePayload {
+  name: string;
+  description?: string | null;
+  amount: number | string;
+  currency?: string;
+  cadence?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  next_charge_at?: string | null;
+  counterparty_type?: string | null;
+  counterparty_id?: number | null;
+  source_bill_id?: number | null;
+}
+
+export interface StandingInstructionCreatePayload extends SubscriptionCreatePayload {
+  destination_account_number: string;
+  destination_bank_code: string;
+  destination_account_name: string;
+}
+
+export interface AuthSessionApi {
+  id: number;
+  user_id: number;
+  device_label: string | null;
+  browser: string | null;
+  os: string | null;
+  ip: string | null;
+  location: string | null;
+  last_seen_at: string | null;
+  created_at: string | null;
+  revoked_at: string | null;
+  is_active: boolean;
 }
 
 export interface NotificationApi {

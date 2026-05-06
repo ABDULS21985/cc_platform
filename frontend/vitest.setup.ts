@@ -2,6 +2,12 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
+// Tests assert against the MOCK_* fixtures used as fallback content when the
+// real API returns nothing. Production defaults to demo-mode OFF (real users
+// see empty states); flip it ON for the test environment so the existing
+// "falls back to MOCK" assertions still pass.
+process.env.NEXT_PUBLIC_USE_DEMO_DATA = 'true';
+
 // Tear down between tests so the DOM (and any mounted providers) start fresh.
 afterEach(() => {
   cleanup();

@@ -10,6 +10,7 @@ import {
   Search,
 } from 'lucide-react';
 import { ApiService } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import DashboardLayout from '@/components/layout/DashboardLayout';
@@ -532,10 +533,10 @@ export default function ActivityPage() {
         const status = (err as { response?: { status?: number } })?.response
           ?.status;
         if (status === 404) {
-          // Wallet not provisioned — fall back to mock so the page still
-          // demonstrates the layout. A clear banner tells the user why.
+          // Wallet not provisioned — show the "wallet missing" banner.
+          // Demo deploys can opt into MOCK_ACTIVITY via NEXT_PUBLIC_USE_DEMO_DATA.
           setWalletMissing(true);
-          setItems(MOCK_ACTIVITY);
+          setItems(useDemoData() ? MOCK_ACTIVITY : []);
         } else {
           toastAxiosError(err, 'Failed to load activity.');
           setItems([]);

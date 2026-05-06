@@ -47,27 +47,21 @@ const CHANNELS: ChannelPref[] = [
     label: 'Email',
     description: 'Receipts, alerts, and digest emails.',
     icon: Mail,
-    enabled: false,
-    comingSoon: true,
-    badge: 'Coming soon',
+    enabled: true,
   },
   {
     id: 'sms',
     label: 'SMS',
-    description: 'Transaction confirmations and security codes.',
+    description: 'Transaction confirmations and security codes (Nigerian numbers).',
     icon: MessageSquare,
-    enabled: false,
-    comingSoon: true,
-    badge: 'Coming soon',
+    enabled: true,
   },
   {
     id: 'push',
     label: 'Mobile push',
     description: 'Real-time alerts on your phone.',
     icon: Smartphone,
-    enabled: false,
-    comingSoon: true,
-    badge: 'Coming soon',
+    enabled: true,
   },
 ];
 
@@ -140,11 +134,20 @@ const DIGEST_OPTIONS: Array<{ id: DigestFrequency; label: string; description: s
   { id: 'weekly', label: 'Weekly', description: 'A round-up every Monday morning.' },
 ];
 
+type ChannelKey = 'in-app' | 'email' | 'sms' | 'push';
+
 export function NotificationPreferencesContent() {
   const [prefs, setPrefs] = useState<Record<CategoryKey, boolean>>(DEFAULT_PREFS);
+  const [channels, setChannels] = useState<Record<ChannelKey, boolean>>({
+    'in-app': true,
+    email: true,
+    sms: false,
+    push: false,
+  });
   const [digest, setDigest] = useState<DigestFrequency>('off');
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<CategoryKey | null>(null);
+  const [savingChannel, setSavingChannel] = useState<ChannelKey | null>(null);
   const [savingDigest, setSavingDigest] = useState(false);
 
   useEffect(() => {
@@ -152,7 +155,13 @@ export function NotificationPreferencesContent() {
     (async () => {
       try {
         const res = await ApiService.notifications.getPreferences();
-        const remote = res.data?.data?.preferences;
+        const remote = res.data?.data?.preferences as
+          | (NotificationPreferencesApi & {
+              channel_email?: boolean;
+              channel_sms?: boolean;
+              channel_push?: boolean;
+            })
+          | undefined;
         if (!cancelled && remote) {
           setPrefs({
             money: remote.money,
@@ -161,6 +170,12 @@ export function NotificationPreferencesContent() {
             events: remote.events,
             security: remote.security,
             system: remote.system,
+          });
+          setChannels({
+            'in-app': true,
+            email: remote.channel_email ?? true,
+            sms: remote.channel_sms ?? false,
+            push: remote.channel_push ?? false,
           });
           if (remote.digest_frequency) setDigest(remote.digest_frequency);
         }
@@ -174,6 +189,29 @@ export function NotificationPreferencesContent() {
       cancelled = true;
     };
   }, []);
+
+  const toggleChannel = async (id: ChannelKey, value: boolean) => {
+    if (id === 'in-app') return;
+    const prev = channels[id];
+    setChannels((c) => ({ ...c, [id]: value }));
+    setSavingChannel(id);
+    const fieldMap: Record<Exclude<ChannelKey, 'in-app'>, string> = {
+      email: 'channel_email',
+      sms: 'channel_sms',
+      push: 'channel_push',
+    };
+    try {
+      await ApiService.notifications.updatePreferences({
+        [fieldMap[id]]: value,
+      } as Partial<Omit<NotificationPreferencesApi, 'user_id' | 'updated_at' | 'security'>>);
+      toast.success(`${value ? 'Enabled' : 'Disabled'} ${id.toUpperCase()}`);
+    } catch {
+      setChannels((c) => ({ ...c, [id]: prev }));
+      toast.error('Could not update channel');
+    } finally {
+      setSavingChannel(null);
+    }
+  };
 
   const updateDigest = async (next: DigestFrequency) => {
     if (next === digest) return;
@@ -230,45 +268,50 @@ export function NotificationPreferencesContent() {
             Channels
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Where notifications can reach you. In-app is on by default; other
-            channels arrive in a future release.
+            Where notifications can reach you. In-app is always on.
           </p>
         </header>
         <Card variant="default" density="compact">
           <CardContent className="divide-y divide-border px-0">
-            {CHANNELS.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between gap-4 px-5 py-4 first:rounded-t-2xl last:rounded-b-2xl"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
-                    aria-hidden="true"
-                  >
-                    <c.icon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">
-                        {c.label}
-                      </p>
-                      {c.badge && (
-                        <Badge variant={c.comingSoon ? 'soft' : 'infoSoft'} size="sm">
-                          {c.badge}
-                        </Badge>
-                      )}
+            {CHANNELS.map((c) => {
+              const channelKey = c.id as ChannelKey;
+              const checked = channels[channelKey];
+              const isInApp = channelKey === 'in-app';
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between gap-4 px-5 py-4 first:rounded-t-2xl last:rounded-b-2xl"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand-soft text-accent-foreground"
+                      aria-hidden="true"
+                    >
+                      <c.icon className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          {c.label}
+                        </p>
+                        {isInApp && (
+                          <Badge variant="successSoft" size="sm">
+                            Always on
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{c.description}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">{c.description}</p>
                   </div>
+                  <Switch
+                    checked={checked}
+                    disabled={isInApp || savingChannel === channelKey}
+                    onCheckedChange={(v) => toggleChannel(channelKey, !!v)}
+                    aria-label={`${c.label} channel`}
+                  />
                 </div>
-                <Switch
-                  checked={c.enabled}
-                  disabled={c.comingSoon}
-                  aria-label={`${c.label} channel`}
-                />
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       </section>

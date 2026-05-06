@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiService, type CommunityData } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import {
@@ -368,8 +369,8 @@ export default function BillsPage() {
         const real = await fetchAggregatedBills(me?.id);
         if (cancelled) return;
         if (real.length === 0) {
-          setBills(MOCK_BILLS);
-          setUsingMock(true);
+          setBills(useDemoData() ? MOCK_BILLS : []);
+          setUsingMock(useDemoData());
         } else {
           setBills(real);
           setUsingMock(false);
@@ -377,8 +378,8 @@ export default function BillsPage() {
       } catch (err) {
         if (cancelled) return;
         toastAxiosError(err, 'Failed to load bills.');
-        setBills(MOCK_BILLS);
-        setUsingMock(true);
+        setBills(useDemoData() ? MOCK_BILLS : []);
+        setUsingMock(useDemoData());
       } finally {
         if (!cancelled) setLoading(false);
       }

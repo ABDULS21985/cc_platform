@@ -140,10 +140,14 @@ class NotificationRepository:
             'events': 'events_enabled',
             'system': 'system_enabled',
         }
+        channel_columns = {'channel_email', 'channel_sms', 'channel_push'}
         for category, value in flags.items():
             if category == 'digest_frequency' and isinstance(value, str):
                 if value in ('off', 'daily', 'weekly'):
                     pref.digest_frequency = value
+                continue
+            if category in channel_columns and isinstance(value, bool):
+                setattr(pref, category, value)
                 continue
             col = column_map.get(category)
             if col and isinstance(value, bool):

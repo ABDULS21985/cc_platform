@@ -77,6 +77,24 @@ class EventRepository:
             query = query.filter(Event.starts_at < now)
         elif scope == 'hosting':
             query = Event.query.filter(Event.creator_id == user_id)
+        elif scope == 'suggested':
+            # Suggested = upcoming public events in joined communities,
+            # excluding ones the user already RSVP'd to or is hosting.
+            attended_ids_subq = (
+                db.session.query(EventAttendee.event_id)
+                .filter(EventAttendee.user_id == user_id)
+                .filter(EventAttendee.cancelled.is_(False))
+                .subquery()
+            )
+            query = Event.query.filter(
+                Event.starts_at >= now,
+                Event.creator_id != user_id,
+                Event.id.notin_(attended_ids_subq),
+                or_(
+                    Event.is_private.is_(False),
+                    Event.community_id.in_(joined_ids_subq),
+                ),
+            )
         # 'live' and 'all' return everything; the service decides slicing by status
 
         total = query.count()

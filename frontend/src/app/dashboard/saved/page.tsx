@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ApiService, type BookmarkApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 import {
   ArrowRight,
   Bookmark,
@@ -240,16 +241,16 @@ export default function SavedPage() {
         const list = res.data?.data?.bookmarks ?? [];
         if (cancelled) return;
         if (list.length === 0) {
-          setItems(MOCK);
-          setUsingMock(true);
+          setItems(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         } else {
           setItems(list.map(mapApiBookmark));
           setUsingMock(false);
         }
       } catch {
         if (!cancelled) {
-          setItems(MOCK);
-          setUsingMock(true);
+          setItems(useDemoData() ? MOCK : []);
+          setUsingMock(useDemoData());
         }
       }
     })();

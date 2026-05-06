@@ -74,3 +74,7 @@ class NotificationPreferencesSchema(Schema):
         allow_none=True,
         validate=validate.OneOf(['off', 'daily', 'weekly']),
     )
+    # Per-channel delivery toggles.
+    channel_email = fields.Boolean(load_default=None, allow_none=True)
+    channel_sms = fields.Boolean(load_default=None, allow_none=True)
+    channel_push = fields.Boolean(load_default=None, allow_none=True)

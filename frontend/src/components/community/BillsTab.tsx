@@ -51,7 +51,6 @@ export function BillsTab({ communityId, isOwner }: DuesPaymentTabProps) {
     setLoading(true);
     try {
       const response = await ApiService.communities.getBills(communityId);
-      console.log("Fetched bills:", response.data.data);
       setBills(response.data.data.bills);
     } catch (error: any) {
       toastAxiosError(error, "Failed to load bills.");

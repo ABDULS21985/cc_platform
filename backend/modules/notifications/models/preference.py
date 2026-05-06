@@ -23,6 +23,10 @@ class NotificationPreference(db.Model):
     digest_frequency = db.Column(db.String(8), default='off', nullable=False)
     # Wall-clock when the last digest email was sent, used to gate the next.
     last_digest_at = db.Column(db.DateTime, nullable=True)
+    # Per-channel toggles (in-app is always on; the others gate dispatchers).
+    channel_email = db.Column(db.Boolean, default=True, nullable=False)
+    channel_sms = db.Column(db.Boolean, default=False, nullable=False)
+    channel_push = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -37,6 +41,9 @@ class NotificationPreference(db.Model):
             'system': self.system_enabled,
             'digest_frequency': self.digest_frequency or 'off',
             'last_digest_at': self.last_digest_at.isoformat() if self.last_digest_at else None,
+            'channel_email': self.channel_email,
+            'channel_sms': self.channel_sms,
+            'channel_push': self.channel_push,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 

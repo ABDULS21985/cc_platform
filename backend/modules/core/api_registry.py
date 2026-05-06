@@ -22,6 +22,10 @@ def register_api_blueprints(api):
         ("modules.auth_v2.resources.auth_resource", "auth_blp"),
         # Auth V2 - Profile resource (profile CRUD, password change, image upload)
         ("modules.auth_v2.resources.profile_resource", "profile_blp"),
+        # Auth V2 - Session resource (login history, revoke device)
+        ("modules.auth_v2.resources.session_resource", "session_blp"),
+        # Auth V2 - Deactivation lifecycle (preflight, deactivate, reactivate)
+        ("modules.auth_v2.resources.deactivation_resource", "deactivation_blp"),
         # Verification - BVN/NIN identity verification (async with Celery)
         ("modules.verification.resources.verification_resource", "verification_blp"),
         # Wallet - Wallet operations (balance, transactions, deposit, withdraw)
@@ -56,6 +60,8 @@ def register_api_blueprints(api):
         ("modules.admin.resources.transactions_resource", "admin_transactions_blp"),
         # Notifications — in-app user notifications
         ("modules.notifications.resources.notification_resource", "notification_blp"),
+        # Notifications — FCM device-token registration for push delivery
+        ("modules.notifications.resources.device_token_resource", "device_token_blp"),
         # Bookmarks — user-saved items (posts, events, communities, bills, transactions)
         ("modules.bookmarks.resources.bookmark_resource", "bookmark_blp"),
         # Events — community events with attendance tracking
@@ -64,6 +70,10 @@ def register_api_blueprints(api):
         ("modules.audit.resources.audit_resource", "audit_blp"),
         # Discovery — trending topics computed from posts
         ("modules.discovery.resources.trending_resource", "discovery_blp"),
+        # Subscriptions — recurring user-scoped outflows
+        ("modules.subscriptions.resources.subscription_resource", "subscription_blp"),
+        # Standing Instructions — kind=standing_instruction view of subscriptions
+        ("modules.subscriptions.resources.standing_instruction_resource", "standing_instruction_blp"),
         # Dev tools — seed endpoints gated on FLASK_ENV=development
         ("modules.dev_tools.resources.seed_resource", "dev_seed_blp"),
     ]

@@ -21,6 +21,8 @@ import { ChangePasswordForm } from '@/components/settings/ChangePasswordForm';
 import { LoginHistoryContent } from '@/components/settings/LoginHistoryContent';
 import { NotificationPreferencesContent } from '@/components/settings/NotificationPreferencesContent';
 import { VerificationContent } from '@/components/settings/VerificationContent';
+import { RoleAccessContent } from '@/components/settings/RoleAccessContent';
+import { DeactivateAccountContent } from '@/components/settings/DeactivateAccountContent';
 import { PlaceholderContent } from '@/components/settings/PlaceholderContent';
 
 export const dynamic = 'force-dynamic';
@@ -151,21 +153,11 @@ function SettingsPageContent() {
       case 'login-history':
         return <LoginHistoryContent />;
       case 'role-access':
-        return (
-          <PlaceholderContent
-            title="Role & access management"
-            description="Coming soon — manage admin permissions and member roles across your communities."
-          />
-        );
+        return <RoleAccessContent />;
       case 'notification':
         return <NotificationPreferencesContent />;
       case 'deactivate':
-        return (
-          <PlaceholderContent
-            title="Deactivate account"
-            description="Coming soon — permanently remove your account and associated data."
-          />
-        );
+        return <DeactivateAccountContent />;
       case 'verification':
         return <VerificationContent />;
       default:
