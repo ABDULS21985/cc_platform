@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, X } from 'lucide-react';
@@ -59,6 +59,7 @@ export function CreateCampaignDialog({
         description: description.trim() || null,
         amount: Number(amount),
         type: 'free_will',
+        expense_kind: 'campaign',
         min_amount: minAmount.trim() ? Number(minAmount) : 0,
         due_date: new Date(`${endDate}T23:59:59`).toISOString(),
       });
@@ -78,6 +79,9 @@ export function CreateCampaignDialog({
       <DialogContent showClose={false} className="p-0 bg-white/95 backdrop-blur-2xl rounded-[32px] w-full max-w-md overflow-hidden border-white/20 shadow-elevated animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between p-6 border-b border-gray-50/50">
           <DialogTitle className="text-xl font-extrabold text-gray-900 tracking-tight">Create campaign</DialogTitle>
+          <DialogDescription className="sr-only">
+            Create a fundraising campaign for this community.
+          </DialogDescription>
           <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
             <X className="w-5 h-5" />
           </button>

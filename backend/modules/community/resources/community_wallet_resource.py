@@ -30,6 +30,62 @@ community_wallet_blp = Blueprint(
 )
 
 
+@community_wallet_blp.route('/<int:community_id>/wallet/transactions')
+class CommunityWalletTransactionsResource(MethodView):
+    """Paginated community-wallet transactions for the WalletTab.
+
+    Distinct from ``/<community_id>/transactions`` (which surfaces a richer
+    payload including payer details) — this route returns the lean ledger
+    plus a ``summary`` block (``total_collected`` / ``total_spent``) so the
+    FE WalletTab can render lifetime stats without a second round trip.
+    """
+
+    @token_required
+    @community_wallet_blp.arguments(CommunityTransactionQuerySchema, location='query')
+    @community_wallet_blp.response(200, description='Wallet transactions retrieved')
+    @community_wallet_blp.alt_response(401, schema=CommunityErrorSchema, description='Unauthorized')
+    @community_wallet_blp.alt_response(403, schema=CommunityErrorSchema, description='Forbidden')
+    def get(self, args, community_id, current_user=None):
+        """Return paginated wallet transactions + summary for an active member."""
+        from modules.community.services.wallet_service import CommunityWalletService
+
+        try:
+            service = CommunityWalletService()
+            payload, error = service.list_transactions(
+                community_id=community_id,
+                user_id=current_user.id,
+                limit=args.get('limit', 50),
+                offset=args.get('offset', 0),
+                type=args.get('type'),
+            )
+            if error == 'Not a community member':
+                return format_error(
+                    error='not_member',
+                    message='You must be an active member to view community transactions',
+                    status_code=403,
+                )
+            if error:
+                return format_error(
+                    error='wallet_transactions_failed',
+                    message=error,
+                    status_code=400,
+                )
+
+            return format_data(
+                data=payload,
+                message='Community wallet transactions retrieved successfully',
+                status_code=200,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                'Error listing community %s wallet transactions: %s',
+                community_id,
+                exc,
+                exc_info=True,
+            )
+            return format_internal_error(str(exc))
+
+
 @community_wallet_blp.route('/<int:community_id>/transactions')
 class CommunityTransactionsResource(MethodView):
     """Community transaction history (member-scoped)."""

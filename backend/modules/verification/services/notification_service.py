@@ -4,7 +4,7 @@ Follows Single Responsibility Principle and uses HTML email templates
 """
 import logging
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
@@ -191,8 +191,119 @@ class NotificationService:
             logger.error(f"Email send failed: {str(e)}")
             raise
 
-    def _send_push(self, user, verification_type: str, status: str) -> Dict:
-        """Send verification push notification via Firebase (optional)."""
+    def _is_fcm_enabled(self) -> bool:
+        """Sandbox-friendly FCM kill-switch.
+
+        Reads ``Config.FCM_ENABLED`` at call-time (not at construction time)
+        so test fixtures can flip it via ``monkeypatch.setattr`` without
+        rebuilding the service.
+        """
+        try:
+            from config import Config
+            return bool(getattr(Config, 'FCM_ENABLED', True))
+        except Exception:  # noqa: BLE001
+            # If config is unimportable in some weird test path, default to
+            # disabled rather than risk live FCM calls.
+            return False
+
+    def _resolve_fcm_tokens(self, user, tokens: Optional[List[str]] = None) -> List[str]:
+        """Resolve FCM registration tokens for a user.
+
+        Prefers an explicit ``tokens`` argument (used by tests + service
+        callers that already know the device tokens). Falls back to a
+        best-effort lookup against the device-token model in the
+        notifications module.
+        """
+        if tokens:
+            return [t for t in tokens if isinstance(t, str) and t.strip()]
+
+        # Best-effort lookup of registered device tokens. We import lazily
+        # so this module stays importable even if the notifications module
+        # is temporarily unavailable in a slim deploy.
+        try:
+            from modules.notifications.models.device_token import DeviceToken
+            rows = (
+                DeviceToken.query
+                .filter(DeviceToken.user_id == getattr(user, 'id', None))
+                .filter(DeviceToken.revoked_at.is_(None))
+                .all()
+            )
+            return [r.fcm_token for r in rows if r.fcm_token]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                'Failed to resolve FCM tokens for user %s: %s',
+                getattr(user, 'id', None),
+                exc,
+            )
+            return []
+
+    def _build_multicast(self, *, tokens: List[str], title: str, body: str, data: Dict[str, str]):
+        """Construct a ``messaging.MulticastMessage`` with platform fallbacks."""
+        from firebase_admin import messaging  # type: ignore
+
+        # ``data`` payload values must be strings on the FCM side.
+        data_payload = {k: str(v) for k, v in (data or {}).items()}
+        return messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            data=data_payload,
+            tokens=tokens,
+            webpush=messaging.WebpushConfig(
+                notification=messaging.WebpushNotification(
+                    title=title,
+                    body=body,
+                ),
+                fcm_options=messaging.WebpushFCMOptions(
+                    link=data_payload.get('link') or '/',
+                ),
+            ),
+        )
+
+    def _dispatch_multicast(self, message) -> Dict[str, Any]:
+        """Send a multicast message and normalize the response shape."""
+        from firebase_admin import messaging  # type: ignore
+
+        try:
+            response = messaging.send_multicast(message)
+        except Exception as exc:  # noqa: BLE001
+            # Wrap Firebase exceptions so an FCM outage never blows up the
+            # verification flow that triggered the push.
+            logger.error('FCM send_multicast failed: %s', exc, exc_info=True)
+            return {
+                'success': False,
+                'success_count': 0,
+                'failure_count': 0,
+                'errors': [str(exc)],
+            }
+
+        errors: List[str] = []
+        for resp in getattr(response, 'responses', []) or []:
+            if not getattr(resp, 'success', False):
+                err = getattr(resp, 'exception', None) or getattr(resp, 'error', None)
+                if err is not None:
+                    errors.append(str(err))
+
+        return {
+            'success': response.success_count > 0,
+            'success_count': int(response.success_count),
+            'failure_count': int(response.failure_count),
+            'errors': errors,
+        }
+
+    def _send_push(
+        self,
+        user,
+        verification_type: str,
+        status: str,
+        tokens: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Send a verification push notification via FCM.
+
+        Sandbox short-circuit: returns ``{'success': False, 'error': 'FCM disabled'}``
+        when ``Config.FCM_ENABLED`` is false (tests, sandbox).
+        """
+        if not self._is_fcm_enabled():
+            return {'success': False, 'error': 'FCM disabled'}
+
         if not self.push_enabled:
             return {'success': False, 'skipped': True, 'error': 'Push notifications are disabled'}
 
@@ -203,20 +314,101 @@ class NotificationService:
             if not firebase or not getattr(firebase, 'app', None):
                 return {'success': False, 'error': 'Firebase not configured'}
 
-            # This project does not currently map user IDs to FCM tokens here.
-            return {'success': False, 'error': 'Push delivery is not implemented for user-targeted verification notifications'}
+            device_tokens = self._resolve_fcm_tokens(user, tokens)
+            if not device_tokens:
+                return {'success': False, 'error': 'No device tokens registered'}
 
-        except Exception as e:
-            logger.warning(f"Push notification failed (Firebase may not be configured): {str(e)}")
-            return {'success': False, 'error': str(e)}
+            verb = 'is verified' if status == 'verified' else 'failed'
+            title = f"{verification_type.upper()} verification {verb}"
+            body = (
+                f"Your {verification_type.upper()} verification has been completed."
+                if status == 'verified'
+                else f"Your {verification_type.upper()} verification could not be completed."
+            )
+            data = {
+                'category': 'verification',
+                'verification_type': verification_type,
+                'status': status,
+                'link': '/dashboard/settings/verification',
+            }
 
-    def _send_transaction_push(self, user, transaction) -> Dict:
-        """Send transaction push notification (optional)."""
+            message = self._build_multicast(
+                tokens=device_tokens, title=title, body=body, data=data,
+            )
+            result = self._dispatch_multicast(message)
+            logger.info(
+                'verification.push.sent',
+                extra={
+                    'event': 'verification.push.sent',
+                    'user_id': getattr(user, 'id', None),
+                    'verification_type': verification_type,
+                    'status': status,
+                    **{k: v for k, v in result.items() if k != 'errors'},
+                },
+            )
+            return result
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error('Verification push failed: %s', exc, exc_info=True)
+            return {'success': False, 'error': str(exc)}
+
+    def _send_transaction_push(
+        self,
+        user,
+        transaction,
+        tokens: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Send a transaction push notification via FCM."""
+        if not self._is_fcm_enabled():
+            return {'success': False, 'error': 'FCM disabled'}
+
         if not self.push_enabled:
             return {'success': False, 'skipped': True, 'error': 'Push notifications are disabled'}
 
-        logger.warning('Push notifications are enabled but user-targeted transaction push is not implemented')
-        return {'success': False, 'error': 'Push delivery not implemented'}
+        try:
+            from firebase.service import FirebaseService
+
+            firebase = FirebaseService.get_instance()
+            if not firebase or not getattr(firebase, 'app', None):
+                return {'success': False, 'error': 'Firebase not configured'}
+
+            device_tokens = self._resolve_fcm_tokens(user, tokens)
+            if not device_tokens:
+                return {'success': False, 'error': 'No device tokens registered'}
+
+            amount = getattr(transaction, 'amount', 0) or 0
+            try:
+                amount_str = f"{float(amount):,.2f}"
+            except Exception:  # noqa: BLE001
+                amount_str = str(amount)
+
+            title = f"₦{amount_str} received"
+            body = getattr(transaction, 'description', None) or 'Wallet credit'
+            data = {
+                'category': 'money',
+                'transaction_id': str(getattr(transaction, 'id', '')),
+                'reference': str(getattr(transaction, 'reference', '') or ''),
+                'link': '/dashboard/wallet',
+            }
+
+            message = self._build_multicast(
+                tokens=device_tokens, title=title, body=body, data=data,
+            )
+            result = self._dispatch_multicast(message)
+            logger.info(
+                'transaction.push.sent',
+                extra={
+                    'event': 'transaction.push.sent',
+                    'user_id': getattr(user, 'id', None),
+                    'transaction_id': getattr(transaction, 'id', None),
+                    **{k: v for k, v in result.items() if k != 'errors'},
+                },
+            )
+            return result
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error('Transaction push failed: %s', exc, exc_info=True)
+            return {'success': False, 'error': str(exc)}
 
     def _send_transaction_email(self, user, transaction) -> Dict:
         """Send transaction email notification through the central dispatcher."""

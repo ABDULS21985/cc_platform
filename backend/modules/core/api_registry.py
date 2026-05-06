@@ -6,15 +6,23 @@ Primary registration path for active REST API resources.
 """
 import logging
 
+from config import Config
+
 logger = logging.getLogger(__name__)
 
 
 def register_api_blueprints(api):
     """
     Register all Flask-Smorest blueprints with the API instance.
-    
+
     Args:
         api: Flask-Smorest Api instance
+
+    Notes:
+        Admin blueprints are conditionally registered based on
+        ``Config.ENABLE_ADMIN_API``. They stay code-resident so they're
+        importable in tests, but they're unreachable at the HTTP layer in
+        standard deploys.
     """
     # List of (module_path, blueprint_name) for Flask-Smorest resources
     api_blueprints = [
@@ -52,12 +60,25 @@ def register_api_blueprints(api):
         ("modules.community.resources.institution_resource", "institution_blp"),
         # Organization - Parent grouping for communities inside institutions
         ("modules.community.resources.organization_resource", "organization_blp"),
-        # Admin - Super Admin portal
-        ("modules.admin.resources.me_resource", "admin_me_blp"),
-        ("modules.admin.resources.overview_resource", "admin_overview_blp"),
-        ("modules.admin.resources.users_resource", "admin_users_blp"),
-        ("modules.admin.resources.communities_resource", "admin_communities_blp"),
-        ("modules.admin.resources.transactions_resource", "admin_transactions_blp"),
+    ]
+
+    # Admin module is conditionally exposed. Gated by ENABLE_ADMIN_API so the
+    # five admin resources stay code-resident (and importable in tests) but
+    # unreachable in standard deploys.
+    if Config.ENABLE_ADMIN_API:
+        api_blueprints.extend([
+            ("modules.admin.resources.me_resource", "admin_me_blp"),
+            ("modules.admin.resources.overview_resource", "admin_overview_blp"),
+            ("modules.admin.resources.users_resource", "admin_users_blp"),
+            ("modules.admin.resources.communities_resource", "admin_communities_blp"),
+            ("modules.admin.resources.transactions_resource", "admin_transactions_blp"),
+        ])
+    else:
+        logger.info(
+            'Admin API disabled (ENABLE_ADMIN_API=false); skipping admin blueprint registration'
+        )
+
+    api_blueprints.extend([
         # Notifications — in-app user notifications
         ("modules.notifications.resources.notification_resource", "notification_blp"),
         # Notifications — FCM device-token registration for push delivery
@@ -76,8 +97,8 @@ def register_api_blueprints(api):
         ("modules.subscriptions.resources.standing_instruction_resource", "standing_instruction_blp"),
         # Dev tools — seed endpoints gated on FLASK_ENV=development
         ("modules.dev_tools.resources.seed_resource", "dev_seed_blp"),
-    ]
-    
+    ])
+
     for module_path, blueprint_name in api_blueprints:
         try:
             # Dynamically import the module

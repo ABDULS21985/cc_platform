@@ -52,8 +52,8 @@ export function ExpensesTab({ communityName, communityId }: ExpensesTabProps) {
     () =>
       bills.filter((bill) =>
         activeTab === "campaigns"
-          ? bill.type === "free_will"
-          : bill.type === "fixed",
+          ? bill.expense_kind === "campaign"
+          : bill.expense_kind === "split_payment",
       ),
     [activeTab, bills],
   );

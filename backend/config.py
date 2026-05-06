@@ -176,6 +176,17 @@ class Config:
         "FIREBASE_CREDENTIALS", "/secrets/firebase_credentials.json"
     )
     ENABLE_PUSH_NOTIFICATIONS = _bool(os.getenv("ENABLE_PUSH_NOTIFICATIONS"), False)
+    # FCM master kill-switch consumed by the verification notification service
+    # and any other module that wants a sandbox short-circuit. Defaults to True
+    # in production so push delivery works once credentials are wired, and
+    # False in tests (TestingConfig overrides) so unit tests never reach FCM.
+    FCM_ENABLED = _bool(os.getenv("FCM_ENABLED"), True)
+
+    # === ADMIN GATE ===
+    # The admin module is code-resident but only routable when this flag is
+    # true. Standard production deploys leave this off — admin endpoints are
+    # served by an isolated deploy with its own secrets and ACLs.
+    ENABLE_ADMIN_API = os.getenv("ENABLE_ADMIN_API", "false").lower() == "true"
     
     # === MISC ===
     MESSAGES_PER_PAGE = _int(os.getenv("MESSAGES_PER_PAGE"), 20)

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -56,6 +56,7 @@ export function CreateSplitPaymentDialog({
         description: description.trim() || null,
         amount: Number(amount),
         type: 'fixed',
+        expense_kind: 'split_payment',
         due_date: new Date(`${endDate}T23:59:59`).toISOString(),
       });
       reset();
@@ -76,6 +77,9 @@ export function CreateSplitPaymentDialog({
           <DialogTitle className="text-lg font-bold text-[#000000]">
             Create split payment
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Create a fixed split payment for this community.
+          </DialogDescription>
         </div>
 
         <div className="p-4 space-y-4">

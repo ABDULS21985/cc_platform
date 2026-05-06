@@ -32,6 +32,7 @@ const fakeBill = (overrides: Record<string, unknown> = {}) => ({
   amount: 100000,
   collected_amount: 25000,
   type: 'free_will',
+  expense_kind: 'campaign',
   min_amount: 0,
   status: 'active',
   is_recurring: false,
@@ -56,7 +57,12 @@ beforeEach(() => {
       data: {
         bills: [
           fakeBill(),
-          fakeBill({ id: 2, title: 'Rent split', type: 'fixed' }),
+          fakeBill({
+            id: 2,
+            title: 'Rent split',
+            type: 'fixed',
+            expense_kind: 'split_payment',
+          }),
         ],
       },
     },
@@ -117,6 +123,7 @@ describe('ExpensesTab', () => {
           description: 'Buy generator',
           amount: 50000,
           type: 'free_will',
+          expense_kind: 'campaign',
         }),
       );
     });

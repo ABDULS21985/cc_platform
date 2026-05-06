@@ -517,7 +517,26 @@ export interface BillData {
   status: string;
   title: string;
   type: "fixed" | "free_will" | string;
+  expense_kind?: "bill" | "campaign" | "split_payment" | string;
   updated_at: string;
+}
+
+export interface BillProgressData {
+  bill_id: number;
+  title: string;
+  amount: number;
+  collected: number;
+  remaining: number;
+  paid_member_count: number;
+  expected_member_count: number;
+  percentage: number;
+  status: string;
+}
+
+export interface BillProgressResponse {
+  success: boolean;
+  message: string;
+  data: BillProgressData;
 }
 
 export interface BillMemberPaymentStatus {
@@ -552,6 +571,7 @@ export interface CreateBillPayload {
   description?: string | null;
   amount: number;
   type?: string;
+  expense_kind?: "bill" | "campaign" | "split_payment";
   min_amount?: number;
   is_recurring?: boolean;
   recurrence_type?: string | null;
@@ -1189,7 +1209,15 @@ export const ApiService = {
       ),
 
     // Bills
-    getBills: (id: number, params?: { limit?: number; offset?: number }) =>
+    getBills: (
+      id: number,
+      params?: {
+        limit?: number;
+        offset?: number;
+        status?: string;
+        expense_kind?: "bill" | "campaign" | "split_payment";
+      },
+    ) =>
       axiosInstance.get<BillListResponse>(`/v2/community/${id}/bills`, {
         params,
       }),
@@ -1200,6 +1228,11 @@ export const ApiService = {
     getBill: (communityId: number, billId: number) =>
       axiosInstance.get<BillResponse>(
         `/v2/community/${communityId}/bills/${billId}`,
+      ),
+
+    getBillProgress: (communityId: number, billId: number) =>
+      axiosInstance.get<BillProgressResponse>(
+        `/v2/community/${communityId}/bills/${billId}/progress`,
       ),
 
     updateBill: (

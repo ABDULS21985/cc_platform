@@ -504,3 +504,112 @@ class CommunityWalletService:
             'status': wallet.status,
             'bell_mfb_active': wallet.bell_mfb_client_id is not None
         }
+
+    def list_transactions(
+        self,
+        community_id: int,
+        user_id: int,
+        limit: int = 50,
+        offset: int = 0,
+        type: Optional[str] = None,
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Paginated community-wallet transactions for an active member.
+
+        Backs ``GET /api/v2/community/<id>/wallet/transactions`` and the
+        FE WalletTab. Returns both the page slice and a ``summary`` block
+        (``total_collected``, ``total_spent``) over the entire community
+        history so the WalletTab stats render real numbers regardless of
+        the current pagination window.
+
+        Args:
+            community_id: Community whose wallet to list.
+            user_id: Caller — must be an active member.
+            limit/offset: Pagination window (limit clamped at 100).
+            type: Optional bucket filter — ``credit`` (deposits) /
+                  ``debit`` (withdrawal/transfer/payment) / or any literal
+                  ``WalletTransaction.type`` value.
+
+        Returns:
+            ``(payload, None)`` on success or ``(None, error)`` where the
+            error string drives resource-layer status mapping.
+        """
+        # Authorization — only active members can view this history.
+        membership = self.member_repo.find_by_community_and_user(community_id, user_id)
+        if not membership or membership.status != 'active':
+            return None, 'Not a community member'
+
+        try:
+            limit = max(1, min(int(limit), 100))
+            offset = max(0, int(offset))
+
+            base_query = WalletTransaction.query.filter(
+                WalletTransaction.community_id == community_id
+            )
+
+            page_query = base_query
+            if type:
+                if type == 'credit':
+                    page_query = page_query.filter(
+                        WalletTransaction.type.in_(['credit', 'deposit'])
+                    )
+                elif type == 'debit':
+                    page_query = page_query.filter(
+                        WalletTransaction.type.in_(
+                            ['debit', 'withdrawal', 'transfer', 'payment']
+                        )
+                    )
+                else:
+                    page_query = page_query.filter(WalletTransaction.type == type)
+
+            total = page_query.count()
+            rows = (
+                page_query.order_by(WalletTransaction.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
+            # Summary aggregates over the FULL community ledger (independent
+            # of `type`/pagination) so WalletTab stats reflect lifetime
+            # totals, not just the current page.
+            completed_statuses = ['successful', 'completed']
+            collected = (
+                base_query.filter(WalletTransaction.status.in_(completed_statuses))
+                .filter(WalletTransaction.type.in_(['credit', 'deposit']))
+                .with_entities(func.coalesce(func.sum(WalletTransaction.net_amount), 0))
+                .scalar()
+            )
+            spent = (
+                base_query.filter(WalletTransaction.status.in_(completed_statuses))
+                .filter(
+                    WalletTransaction.type.in_(['debit', 'withdrawal', 'transfer', 'payment'])
+                )
+                .with_entities(func.coalesce(func.sum(WalletTransaction.net_amount), 0))
+                .scalar()
+            )
+
+            transactions = [t.to_dict() for t in rows]
+
+            return {
+                'transactions': transactions,
+                'pagination': {
+                    'total': int(total),
+                    'limit': limit,
+                    'offset': offset,
+                    'has_more': (offset + len(transactions)) < int(total),
+                },
+                'summary': {
+                    'total_collected': float(collected or 0),
+                    'total_spent': float(spent or 0),
+                },
+            }, None
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                'Error listing community %s transactions for user %s: %s',
+                community_id,
+                user_id,
+                exc,
+                exc_info=True,
+            )
+            return None, str(exc)
