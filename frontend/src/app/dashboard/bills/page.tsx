@@ -360,13 +360,8 @@ export default function BillsPage() {
     (async () => {
       setLoading(true);
       try {
-        // Read user_id from localStorage (set at login) for "isYou" attribution.
-        const raw =
-          typeof window !== 'undefined'
-            ? window.localStorage.getItem('user_data')
-            : null;
-        const me = raw ? (JSON.parse(raw) as { id?: number }) : null;
-        const real = await fetchAggregatedBills(me?.id);
+        const profileRes = await ApiService.profile.get();
+        const real = await fetchAggregatedBills(profileRes.data?.data?.id);
         if (cancelled) return;
         if (real.length === 0) {
           setBills(useDemoData() ? MOCK_BILLS : []);

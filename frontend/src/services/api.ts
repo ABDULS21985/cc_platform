@@ -423,7 +423,7 @@ export interface BillData {
   recurrence_type?: string;
   status: string;
   title: string;
-  type: string;
+  type: "fixed" | "free_will" | string;
   updated_at: string;
 }
 
@@ -1122,6 +1122,7 @@ export const ApiService = {
       offset?: number;
       unread_only?: boolean;
       category?: string;
+      community_id?: number;
     }) =>
       axiosInstance.get<ApiResponse<{
         notifications: NotificationApi[];
@@ -1180,6 +1181,12 @@ export const ApiService = {
         unread_by_category: Record<string, number>;
         total: number;
       }>>("/v2/notifications/unread-by-category"),
+
+    unreadByCommunity: (communityId: number) =>
+      axiosInstance.get<ApiResponse<{
+        community_id: number;
+        unread_count: number;
+      }>>(`/v2/notifications/communities/${communityId}/unread-count`),
 
     listMutedCommunities: () =>
       axiosInstance.get<ApiResponse<{ community_ids: number[] }>>(
@@ -1545,6 +1552,7 @@ export interface AuthSessionApi {
 export interface NotificationApi {
   id: number;
   user_id: number;
+  community_id: number | null;
   category: string;
   title: string;
   body: string;

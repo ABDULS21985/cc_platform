@@ -353,6 +353,43 @@ class PaginationSchema(Schema):
     has_more = fields.Boolean(metadata={'description': 'Whether more records exist'})
 
 
+class BeneficiaryDataSchema(Schema):
+    id = fields.Integer(metadata={'description': 'Beneficiary ID'})
+    user_id = fields.Integer(metadata={'description': 'Owner user ID'})
+    name = fields.String(metadata={'description': 'Display name'})
+    account_number = fields.String(metadata={'description': 'Recipient account number'})
+    account_name = fields.String(metadata={'description': 'Recipient account holder name'})
+    bank_code = fields.String(metadata={'description': 'Recipient bank code'})
+    bank_name = fields.String(metadata={'description': 'Recipient bank name'})
+    nickname = fields.String(allow_none=True, metadata={'description': 'Optional nickname'})
+    is_favorite = fields.Boolean(metadata={'description': 'Favorite flag'})
+    last_used_at = fields.String(allow_none=True, metadata={'description': 'Last selected timestamp'})
+    created_at = fields.String(allow_none=True, metadata={'description': 'Creation timestamp'})
+    updated_at = fields.String(allow_none=True, metadata={'description': 'Update timestamp'})
+
+
+class BeneficiaryListDataSchema(Schema):
+    beneficiaries = fields.List(fields.Nested(BeneficiaryDataSchema))
+    pagination = fields.Nested(PaginationSchema)
+
+
+class BeneficiaryListResponseSchema(Schema):
+    success = fields.Boolean()
+    message = fields.String()
+    data = fields.Nested(BeneficiaryListDataSchema)
+
+
+class BeneficiarySaveDataSchema(Schema):
+    beneficiary = fields.Nested(BeneficiaryDataSchema)
+    already_saved = fields.Boolean()
+
+
+class BeneficiarySaveResponseSchema(Schema):
+    success = fields.Boolean()
+    message = fields.String()
+    data = fields.Nested(BeneficiarySaveDataSchema)
+
+
 class TransactionListSchema(Schema):
     """Transaction list with pagination"""
     transactions = fields.List(fields.Nested(TransactionDataSchema))

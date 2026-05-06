@@ -15,17 +15,22 @@ from modules.wallet.schemas.wallet_schema import (
     DepositSchema,
     WithdrawSchema,
     TransactionQuerySchema,
+    BeneficiaryQuerySchema,
+    BeneficiaryCreateSchema,
     SetTransactionPinSchema,
     ChangeTransactionPinSchema,
     ResetTransactionPinSchema,
     WalletResponseSchema,
     TransactionResponseSchema,
+    BeneficiaryListResponseSchema,
+    BeneficiarySaveResponseSchema,
     WalletSummaryResponseSchema,
     DepositResponseSchema,
     WithdrawResponseSchema,
     WalletErrorSchema
 )
 from modules.wallet.services.wallet_service import WalletService
+from modules.wallet.services.wallet_beneficiary_service import WalletBeneficiaryService
 from modules.verification.utils.rate_limiter import rate_limit
 from modules.core.response_formatter import format_data, format_error, format_internal_error
 
