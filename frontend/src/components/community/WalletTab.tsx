@@ -1,18 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Loader2,
-  Plus,
-  ArrowDownToLine,
-  MoreHorizontal,
-  ArrowUpRight,
   ArrowDownLeft,
+  ArrowDownToLine,
+  ArrowUpRight,
+  Copy,
+  Landmark,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
 } from "lucide-react";
 import useCurrency from "@/hooks/useCurrency";
-import { ApiService } from "@/services/api";
-import { toast } from 'sonner';
+import { ApiService, type CommunityBalanceData, type CommunityTransaction } from "@/services/api";
+import { toast } from "sonner";
 import { toastAxiosError } from "@/hooks/useAxiosError";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface WalletTabProps {
   communityName: string;
@@ -30,7 +49,46 @@ interface Transaction {
   created_at: string;
 }
 
-// Group transactions by relative date label
+const PAGE_SIZE = 20;
+
+function toNumber(value: string | number | null | undefined) {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function transactionDirection(txn: CommunityTransaction): "credit" | "debit" {
+  if (txn.direction === "credit" || txn.direction === "debit") {
+    return txn.direction;
+  }
+
+  if (
+    txn.transaction_type === "community_transfer" ||
+    txn.type === "transfer" ||
+    txn.type === "withdrawal"
+  ) {
+    return "debit";
+  }
+
+  return "credit";
+}
+
+function mapTransaction(txn: CommunityTransaction): Transaction {
+  const type = transactionDirection(txn);
+  const payerName = txn.payer_name || txn.user?.full_name || txn.payer?.full_name;
+  const status = txn.status ? `${txn.status}` : undefined;
+
+  return {
+    id: txn.id,
+    type,
+    description:
+      txn.description ||
+      (type === "credit" ? "Community wallet credit" : "Community wallet transfer"),
+    sub_description: payerName || status,
+    amount: Math.abs(toNumber(txn.net_amount ?? txn.amount)),
+    created_at: txn.created_at,
+  };
+}
+
 function groupByDate(transactions: Transaction[]) {
   const groups: { label: string; items: Transaction[] }[] = [];
   const seen = new Map<string, number>();
@@ -42,7 +100,9 @@ function groupByDate(transactions: Transaction[]) {
     yesterday.setDate(today.getDate() - 1);
 
     let label: string;
-    if (date.toDateString() === today.toDateString()) {
+    if (Number.isNaN(date.getTime())) {
+      label = "Unknown date";
+    } else if (date.toDateString() === today.toDateString()) {
       label = "Today";
     } else if (date.toDateString() === yesterday.toDateString()) {
       label = "Yesterday";
@@ -71,54 +131,160 @@ export default function WalletTab({
   const { formatCurrency } = useCurrency();
   const [filter, setFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
-  const [balance, setBalance] = useState<number>(0);
-  const [totalCollected, setTotalCollected] = useState<number>(0);
-  const [totalSpent, setTotalSpent] = useState<number>(0);
+  const [balanceInfo, setBalanceInfo] = useState<CommunityBalanceData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [fundOpen, setFundOpen] = useState(false);
+  const [fundAmount, setFundAmount] = useState("");
+  const [fundDescription, setFundDescription] = useState("");
+  const [funding, setFunding] = useState(false);
+  const [depositResult, setDepositResult] = useState<any>(null);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [recipientAccount, setRecipientAccount] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [recipientBankCode, setRecipientBankCode] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawPin, setWithdrawPin] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchWallet = async () => {
-      setLoading(true);
-      try {
-        // const res = await ApiService.communities.getWallet(communityId);
-        // const data = res.data.data;
-        // setBalance(data.balance ?? 0);
-        // setTotalCollected(data.total_collected ?? 0);
-        // setTotalSpent(data.total_spent ?? 0);
-        // setTransactions(data.transactions ?? []);
-        // setHasMore(data.has_more ?? false);
-      } catch (err: any) {
-        toastAxiosError(err, "Failed to load wallet data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchWallet();
+  const fetchWallet = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [balanceResponse, transactionsResponse] = await Promise.all([
+        ApiService.communities.getBalance(communityId),
+        ApiService.communities.getTransactions(communityId, {
+          limit: PAGE_SIZE,
+          offset: 0,
+        }),
+      ]);
+
+      setBalanceInfo(balanceResponse.data.data);
+      const payload = transactionsResponse.data.data;
+      setTransactions((payload.transactions ?? []).map(mapTransaction));
+      setHasMore(Boolean(payload.pagination?.has_more));
+    } catch (err: any) {
+      toastAxiosError(err, "Failed to load wallet data.");
+    } finally {
+      setLoading(false);
+    }
   }, [communityId]);
 
-  const filtered = transactions.filter((t) =>
-    filter === "all" ? true : t.type === filter,
+  useEffect(() => {
+    fetchWallet();
+  }, [fetchWallet]);
+
+  const totalCollected = balanceInfo?.total_deposits ?? 0;
+  const totalSpent = balanceInfo?.total_withdrawals ?? 0;
+  const transactionCount = balanceInfo?.transaction_count ?? transactions.length;
+
+  const filtered = useMemo(
+    () => transactions.filter((t) => (filter === "all" ? true : t.type === filter)),
+    [filter, transactions],
   );
 
-  const grouped = groupByDate(filtered);
+  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
     try {
-      const nextPage = page + 1;
-    //   const res = await ApiService.communities.getWallet(communityId, nextPage);
-    //   const data = res.data.data;
-    //   setTransactions((prev) => [...prev, ...(data.transactions ?? [])]);
-    //   setHasMore(data.has_more ?? false);
-    //   setPage(nextPage);
-    } catch(err) {
+      const response = await ApiService.communities.getTransactions(communityId, {
+        limit: PAGE_SIZE,
+        offset: transactions.length,
+      });
+      const payload = response.data.data;
+      setTransactions((prev) => [
+        ...prev,
+        ...(payload.transactions ?? []).map(mapTransaction),
+      ]);
+      setHasMore(Boolean(payload.pagination?.has_more));
+    } catch (err: any) {
       toastAxiosError(err, "Failed to load more transactions.");
     } finally {
       setLoadingMore(false);
     }
+  };
+
+  const resetDepositForm = () => {
+    setFundAmount("");
+    setFundDescription("");
+    setDepositResult(null);
+  };
+
+  const handleFundWallet = async () => {
+    const amount = Number(fundAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid amount.");
+      return;
+    }
+
+    setFunding(true);
+    try {
+      const response = await ApiService.communities.deposit(communityId, {
+        amount,
+        description: fundDescription.trim() || `Deposit to ${communityName}`,
+      });
+      setDepositResult(response.data.data);
+      toast.success("Deposit account generated");
+      await fetchWallet();
+    } catch (err: any) {
+      toastAxiosError(err, "Failed to start funding flow.");
+    } finally {
+      setFunding(false);
+    }
+  };
+
+  const resetWithdrawForm = () => {
+    setWithdrawAmount("");
+    setRecipientAccount("");
+    setRecipientName("");
+    setRecipientBankCode("");
+    setWithdrawReason("");
+    setWithdrawPin("");
+  };
+
+  const handleWithdraw = async () => {
+    const amount = Number(withdrawAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid withdrawal amount.");
+      return;
+    }
+    if (!recipientAccount.trim() || !recipientName.trim() || !recipientBankCode.trim()) {
+      toast.error("Recipient account, name, and bank code are required.");
+      return;
+    }
+    if (!/^\d{4}$/.test(withdrawPin)) {
+      toast.error("Enter your 4-digit transaction PIN.");
+      return;
+    }
+
+    setWithdrawing(true);
+    try {
+      await ApiService.communities.transfer(communityId, {
+        amount,
+        recipient_account: recipientAccount.trim(),
+        recipient_name: recipientName.trim(),
+        recipient_bank_code: recipientBankCode.trim(),
+        reason: withdrawReason.trim() || `Withdrawal from ${communityName}`,
+        pin: withdrawPin,
+      });
+      toast.success("Transfer initiated");
+      setWithdrawOpen(false);
+      resetWithdrawForm();
+      await fetchWallet();
+    } catch (err: any) {
+      toastAxiosError(err, "Failed to withdraw funds.");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleCopyAccount = async () => {
+    if (!balanceInfo?.account_number) return;
+    await navigator.clipboard.writeText(balanceInfo.account_number);
+    toast.success("Account number copied");
   };
 
   if (loading) {
@@ -131,43 +297,71 @@ export default function WalletTab({
 
   return (
     <div className="space-y-4">
-      {/* Balance card */}
       <div
         className="rounded-2xl p-6 text-white relative overflow-hidden"
         style={{ background: "#0E9DA5" }}
       >
-        {/* decorative circles */}
         <div className="absolute -top-14 -right-10 w-48 h-48 rounded-full bg-white/[0.07]" />
         <div className="absolute -bottom-12 left-10 w-36 h-36 rounded-full bg-white/[0.05]" />
 
         <p className="text-xs text-white/80 mb-1 relative z-10">
           Community wallet balance
         </p>
-        <p className="text-3xl font-bold mb-5 relative z-10">
-          {formatCurrency(balance)}
+        <p className="text-3xl font-bold mb-1 relative z-10">
+          {formatCurrency(balanceInfo?.balance ?? 0)}
+        </p>
+        <p className="text-xs text-white/75 mb-5 relative z-10 capitalize">
+          {balanceInfo?.status ? `${balanceInfo.status} wallet` : "Wallet"}
         </p>
 
         <div className="flex gap-3 relative z-10">
-          <button className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md">
+          <button
+            type="button"
+            onClick={() => {
+              resetDepositForm();
+              setFundOpen(true);
+            }}
+            className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md"
+          >
             <Plus className="w-4 h-4" />
             Fund wallet
           </button>
-          <button className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md">
+          <button
+            type="button"
+            onClick={() => setWithdrawOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md"
+          >
             <ArrowDownToLine className="w-4 h-4" />
             Withdraw
           </button>
-          <button className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md">
-            <MoreHorizontal className="w-4 h-4" />
-            More
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex-1 flex items-center justify-center gap-2 bg-white/20 hover:bg-white/30 transition text-white text-sm font-medium py-2 rounded-md"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+                More
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={fetchWallet}>
+                <RefreshCw className="mr-2 size-4" />
+                Refresh wallet
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDetailsOpen(true)}>
+                <Landmark className="mr-2 size-4" />
+                Wallet details
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-white rounded-xl p-4 border border-[#f0f0f0]">
-          <div className="w-7 h-7 rounded-lg bg-[#e1f2ee] flex items-center justify-center mb-3">
-            <ArrowUpRight className="w-4 h-4 text-[#0E9DA5]" />
+          <div className="w-7 h-7 rounded-lg bg-[#fff3eb] flex items-center justify-center mb-3">
+            <ArrowUpRight className="w-4 h-4 text-orange-500" />
           </div>
           <p className="text-base font-bold text-black">
             {formatCurrency(totalSpent)}
@@ -175,8 +369,8 @@ export default function WalletTab({
           <p className="text-xs text-[#959595] mt-0.5">Total spent</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-[#f0f0f0]">
-          <div className="w-7 h-7 rounded-lg bg-[#fff3eb] flex items-center justify-center mb-3">
-            <ArrowDownLeft className="w-4 h-4 text-orange-500" />
+          <div className="w-7 h-7 rounded-lg bg-[#e1f2ee] flex items-center justify-center mb-3">
+            <ArrowDownLeft className="w-4 h-4 text-[#0E9DA5]" />
           </div>
           <p className="text-base font-bold text-black">
             {formatCurrency(totalCollected)}
@@ -185,27 +379,15 @@ export default function WalletTab({
         </div>
         <div className="bg-white rounded-xl p-4 border border-[#f0f0f0]">
           <div className="w-7 h-7 rounded-lg bg-[#e6f1fb] flex items-center justify-center mb-3">
-            <svg
-              className="w-4 h-4 text-blue-500"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="2" y="5" width="20" height="14" rx="2" />
-              <line x1="2" y1="10" x2="22" y2="10" />
-            </svg>
+            <Landmark className="w-4 h-4 text-blue-500" />
           </div>
-          <p className="text-base font-bold text-black">
-            {transactions.length}
-          </p>
+          <p className="text-base font-bold text-black">{transactionCount}</p>
           <p className="text-xs text-[#959595] mt-0.5">Transactions</p>
         </div>
       </div>
 
-      {/* Transactions list */}
       <div className="bg-white rounded-xl p-4 sm:p-5 border border-[#f0f0f0]">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-3">
           <h4 className="text-sm font-semibold text-black">
             Transaction history
           </h4>
@@ -213,6 +395,7 @@ export default function WalletTab({
             {(["all", "credit", "debit"] as FilterType[]).map((f) => (
               <button
                 key={f}
+                type="button"
                 onClick={() => setFilter(f)}
                 className={`text-xs px-3 py-1.5 rounded-full border transition capitalize ${
                   filter === f
@@ -239,6 +422,7 @@ export default function WalletTab({
                 </p>
                 {group.items.map((txn) => {
                   const isCredit = txn.type === "credit";
+                  const time = new Date(txn.created_at);
                   return (
                     <div
                       key={txn.id}
@@ -250,9 +434,9 @@ export default function WalletTab({
                         }`}
                       >
                         {isCredit ? (
-                          <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                          <ArrowDownLeft className="w-4 h-4 text-emerald-500" />
                         ) : (
-                          <ArrowDownLeft className="w-4 h-4 text-orange-500" />
+                          <ArrowUpRight className="w-4 h-4 text-orange-500" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -275,13 +459,12 @@ export default function WalletTab({
                           {formatCurrency(txn.amount)}
                         </p>
                         <p className="text-xs text-[#959595] mt-0.5">
-                          {new Date(txn.created_at).toLocaleTimeString(
-                            "en-NG",
-                            {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}
+                          {Number.isNaN(time.getTime())
+                            ? "N/A"
+                            : time.toLocaleTimeString("en-NG", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
                         </p>
                       </div>
                     </div>
@@ -295,18 +478,211 @@ export default function WalletTab({
         {hasMore && (
           <div className="text-center mt-4">
             <button
+              type="button"
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="text-sm text-[#0E9DA5] flex items-center gap-1.5 mx-auto hover:underline"
+              className="text-sm text-[#0E9DA5] flex items-center gap-1.5 mx-auto hover:underline disabled:opacity-60"
             >
-              {loadingMore ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : null}
+              {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {loadingMore ? "Loading..." : "Load more transactions"}
             </button>
           </div>
         )}
       </div>
+
+      <Dialog
+        open={fundOpen}
+        onOpenChange={(open) => {
+          setFundOpen(open);
+          if (!open) resetDepositForm();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Fund community wallet</DialogTitle>
+          </DialogHeader>
+          {depositResult ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-4 space-y-3">
+                <div>
+                  <p className="text-xs text-[#959595]">Amount</p>
+                  <p className="text-lg font-bold">{formatCurrency(toNumber(depositResult.amount))}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#959595]">Account number</p>
+                  <p className="font-semibold">{depositResult.account_details?.account_number || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#959595]">Account name</p>
+                  <p className="font-semibold">{depositResult.account_details?.account_name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-[#959595]">Bank</p>
+                  <p className="font-semibold">{depositResult.account_details?.bank_name || "N/A"}</p>
+                </div>
+              </div>
+              {depositResult.instructions && (
+                <p className="text-sm text-muted-foreground">{depositResult.instructions}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="fund-amount">Amount</Label>
+                <Input
+                  id="fund-amount"
+                  inputMode="decimal"
+                  value={fundAmount}
+                  onChange={(event) => setFundAmount(event.target.value)}
+                  placeholder="5000"
+                  disabled={funding}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="fund-description">Description</Label>
+                <Input
+                  id="fund-description"
+                  value={fundDescription}
+                  onChange={(event) => setFundDescription(event.target.value)}
+                  placeholder="Monthly contribution"
+                  disabled={funding}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFundOpen(false)} disabled={funding}>
+              Close
+            </Button>
+            {!depositResult && (
+              <Button onClick={handleFundWallet} loading={funding}>
+                Generate account
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw from community wallet</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="withdraw-amount">Amount</Label>
+              <Input
+                id="withdraw-amount"
+                inputMode="decimal"
+                value={withdrawAmount}
+                onChange={(event) => setWithdrawAmount(event.target.value)}
+                placeholder="5000"
+                disabled={withdrawing}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="recipient-account">Recipient account</Label>
+              <Input
+                id="recipient-account"
+                inputMode="numeric"
+                value={recipientAccount}
+                onChange={(event) => setRecipientAccount(event.target.value.replace(/\D/g, ""))}
+                placeholder="0123456789"
+                disabled={withdrawing}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="recipient-name">Recipient name</Label>
+              <Input
+                id="recipient-name"
+                value={recipientName}
+                onChange={(event) => setRecipientName(event.target.value)}
+                placeholder="Recipient account name"
+                disabled={withdrawing}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="recipient-bank-code">Bank code</Label>
+              <Input
+                id="recipient-bank-code"
+                value={recipientBankCode}
+                onChange={(event) => setRecipientBankCode(event.target.value.trim())}
+                placeholder="058"
+                disabled={withdrawing}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="withdraw-reason">Reason</Label>
+              <Input
+                id="withdraw-reason"
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value)}
+                placeholder="Vendor payment"
+                disabled={withdrawing}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="withdraw-pin">Transaction PIN</Label>
+              <Input
+                id="withdraw-pin"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={withdrawPin}
+                onChange={(event) => setWithdrawPin(event.target.value.replace(/\D/g, ""))}
+                placeholder="1234"
+                disabled={withdrawing}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)} disabled={withdrawing}>
+              Cancel
+            </Button>
+            <Button onClick={handleWithdraw} loading={withdrawing}>
+              Initiate transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Wallet details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] p-4">
+            <div>
+              <p className="text-xs text-[#959595]">Community</p>
+              <p className="font-semibold">{communityName}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#959595]">Account number</p>
+              <p className="font-semibold">{balanceInfo?.account_number || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#959595]">Account name</p>
+              <p className="font-semibold">{balanceInfo?.account_name || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#959595]">Status</p>
+              <p className="font-semibold capitalize">{balanceInfo?.status || "N/A"}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailsOpen(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={handleCopyAccount}
+              disabled={!balanceInfo?.account_number}
+              leadingIcon={<Copy className="size-4" />}
+            >
+              Copy account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -28,6 +28,8 @@ export interface MemberItem {
   postsCount?: number;
   /** Optional: starred contact. */
   isFavorite?: boolean;
+  /** Server bookmark row backing the favorite state. */
+  favoriteBookmarkId?: number | null;
   /** Tone class for the avatar fallback (background + foreground). */
   avatarTone: string;
 }

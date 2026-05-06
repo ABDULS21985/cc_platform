@@ -40,9 +40,12 @@ from modules.community.resources.community_wallet_resource import (
 )
 from modules.community.resources.post_resource import (
     post_blp,
+    CommunityPostCommentsResource,
+    CommunityPostCommentResource,
     CommunityPostListResource,
     CommunityPostResource,
     CommunityPostMediaUploadResource,
+    CommunityPostReactionResource,
 )
 from modules.community.resources.membership_payment_resource import (
     membership_payment_blp,
@@ -95,6 +98,9 @@ __all__ = [
     'CommunityPostListResource',
     'CommunityPostResource',
     'CommunityPostMediaUploadResource',
+    'CommunityPostCommentsResource',
+    'CommunityPostCommentResource',
+    'CommunityPostReactionResource',
     'MembershipPaymentInitResource',
     'MembershipPaymentVerifyResource',
     'MembershipPaymentStatusResource',

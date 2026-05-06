@@ -135,6 +135,16 @@ class CommunityPostStatus(str, Enum):
         return [e.value for e in cls]
 
 
+class CommunityPostReactionType(str, Enum):
+    """Supported community post reaction values."""
+
+    LIKE = 'like'
+
+    @classmethod
+    def values(cls) -> list:
+        return [e.value for e in cls]
+
+
 class InviteStatus(str, Enum):
     """Invite status values"""
     ACTIVE = 'active'

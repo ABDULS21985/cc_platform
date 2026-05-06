@@ -10,6 +10,7 @@
 import * as React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { userEvent } from '@testing-library/user-event';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -19,6 +20,8 @@ const apiMocks = {
     getSummary: vi.fn(),
     getDetails: vi.fn(),
     getTransactions: vi.fn(),
+    deposit: vi.fn(),
+    withdraw: vi.fn(),
   },
   communities: {
     joined: vi.fn(),
@@ -97,7 +100,7 @@ beforeEach(() => {
     data: { data: { wallet: { balance: 0, currency: 'NGN' } } },
   });
   apiMocks.wallet.getDetails.mockResolvedValue({
-    data: { data: { id: 1, account_number: '0000000000', account_name: 'Test', balance: '0', currency: 'NGN', status: 'active', created_at: '' } },
+    data: { data: { id: 1, account_number: '0000000000', account_name: 'Test', bank_name: 'Bell MFB', balance: '0', currency: 'NGN', status: 'active', created_at: '' } },
   });
   apiMocks.wallet.getTransactions.mockResolvedValue({
     data: { data: { transactions: [] } },
@@ -186,10 +189,18 @@ describe('WalletStatsStrip', () => {
 describe('WalletBalanceCard', () => {
   it('hits /v2/wallet/summary on mount', async () => {
     const { WalletBalanceCard } = await importComponents();
-    render(<WalletBalanceCard />);
+    render(<WalletBalanceCard onAction={vi.fn()} />);
     await waitFor(() => {
       expect(apiMocks.wallet.getSummary).toHaveBeenCalled();
     });
+  });
+
+  it('routes quick actions to the wallet flow owner', async () => {
+    const onAction = vi.fn();
+    const { WalletBalanceCard } = await importComponents();
+    render(<WalletBalanceCard onAction={onAction} />);
+    await userEvent.click(screen.getByRole('button', { name: /Fund/i }));
+    expect(onAction).toHaveBeenCalledWith('fund');
   });
 });
 
@@ -236,7 +247,7 @@ describe('Beneficiaries', () => {
       },
     });
     const { Beneficiaries } = await importComponents();
-    render(<Beneficiaries />);
+    render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
     await waitFor(() => {
       expect(screen.getAllByText('Adaeze Mbakwe').length).toBe(1);
     });
@@ -251,7 +262,7 @@ describe('Beneficiaries', () => {
       data: { data: { transactions: [] } },
     });
     const { Beneficiaries } = await importComponents();
-    render(<Beneficiaries />);
+    render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
     // Seed beneficiary "Ada Lovelace" should appear when nothing real is available.
     await waitFor(() => {
       expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
@@ -272,12 +283,45 @@ describe('Beneficiaries', () => {
       },
     });
     const { Beneficiaries } = await importComponents();
-    render(<Beneficiaries />);
+    render(<Beneficiaries onCreate={vi.fn()} onSelect={vi.fn()} />);
     // No real outflow to a recipient → seed list shows.
     await waitFor(() => {
       expect(screen.getByText('Ada Lovelace')).toBeInTheDocument();
     });
     expect(screen.queryByText('Should not appear')).not.toBeInTheDocument();
+  });
+
+  it('opens real flow callbacks for new and saved recipient clicks', async () => {
+    const onCreate = vi.fn();
+    const onSelect = vi.fn();
+    apiMocks.wallet.getTransactions.mockResolvedValue({
+      data: {
+        data: {
+          transactions: [
+            fakeTx({
+              destination_account_name: 'Adaeze Mbakwe',
+              destination_account_number: '0011223344',
+              destination_bank_name: 'GTBank',
+              meta: { bank_code: '058' },
+            }),
+          ],
+        },
+      },
+    });
+    const { Beneficiaries } = await importComponents();
+    render(<Beneficiaries onCreate={onCreate} onSelect={onSelect} />);
+    await waitFor(() => {
+      expect(screen.getByText('Adaeze Mbakwe')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Add a new recipient/i }));
+    expect(onCreate).toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /Send to Adaeze Mbakwe/i }));
+    expect(onSelect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountNumber: '0011223344',
+        bankCode: '058',
+      }),
+    );
   });
 });
 
@@ -399,7 +443,7 @@ describe('FundingSources', () => {
       },
     });
     const { FundingSources } = await importComponents();
-    render(<FundingSources />);
+    render(<FundingSources onAdd={vi.fn()} />);
     await waitFor(() => {
       expect(screen.getByText('CCPay wallet')).toBeInTheDocument();
     });
@@ -414,7 +458,7 @@ describe('FundingSources', () => {
       response: { status: 404 },
     });
     const { FundingSources } = await importComponents();
-    render(<FundingSources />);
+    render(<FundingSources onAdd={vi.fn()} />);
     await waitFor(() => {
       expect(
         screen.getByText(/Verify identity to unlock funding/i),
@@ -424,5 +468,48 @@ describe('FundingSources', () => {
       'href',
       '/dashboard/settings?tab=verification',
     );
+  });
+
+  it('uses the Add button to open the real fund flow', async () => {
+    const onAdd = vi.fn();
+    const { FundingSources } = await importComponents();
+    render(<FundingSources onAdd={onAdd} />);
+    await waitFor(() => {
+      expect(screen.getByText('CCPay wallet')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('button', { name: /Add/i }));
+    expect(onAdd).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AccountDetailsModal
+// ---------------------------------------------------------------------------
+describe('AccountDetailsModal', () => {
+  it('renders backend-provided details and copies that account number', async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } });
+    const { AccountDetailsModal } = await import('@/components/wallet/AccountDetailsModal');
+
+    render(
+      <AccountDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        details={{
+          account_number: '1234567890',
+          account_name: 'Sam Tester',
+          bank_name: 'SafeHaven MFB',
+          reference: 'DEP-123',
+          instructions: 'Transfer to this account.',
+        }}
+      />,
+    );
+
+    expect(screen.getByText('1234567890')).toBeInTheDocument();
+    expect(screen.getByText('SafeHaven MFB')).toBeInTheDocument();
+    expect(screen.getByText('Sam Tester')).toBeInTheDocument();
+    expect(screen.getByText('DEP-123')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Copy/i }));
+    expect(writeText).toHaveBeenCalledWith('1234567890');
   });
 });

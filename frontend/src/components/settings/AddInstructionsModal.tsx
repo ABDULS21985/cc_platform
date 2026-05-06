@@ -17,180 +17,226 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
+export type StandingInstructionCadence = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export interface AddInstructionFormData {
+  title: string;
+  amount: string;
+  frequency: StandingInstructionCadence;
+  startDate: string;
+  endDate: string;
+  destinationAccountNumber: string;
+  destinationBankCode: string;
+  destinationAccountName: string;
+}
+
 interface AddInstructionsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onNext: (data: any) => void;
+  onNext: (data: AddInstructionFormData) => void;
 }
+
+const initialState: AddInstructionFormData = {
+  title: '',
+  amount: '',
+  frequency: 'monthly',
+  startDate: '',
+  endDate: '',
+  destinationAccountNumber: '',
+  destinationBankCode: '',
+  destinationAccountName: '',
+};
 
 export function AddInstructionsModal({
   isOpen,
   onClose,
   onNext,
 }: AddInstructionsModalProps) {
-  const [title, setTitle] = useState('Sherifat Mobalaji');
-  const [amount, setAmount] = useState('');
-  const [frequency, setFrequency] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [form, setForm] = useState<AddInstructionFormData>(initialState);
+
+  const update = <K extends keyof AddInstructionFormData>(
+    key: K,
+    value: AddInstructionFormData[K],
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleCreateInstructions = () => {
-    const formData = {
-      title,
-      amount,
-      frequency,
-      startDate,
-      endDate,
-    };
-    onNext(formData);
+    onNext({
+      ...form,
+      title: form.title.trim(),
+      amount: form.amount.trim(),
+      destinationAccountNumber: form.destinationAccountNumber.trim(),
+      destinationBankCode: form.destinationBankCode.trim(),
+      destinationAccountName: form.destinationAccountName.trim(),
+    });
   };
 
   const handleCancel = () => {
+    setForm(initialState);
     onClose();
-    // Reset form
-    setTitle('Sherifat Mobalaji');
-    setAmount('');
-    setFrequency('');
-    setStartDate('');
-    setEndDate('');
   };
 
+  const canContinue =
+    form.title.trim().length > 0 &&
+    form.amount.trim().length > 0 &&
+    form.destinationAccountNumber.trim().length > 0 &&
+    form.destinationBankCode.trim().length > 0 &&
+    form.destinationAccountName.trim().length > 0;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="p-0 bg-white rounded-lg w-full max-w-md overflow-hidden">
-        <DialogHeader className="p-4 border-b">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
+      <DialogContent className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-0">
+        <DialogHeader className="border-b p-4">
           <DialogTitle className="text-lg font-bold text-[#000000]">
             Add instructions
           </DialogTitle>
         </DialogHeader>
 
-        <div className="p-4 space-y-4">
-          {/* Title - Full Width */}
+        <div className="space-y-4 p-4">
           <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
+            <label htmlFor="instruction-title" className="mb-2 block text-sm font-medium text-[#000000]">
               Title
             </label>
             <Input
+              id="instruction-title"
               type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
+              placeholder="Estate maintenance"
+              value={form.title}
+              onChange={(e) => update('title', e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
             />
           </div>
 
-          {/* Two Column Layout for remaining fields */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
+              <label htmlFor="instruction-amount" className="mb-2 block text-sm font-medium text-[#000000]">
                 Amount
               </label>
               <Input
+                id="instruction-amount"
                 type="text"
-                placeholder="Enter amount"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
+                inputMode="decimal"
+                placeholder="18500"
+                value={form.amount}
+                onChange={(e) => update('amount', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
+              <label className="mb-2 block text-sm font-medium text-[#000000]">
                 Frequency
               </label>
+              <Select
+                value={form.frequency}
+                onValueChange={(value) =>
+                  update('frequency', value as StandingInstructionCadence)
+                }
+              >
+                <SelectTrigger className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]">
+                  <SelectValue placeholder="Frequency" />
+                </SelectTrigger>
+                <SelectContent className="rounded-lg border border-gray-200 bg-white">
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="instruction-start-date" className="mb-2 block text-sm font-medium text-[#000000]">
+                Start date
+              </label>
               <Input
-                type="text"
-                placeholder="Frequency"
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-                className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
+                id="instruction-start-date"
+                type="date"
+                value={form.startDate}
+                onChange={(e) => update('startDate', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="instruction-end-date" className="mb-2 block text-sm font-medium text-[#000000]">
+                End date
+              </label>
+              <Input
+                id="instruction-end-date"
+                type="date"
+                value={form.endDate}
+                onChange={(e) => update('endDate', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="destination-account-name" className="mb-2 block text-sm font-medium text-[#000000]">
+              Destination account name
+            </label>
+            <Input
+              id="destination-account-name"
+              type="text"
+              placeholder="Lekki HOA"
+              value={form.destinationAccountName}
+              onChange={(e) => update('destinationAccountName', e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
-                Start date
+              <label htmlFor="destination-account-number" className="mb-2 block text-sm font-medium text-[#000000]">
+                Destination account
               </label>
-              <Select value={startDate} onValueChange={setStartDate}>
-                <SelectTrigger className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-lg">
-                  <SelectItem
-                    value="today"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Today
-                  </SelectItem>
-                  <SelectItem
-                    value="tomorrow"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Tomorrow
-                  </SelectItem>
-                  <SelectItem
-                    value="next-week"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Next Week
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="destination-account-number"
+                type="text"
+                inputMode="numeric"
+                placeholder="1234567890"
+                value={form.destinationAccountNumber}
+                onChange={(e) => update('destinationAccountNumber', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
-                End date
+              <label htmlFor="destination-bank-code" className="mb-2 block text-sm font-medium text-[#000000]">
+                Bank code
               </label>
-              <Select value={endDate} onValueChange={setEndDate}>
-                <SelectTrigger className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-lg">
-                  <SelectItem
-                    value="1-month"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    1 Month
-                  </SelectItem>
-                  <SelectItem
-                    value="3-months"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    3 Months
-                  </SelectItem>
-                  <SelectItem
-                    value="6-months"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    6 Months
-                  </SelectItem>
-                  <SelectItem
-                    value="1-year"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    1 Year
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="destination-bank-code"
+                type="text"
+                placeholder="044"
+                value={form.destinationBankCode}
+                onChange={(e) => update('destinationBankCode', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+              />
             </div>
           </div>
         </div>
 
-        <div className="p-4 flex gap-3">
+        <div className="flex gap-3 p-4">
           <Button
+            type="button"
             onClick={handleCancel}
             variant="outline"
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+            className="flex-1 border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200"
           >
             Cancel
           </Button>
           <Button
+            type="button"
             onClick={handleCreateInstructions}
-            className="flex-1 bg-[#0E9DA5] hover:bg-[#0d8a91] text-white"
+            disabled={!canContinue}
+            className="flex-1 bg-[#0E9DA5] text-white hover:bg-[#0d8a91]"
           >
-            Create instructions
+            Continue
           </Button>
         </div>
       </DialogContent>

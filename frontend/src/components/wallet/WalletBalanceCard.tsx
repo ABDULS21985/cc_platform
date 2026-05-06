@@ -4,12 +4,6 @@ import { useState, useEffect } from 'react';
 import { ApiService } from '@/services/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowDownToLine, ArrowUpRight, Eye, EyeOff, Plus, Wallet } from 'lucide-react';
-import { MakePaymentModal } from './MakePaymentModal';
-import { AccountDetailsModal } from './AccountDetailsModal';
-import { SendMoneyModal } from './SendMoneyModal';
-import { WithdrawMoneyModal } from './WithdrawMoneyModal';
-import { TransactionPinModal } from './TransactionPinModal';
-import { SuccessModal } from './SuccessModal';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import { cn } from '@/lib/utils';
 
@@ -22,24 +16,22 @@ const QUICK_ACTIONS = [
 
 type QuickActionId = (typeof QUICK_ACTIONS)[number]['id'];
 
-export default function WalletBalanceCard() {
+interface WalletBalanceCardProps {
+  onAction: (id: QuickActionId) => void;
+  refreshKey?: number;
+}
+
+export default function WalletBalanceCard({
+  onAction,
+  refreshKey = 0,
+}: WalletBalanceCardProps) {
   const [balance, setBalance] = useState<string>('0.00');
   const [loading, setLoading] = useState(true);
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
 
-  const [isMakePaymentOpen, setIsMakePaymentOpen] = useState(false);
-  const [isAccountDetailsOpen, setIsAccountDetailsOpen] = useState(false);
-  const [isSendMoneyOpen, setIsSendMoneyOpen] = useState(false);
-  const [isWithdrawMoneyOpen, setIsWithdrawMoneyOpen] = useState(false);
-  const [isSendPinOpen, setIsSendPinOpen] = useState(false);
-  const [isWithdrawPinOpen, setIsWithdrawPinOpen] = useState(false);
-  const [isSendSuccessOpen, setIsSendSuccessOpen] = useState(false);
-  const [isWithdrawSuccessOpen, setIsWithdrawSuccessOpen] = useState(false);
-  const [transactionAmount, setTransactionAmount] = useState('');
-  const [recipientName, setRecipientName] = useState('');
-
   useEffect(() => {
     const fetchWallet = async () => {
+      setLoading(true);
       try {
         const response = await ApiService.wallet.getSummary();
         if (response.data.data.wallet) {
@@ -53,39 +45,7 @@ export default function WalletBalanceCard() {
       }
     };
     fetchWallet();
-  }, []);
-
-  const handleQuickAction = (id: QuickActionId) => {
-    switch (id) {
-      case 'fund':
-        setIsMakePaymentOpen(true);
-        break;
-      case 'send':
-        setIsSendMoneyOpen(true);
-        break;
-      case 'withdraw':
-        setIsWithdrawMoneyOpen(true);
-        break;
-      case 'account':
-        setIsAccountDetailsOpen(true);
-        break;
-    }
-  };
-
-  // Send Money Flow
-  const handleSendMoneySubmit = (amount: string, recipient: string) => {
-    setTransactionAmount(amount);
-    setRecipientName(recipient);
-    setIsSendMoneyOpen(false);
-    setIsSendPinOpen(true);
-  };
-
-  // Withdraw Money Flow
-  const handleWithdrawMoneySubmit = (amount: string) => {
-    setTransactionAmount(amount);
-    setIsWithdrawMoneyOpen(false);
-    setIsWithdrawPinOpen(true);
-  };
+  }, [refreshKey]);
 
   return (
     <>
@@ -171,7 +131,7 @@ export default function WalletBalanceCard() {
               <button
                 key={id}
                 type="button"
-                onClick={() => handleQuickAction(id)}
+                onClick={() => onAction(id)}
                 className={cn(
                   'group flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-md',
                   'text-xs font-semibold text-white transition-colors hover:bg-white/20',
@@ -187,70 +147,6 @@ export default function WalletBalanceCard() {
           </div>
         </div>
       </section>
-
-      <MakePaymentModal
-        isOpen={isMakePaymentOpen}
-        onClose={() => setIsMakePaymentOpen(false)}
-        onSend={() => {
-          setIsMakePaymentOpen(false);
-          setIsAccountDetailsOpen(true);
-        }}
-      />
-
-      <AccountDetailsModal
-        isOpen={isAccountDetailsOpen}
-        onClose={() => setIsAccountDetailsOpen(false)}
-      />
-
-      <SendMoneyModal
-        isOpen={isSendMoneyOpen}
-        onClose={() => setIsSendMoneyOpen(false)}
-        onSend={handleSendMoneySubmit}
-      />
-
-      <WithdrawMoneyModal
-        isOpen={isWithdrawMoneyOpen}
-        onClose={() => setIsWithdrawMoneyOpen(false)}
-        onConfirm={handleWithdrawMoneySubmit}
-      />
-
-      <TransactionPinModal
-        isOpen={isSendPinOpen}
-        onClose={() => setIsSendPinOpen(false)}
-        onConfirm={() => {
-          setIsSendPinOpen(false);
-          setIsSendSuccessOpen(true);
-        }}
-        title="Confirm transfer"
-        confirmButtonText="Send"
-      />
-
-      <TransactionPinModal
-        isOpen={isWithdrawPinOpen}
-        onClose={() => setIsWithdrawPinOpen(false)}
-        onConfirm={() => {
-          setIsWithdrawPinOpen(false);
-          setIsWithdrawSuccessOpen(true);
-        }}
-        title="Withdraw funds"
-        confirmButtonText="Withdraw"
-      />
-
-      <SuccessModal
-        isOpen={isSendSuccessOpen}
-        onClose={() => setIsSendSuccessOpen(false)}
-        amount={`₦${transactionAmount}`}
-        message={`You have successfully sent ${transactionAmount} to ${recipientName}`}
-        isWithdrawal={false}
-      />
-
-      <SuccessModal
-        isOpen={isWithdrawSuccessOpen}
-        onClose={() => setIsWithdrawSuccessOpen(false)}
-        amount={`₦${transactionAmount}`}
-        message="Your withdrawal has been completed"
-        isWithdrawal={true}
-      />
     </>
   );
 }

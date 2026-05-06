@@ -83,11 +83,12 @@ export default function EventDetailsClient() {
   }, [eventId]);
 
   const isPaid = !!(event?.ticket_price && event.ticket_price !== '0' && event.ticket_price !== '');
+  const paidTicketingUnavailable = isPaid && event?.payment_supported !== true;
   const isAttending = !!event?.is_attending;
 
   const handleJoin = async () => {
     if (!event) return;
-    if (isPaid && !isAttending) {
+    if (paidTicketingUnavailable && !isAttending) {
       setPaymentOpen(true);
       return;
     }
@@ -96,6 +97,10 @@ export default function EventDetailsClient() {
 
   const commitAttendance = async () => {
     if (!event) return;
+    if (!isAttending && isPaid && event.payment_supported !== true) {
+      setPaymentOpen(true);
+      return;
+    }
     setSubmitting(true);
     try {
       const res = isAttending
@@ -216,8 +221,10 @@ export default function EventDetailsClient() {
               >
                 {isAttending
                   ? "You're going"
-                  : isPaid
-                    ? `Get ticket · ₦${event.ticket_price}`
+                  : paidTicketingUnavailable
+                    ? 'Paid tickets unavailable'
+                    : isPaid
+                      ? `Get ticket · ₦${event.ticket_price}`
                     : 'Join event'}
               </Button>
             </div>
@@ -313,7 +320,6 @@ export default function EventDetailsClient() {
       <PaymentDialog
         isOpen={paymentOpen}
         onClose={() => setPaymentOpen(false)}
-        onPay={commitAttendance}
         amount={event.ticket_price ?? '0'}
       />
     </DashboardLayout>

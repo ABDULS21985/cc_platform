@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ApiService, type CommunityData } from '@/services/api';
 import { useDemoData } from '@/lib/demo-mode';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -433,7 +434,35 @@ async function fetchAggregatedMembers(): Promise<MemberItem[]> {
   return [...byUser.values()];
 }
 
+const memberTargetRef = (id: string | number) => `member:${id}`;
+
+async function fetchMemberBookmarkMap(): Promise<Map<string, number>> {
+  const res = await ApiService.bookmarks.list({ kind: 'member', limit: 200 });
+  const bookmarks = res.data?.data?.bookmarks ?? [];
+  return new Map(
+    bookmarks
+      .filter((b) => b.kind === 'member')
+      .map((b) => [b.target_ref, b.id])
+  );
+}
+
+function applyMemberBookmarks(
+  items: MemberItem[],
+  bookmarks: Map<string, number>
+): MemberItem[] {
+  return items.map((member) => {
+    const bookmarkId =
+      bookmarks.get(memberTargetRef(member.id)) ?? bookmarks.get(member.id);
+    return {
+      ...member,
+      isFavorite: bookmarkId !== undefined,
+      favoriteBookmarkId: bookmarkId ?? null,
+    };
+  });
+}
+
 export default function MembersPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
@@ -447,13 +476,16 @@ export default function MembersPage() {
     (async () => {
       setLoading(true);
       try {
-        const real = await fetchAggregatedMembers();
+        const [real, memberBookmarks] = await Promise.all([
+          fetchAggregatedMembers(),
+          fetchMemberBookmarkMap().catch(() => new Map<string, number>()),
+        ]);
         if (cancelled) return;
         if (real.length === 0) {
           setMembers(useDemoData() ? MOCK_MEMBERS : []);
           setUsingMock(useDemoData());
         } else {
-          setMembers(real);
+          setMembers(applyMemberBookmarks(real, memberBookmarks));
           setUsingMock(false);
         }
       } catch (err) {
@@ -534,30 +566,125 @@ export default function MembersPage() {
       });
   }, [members, activeTab, search, communityFilter, sort]);
 
-  const toggleFavorite = (id: string) => {
+  const toggleFavorite = async (id: string) => {
+    const m = members.find((m) => m.id === id);
+    if (!m) return;
+
+    if (usingMock) {
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.id === id ? { ...member, isFavorite: !member.isFavorite } : member
+        )
+      );
+      toast.success(
+        m.isFavorite ? `Removed ${m.name} from favorites` : `Saved ${m.name}`
+      );
+      return;
+    }
+
+    if (m.isFavorite) {
+      if (!m.favoriteBookmarkId) {
+        toast.error('Could not identify this favorite');
+        return;
+      }
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.id === id
+            ? { ...member, isFavorite: false, favoriteBookmarkId: null }
+            : member
+        )
+      );
+      try {
+        await ApiService.bookmarks.delete(m.favoriteBookmarkId);
+        toast.success(`Removed ${m.name} from favorites`);
+      } catch (err) {
+        setMembers((prev) =>
+          prev.map((member) =>
+            member.id === id
+              ? {
+                  ...member,
+                  isFavorite: true,
+                  favoriteBookmarkId: m.favoriteBookmarkId,
+                }
+              : member
+          )
+        );
+        toastAxiosError(err, 'Failed to remove favorite.');
+      }
+      return;
+    }
+
     setMembers((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, isFavorite: !m.isFavorite } : m
+      prev.map((member) =>
+        member.id === id ? { ...member, isFavorite: true } : member
       )
     );
-    const m = members.find((m) => m.id === id);
-    toast.success(
-      m?.isFavorite ? `Removed ${m.name} from favorites` : `Saved ${m?.name}`
-    );
+    try {
+      const primaryCommunity = m.communities[0];
+      const res = await ApiService.bookmarks.create({
+        kind: 'member',
+        target_ref: memberTargetRef(m.id),
+        title: m.name,
+        description: m.bio ?? `@${m.username}`,
+        source: primaryCommunity?.name ?? 'Members',
+        href: `/dashboard/members?member=${m.id}`,
+        community_id: primaryCommunity ? Number(primaryCommunity.id) : null,
+        community_name: primaryCommunity?.name ?? null,
+      });
+      const bookmark = res.data?.data?.bookmark;
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.id === id
+            ? {
+                ...member,
+                isFavorite: true,
+                favoriteBookmarkId: bookmark?.id ?? null,
+              }
+            : member
+        )
+      );
+      toast.success(`Saved ${m.name}`);
+    } catch (err) {
+      setMembers((prev) =>
+        prev.map((member) =>
+          member.id === id
+            ? { ...member, isFavorite: false, favoriteBookmarkId: null }
+            : member
+        )
+      );
+      toastAxiosError(err, 'Failed to save favorite.');
+    }
   };
 
-  const handleInvite = (id: string) => {
+  const handleInvite = async (id: string) => {
     const m = members.find((m) => m.id === id);
-    toast.success(`Invited ${m?.name} to a community`, {
-      description: 'Pick a community in the next step.',
-    });
+    const community = m?.communities[0];
+    const communityId = community ? Number(community.id) : NaN;
+    if (!m || !Number.isFinite(communityId)) {
+      router.push('/dashboard/community');
+      return;
+    }
+    if (usingMock) {
+      router.push(`/dashboard/community/${communityId}`);
+      return;
+    }
+    try {
+      const res = await ApiService.communities.createInvite(communityId, {
+        expires_in_days: 7,
+        max_uses: 1,
+      });
+      const inviteCode = res.data?.data?.invite_code;
+      if (inviteCode && navigator.clipboard) {
+        await navigator.clipboard.writeText(`${window.location.origin}/join/${inviteCode}`);
+      }
+      toast.success(`Invite link created for ${community.name}`);
+    } catch (err) {
+      toastAxiosError(err, 'Failed to create invite link.');
+    }
   };
 
   const handleMessage = (id: string) => {
-    const m = members.find((m) => m.id === id);
-    toast(`Opening chat with ${m?.name}`, {
-      description: 'Direct messages coming soon.',
-    });
+    router.push(`/dashboard/inbox?member=${id}`);
   };
 
   return (
@@ -566,7 +693,7 @@ export default function MembersPage() {
         <MembersHero
           stats={stats}
           circleCount={communities.length}
-          onInvite={() => toast.info('Pick a community to invite to', { description: 'Tap a member’s "Invite" button below.' })}
+          onInvite={() => router.push('/dashboard/community')}
         />
 
         {/* Tabs */}

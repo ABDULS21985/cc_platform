@@ -3,7 +3,7 @@ from sqlalchemy import func
 from modules.auth_v2.extensions import db
 
 
-BOOKMARK_KINDS = ('post', 'event', 'community', 'bill', 'transaction')
+BOOKMARK_KINDS = ('post', 'event', 'community', 'bill', 'transaction', 'member')
 
 
 class Bookmark(db.Model):

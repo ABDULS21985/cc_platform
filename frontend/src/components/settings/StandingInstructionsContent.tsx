@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { Calendar, MoreHorizontal, Pause, Play, Plus, Repeat, Trash2 } from 'lucide-react';
-import { AddInstructionsModal } from './AddInstructionsModal';
+import { AddInstructionsModal, type AddInstructionFormData } from './AddInstructionsModal';
 import { PasswordConfirmModal } from './PasswordConfirmModal';
-import { SplitPaymentModal } from './SplitPaymentModal';
+import { SplitPaymentModal, type SplitPaymentFormData } from './SplitPaymentModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -35,13 +35,63 @@ function formatNextRun(iso: string | null): string {
   });
 }
 
+function parseAmount(value: string): number {
+  const normalized = value.replace(/[,\s₦]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseOptionalAmount(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = parseAmount(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toInstructionDateIso(value: string): string | null {
+  if (!value) return null;
+  return new Date(`${value}T08:00:00+01:00`).toISOString();
+}
+
+function buildCreatePayload(
+  base: AddInstructionFormData,
+  split: SplitPaymentFormData,
+  pin: string,
+): StandingInstructionCreatePayload | null {
+  const amount = parseAmount(base.amount);
+  if (!amount) return null;
+
+  const startAt = toInstructionDateIso(base.startDate);
+  const endAt = toInstructionDateIso(base.endDate);
+
+  return {
+    name: base.title,
+    amount,
+    currency: 'NGN',
+    cadence: base.frequency,
+    start_at: startAt,
+    end_at: endAt,
+    next_charge_at: startAt,
+    destination_account_number: base.destinationAccountNumber,
+    destination_bank_code: base.destinationBankCode,
+    destination_account_name: base.destinationAccountName,
+    split_member_name: split.splitMemberName || null,
+    split_primary_amount: parseOptionalAmount(split.splitPrimaryAmount),
+    split_secondary_amount: parseOptionalAmount(split.splitSecondaryAmount),
+    pin,
+  };
+}
+
 export function StandingInstructionsContent() {
   const [items, setItems] = useState<SubscriptionApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
-  const [currentTitle, setCurrentTitle] = useState('');
+  const [draft, setDraft] = useState<AddInstructionFormData | null>(null);
+  const [verifiedPin, setVerifiedPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = async () => {
@@ -61,42 +111,55 @@ export function StandingInstructionsContent() {
     load();
   }, []);
 
-  const handleAddModalNext = (data: { title: string }) => {
-    setCurrentTitle(data.title);
+  const handleAddModalNext = (data: AddInstructionFormData) => {
+    setDraft(data);
+    setVerifiedPin('');
+    setPinError(null);
     setIsAddModalOpen(false);
     setIsPasswordModalOpen(true);
   };
 
-  const handlePasswordModalNext = () => {
-    setIsPasswordModalOpen(false);
-    setIsSplitModalOpen(true);
+  const handlePasswordModalNext = async (pin: string) => {
+    setVerifyingPin(true);
+    setPinError(null);
+    try {
+      await ApiService.standingInstructions.verifyPin({ pin });
+      setVerifiedPin(pin);
+      setIsPasswordModalOpen(false);
+      setIsSplitModalOpen(true);
+    } catch {
+      setPinError('PIN could not be verified');
+      toast.error('PIN verification failed');
+    } finally {
+      setVerifyingPin(false);
+    }
   };
 
-  const handleSplitModalComplete = async (data: unknown) => {
-    setIsSplitModalOpen(false);
-    // The split modal currently emits an opaque shape; map only what we know.
-    const split = (data as Partial<StandingInstructionCreatePayload>) ?? {};
-    const payload: StandingInstructionCreatePayload = {
-      name: currentTitle || 'Standing instruction',
-      amount: typeof split.amount === 'number' ? split.amount : 0,
-      cadence: split.cadence ?? 'monthly',
-      destination_account_number: split.destination_account_number ?? '',
-      destination_bank_code: split.destination_bank_code ?? '',
-      destination_account_name: split.destination_account_name ?? '',
-    };
-    if (!payload.amount || !payload.destination_account_number) {
-      toast.info('Saved as draft (complete in wallet to activate)');
+  const handleSplitModalComplete = async (data: SplitPaymentFormData) => {
+    if (!draft || !verifiedPin) {
+      toast.error('Start the instruction again');
       return;
     }
+
+    const payload = buildCreatePayload(draft, data, verifiedPin);
+    if (!payload) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+
+    setCreating(true);
     try {
       const res = await ApiService.standingInstructions.create(payload);
       const created = res.data?.data?.subscription;
       if (created) {
         setItems((prev) => [created, ...prev]);
       }
+      closeAll();
       toast.success('Standing instruction created');
     } catch {
       toast.error('Could not create standing instruction');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -104,7 +167,9 @@ export function StandingInstructionsContent() {
     setIsAddModalOpen(false);
     setIsPasswordModalOpen(false);
     setIsSplitModalOpen(false);
-    setCurrentTitle('');
+    setDraft(null);
+    setVerifiedPin('');
+    setPinError(null);
   };
 
   const setStatus = async (id: number, next: 'active' | 'paused' | 'cancelled') => {
@@ -129,6 +194,19 @@ export function StandingInstructionsContent() {
     }
   };
 
+  const deleteInstruction = async (id: number) => {
+    setBusyId(id);
+    try {
+      await ApiService.standingInstructions.delete(id);
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      toast.success('Deleted');
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -139,7 +217,7 @@ export function StandingInstructionsContent() {
     );
   }
 
-  const visible = items.filter((i) => i.status !== 'cancelled');
+  const visible = items;
 
   return (
     <div className="space-y-5">
@@ -190,6 +268,11 @@ export function StandingInstructionsContent() {
                           Paused
                         </Badge>
                       )}
+                      {s.status === 'cancelled' && (
+                        <Badge variant="soft" size="sm" className="mt-1">
+                          Cancelled
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -209,33 +292,43 @@ export function StandingInstructionsContent() {
                         /{cadenceLabel[s.cadence]}
                       </p>
                     </div>
+                    {s.status !== 'cancelled' && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={
+                          s.status === 'paused'
+                            ? `Resume ${s.name}`
+                            : `Pause ${s.name}`
+                        }
+                        disabled={busyId === s.id}
+                        onClick={() =>
+                          setStatus(s.id, s.status === 'paused' ? 'active' : 'paused')
+                        }
+                      >
+                        {s.status === 'paused' ? (
+                          <Play className="size-4" aria-hidden="true" />
+                        ) : (
+                          <Pause className="size-4" aria-hidden="true" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-sm"
                       aria-label={
-                        s.status === 'paused'
-                          ? `Resume ${s.name}`
-                          : `Pause ${s.name}`
+                        s.status === 'cancelled'
+                          ? `Delete ${s.name}`
+                          : `Cancel ${s.name}`
                       }
                       disabled={busyId === s.id}
                       onClick={() =>
-                        setStatus(s.id, s.status === 'paused' ? 'active' : 'paused')
+                        s.status === 'cancelled'
+                          ? deleteInstruction(s.id)
+                          : setStatus(s.id, 'cancelled')
                       }
-                    >
-                      {s.status === 'paused' ? (
-                        <Play className="size-4" aria-hidden="true" />
-                      ) : (
-                        <Pause className="size-4" aria-hidden="true" />
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Cancel ${s.name}`}
-                      disabled={busyId === s.id}
-                      onClick={() => setStatus(s.id, 'cancelled')}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
                     </Button>
@@ -264,13 +357,16 @@ export function StandingInstructionsContent() {
         isOpen={isPasswordModalOpen}
         onClose={closeAll}
         onNext={handlePasswordModalNext}
-        title={currentTitle}
+        title={draft?.title ?? ''}
+        isSubmitting={verifyingPin}
+        error={pinError}
       />
       <SplitPaymentModal
         isOpen={isSplitModalOpen}
         onClose={closeAll}
         onComplete={handleSplitModalComplete}
-        title={currentTitle}
+        title={draft?.title ?? ''}
+        isSubmitting={creating}
       />
     </div>
   );

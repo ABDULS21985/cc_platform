@@ -19,12 +19,15 @@ import { motion } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 import { ApiService } from '@/services/api';
 
-interface Beneficiary {
+export interface Beneficiary {
   id: string;
   name: string;
   bank: string;
   /** Last 4 digits, masked. */
   accountTail: string;
+  accountNumber?: string;
+  accountName?: string;
+  bankCode?: string;
   initials: string;
   /** Tone for the avatar fallback bg. */
   tone: string;
@@ -66,6 +69,11 @@ interface ApiTx {
   destination_account_name?: string | null;
   destination_account_number?: string | null;
   destination_bank_name?: string | null;
+  meta?: {
+    bank_code?: string | null;
+    bank_name?: string | null;
+    destination_bank_name?: string | null;
+  } | null;
   community_id?: number | null;
   completed_at?: string;
   created_at?: string;
@@ -97,11 +105,19 @@ function deriveBeneficiaries(items: ApiTx[]): Beneficiary[] {
     if (seen.has(key)) continue;
     const tail = acct ? acct.slice(-4) : '••••';
     const display = name || `Account ··${tail}`;
+    const bankName =
+      (t.destination_bank_name ?? '').trim() ||
+      (t.meta?.destination_bank_name ?? '').trim() ||
+      (t.meta?.bank_name ?? '').trim() ||
+      'Bank';
     seen.set(key, {
       id: key,
       name: display,
-      bank: (t.destination_bank_name ?? '').trim() || 'Bank',
+      bank: bankName,
       accountTail: tail,
+      accountNumber: acct || undefined,
+      accountName: name || undefined,
+      bankCode: (t.meta?.bank_code ?? '').trim() || undefined,
       initials: initialsFor(display),
       tone: TONES[seen.size % TONES.length],
       lastSent: relativeAge(t.completed_at ?? t.created_at ?? ''),
@@ -180,10 +196,11 @@ const SEED_BENEFICIARIES: Beneficiary[] = [
 ];
 
 interface BeneficiariesProps {
-  onSelect?: (b: Beneficiary) => void;
+  onCreate: () => void;
+  onSelect: (b: Beneficiary) => void;
 }
 
-export function Beneficiaries({ onSelect }: BeneficiariesProps) {
+export function Beneficiaries({ onCreate, onSelect }: BeneficiariesProps) {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const [allOpen, setAllOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -296,7 +313,7 @@ export function Beneficiaries({ onSelect }: BeneficiariesProps) {
           <motion.button
             type="button"
             whileTap={{ scale: 0.97 }}
-            onClick={() => onSelect?.({ id: 'new', name: 'New recipient' } as Beneficiary)}
+            onClick={onCreate}
             className={cn(
               'flex w-[112px] shrink-0 snap-start flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-center transition-colors',
               'hover:border-input hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -338,7 +355,7 @@ export function Beneficiaries({ onSelect }: BeneficiariesProps) {
                 duration: 0.3,
                 ease: [0.16, 1, 0.3, 1],
               }}
-              onClick={() => onSelect?.(b)}
+              onClick={() => onSelect(b)}
               className={cn(
                 'group flex w-[112px] shrink-0 snap-start flex-col items-center gap-2 rounded-2xl border border-border bg-card p-3 text-center transition-colors',
                 'hover:border-input hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -404,7 +421,7 @@ export function Beneficiaries({ onSelect }: BeneficiariesProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        onSelect?.(b);
+                        onSelect(b);
                         setAllOpen(false);
                       }}
                       className="flex w-full items-center gap-3 rounded-xl border border-transparent p-2.5 text-left transition-colors hover:border-border hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

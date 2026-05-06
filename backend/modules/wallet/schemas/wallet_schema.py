@@ -69,10 +69,20 @@ class WithdrawSchema(Schema):
     
     bank_code = fields.String(
         required=True,
-        validate=validate.Length(min=3, max=5),
+        validate=validate.Length(min=3, max=20),
         metadata={
-            'description': 'Bank code (3-5 characters)',
+            'description': 'Bank code',
             'example': '011'
+        }
+    )
+
+    bank_name = fields.String(
+        load_default=None,
+        allow_none=True,
+        validate=validate.Length(max=100),
+        metadata={
+            'description': 'Destination bank name',
+            'example': 'GTBank'
         }
     )
     
@@ -99,6 +109,16 @@ class WithdrawSchema(Schema):
         metadata={
             'description': '4-digit transaction PIN',
             'example': '1234',
+        },
+    )
+
+    note = fields.String(
+        load_default=None,
+        allow_none=True,
+        validate=validate.Length(max=255),
+        metadata={
+            'description': 'Optional withdrawal note',
+            'example': 'Rent payment',
         },
     )
     
@@ -238,6 +258,7 @@ class WalletDataSchema(Schema):
     id = fields.Integer(metadata={'description': 'Wallet ID'})
     account_number = fields.String(metadata={'description': 'Bell MFB account number'})
     account_name = fields.String(metadata={'description': 'Account holder name'})
+    bank_name = fields.String(allow_none=True, metadata={'description': 'Virtual account bank name'})
     balance = fields.String(metadata={'description': 'Current balance', 'example': '5000.00'})
     currency = fields.String(metadata={'description': 'Currency code', 'example': 'NGN'})
     status = fields.String(metadata={'description': 'Wallet status', 'example': 'active'})
@@ -261,7 +282,13 @@ class TransactionDataSchema(Schema):
     net_amount = fields.String(metadata={'description': 'Net amount after fee'})
     description = fields.String(metadata={'description': 'Transaction description'})
     source_account_name = fields.String(allow_none=True, metadata={'description': 'Source account name'})
+    source_account_number = fields.String(allow_none=True, metadata={'description': 'Source account number'})
+    source_bank_code = fields.String(allow_none=True, metadata={'description': 'Source bank code'})
     source_bank_name = fields.String(allow_none=True, metadata={'description': 'Source bank name'})
+    destination_account_number = fields.String(allow_none=True, metadata={'description': 'Destination account number'})
+    destination_account_name = fields.String(allow_none=True, metadata={'description': 'Destination account name'})
+    destination_bank_name = fields.String(allow_none=True, metadata={'description': 'Destination bank name'})
+    note = fields.String(allow_none=True, metadata={'description': 'Transaction note'})
     status = fields.String(metadata={'description': 'Transaction status'})
     completed_at = fields.String(allow_none=True, metadata={'description': 'Completion timestamp'})
     created_at = fields.String(metadata={'description': 'Creation timestamp'})
@@ -340,8 +367,10 @@ class WithdrawDataSchema(Schema):
     amount = fields.String(metadata={'description': 'Withdrawal amount'})
     fee = fields.String(metadata={'description': 'Transaction fee'})
     net_amount = fields.String(metadata={'description': 'Net amount after fee'})
-    status = fields.String(metadata={'description': 'Transaction status', 'example': 'processing'})
-    destination_bank = fields.String(metadata={'description': 'Destination bank code'})
+    status = fields.String(metadata={'description': 'Transaction status', 'example': 'pending'})
+    provider_status = fields.String(metadata={'description': 'Provider transfer status', 'example': 'provider_unavailable'})
+    destination_bank = fields.String(metadata={'description': 'Destination bank name'})
+    destination_bank_code = fields.String(metadata={'description': 'Destination bank code'})
     destination_account = fields.String(metadata={'description': 'Destination account number'})
     message = fields.String(metadata={'description': 'Status message'})
 

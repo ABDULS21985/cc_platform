@@ -1,1 +1,1 @@
-"""Bookmarks module — user-saved items (posts, events, communities, bills, transactions)."""
+"""Bookmarks module — user-saved items (posts, events, communities, members, bills, transactions)."""

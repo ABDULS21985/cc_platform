@@ -29,6 +29,7 @@ class EventService:
         ticket_price: Optional[str] = None,
         duration_label: Optional[str] = None,
         cover_image: Optional[str] = None,
+        auto_approve_members: bool = False,
     ) -> Tuple[Dict[str, Any], int]:
         if community_id:
             membership = CommunityMember.query.filter_by(
@@ -51,6 +52,7 @@ class EventService:
             capacity=capacity or 0,
             ticket_price=ticket_price,
             cover_image=cover_image,
+            auto_approve_members=bool(auto_approve_members),
         )
         # Creator auto-attends.
         self.repo.attend(event.id, creator_id)
@@ -125,6 +127,11 @@ class EventService:
         if not event:
             return {'error': 'Event not found', 'code': 'NOT_FOUND'}, 404
         was_attending = event.is_user_attending(user_id)
+        if event.requires_payment and not was_attending:
+            return {
+                'error': 'Paid event ticketing is not available yet',
+                'code': 'PAID_EVENT_UNSUPPORTED',
+            }, 402
         if event.capacity and event.attendee_count() >= event.capacity and not was_attending:
             return {'error': 'Event is at capacity', 'code': 'AT_CAPACITY'}, 409
         self.repo.attend(event_id, user_id)

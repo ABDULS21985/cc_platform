@@ -16,6 +16,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  User,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -43,7 +44,7 @@ import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-type SavedKind = 'post' | 'event' | 'community' | 'bill' | 'transaction';
+type SavedKind = 'post' | 'event' | 'community' | 'bill' | 'transaction' | 'member';
 
 interface SavedItem {
   id: string;
@@ -83,6 +84,11 @@ const KIND_CONFIG: Record<
     label: 'Community',
     icon: Users,
     tone: 'bg-success/15 text-success',
+  },
+  member: {
+    label: 'Member',
+    icon: User,
+    tone: 'bg-brand-soft text-accent-foreground',
   },
   bill: {
     label: 'Bill',
@@ -195,6 +201,7 @@ const TABS: Array<{
   { value: 'post', label: 'Posts', icon: MessageCircle },
   { value: 'event', label: 'Events', icon: Calendar },
   { value: 'community', label: 'Communities', icon: Users },
+  { value: 'member', label: 'Members', icon: User },
   { value: 'bill', label: 'Bills', icon: Receipt },
   { value: 'transaction', label: 'Transactions', icon: Wallet },
 ];
@@ -265,6 +272,7 @@ export default function SavedPage() {
       post: items.filter((i) => i.kind === 'post').length,
       event: items.filter((i) => i.kind === 'event').length,
       community: items.filter((i) => i.kind === 'community').length,
+      member: items.filter((i) => i.kind === 'member').length,
       bill: items.filter((i) => i.kind === 'bill').length,
       transaction: items.filter((i) => i.kind === 'transaction').length,
     }),

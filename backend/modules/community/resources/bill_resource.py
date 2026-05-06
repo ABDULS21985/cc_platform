@@ -140,7 +140,7 @@ class BillResource(MethodView):
                 )
             
             return format_data(
-                data=bill_service.serialize_bill_data(bill),
+                data=bill_service.serialize_bill_data(bill, include_detail=True),
                 message='Bill retrieved successfully',
                 status_code=200,
             )

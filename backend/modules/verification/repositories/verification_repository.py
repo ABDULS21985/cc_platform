@@ -40,6 +40,13 @@ class VerificationRepository:
     def find_by_user_id(self, user_id: int) -> Optional[UserVerification]:
         """Find verification by user ID"""
         return UserVerification.query.filter_by(user_id=user_id).first()
+
+    def find_by_task_id_for_user(self, task_id: str, user_id: int) -> Optional[UserVerification]:
+        """Find a verification task owned by the user."""
+        return UserVerification.query.filter_by(
+            task_id=task_id,
+            user_id=user_id,
+        ).first()
     
     def find_by_hash(self, verification_hash: str) -> Optional[UserVerification]:
         """

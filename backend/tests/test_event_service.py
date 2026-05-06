@@ -6,7 +6,15 @@ from unittest.mock import MagicMock, patch
 from modules.events.services.event_service import EventService
 
 
-def _make_event(*, capacity=10, attendees=0, attending_user_ids=(), creator_id=1, cancelled=False):
+def _make_event(
+    *,
+    capacity=10,
+    attendees=0,
+    attending_user_ids=(),
+    creator_id=1,
+    cancelled=False,
+    requires_payment=False,
+):
     evt = MagicMock()
     evt.id = 1
     evt.creator_id = creator_id
@@ -16,6 +24,7 @@ def _make_event(*, capacity=10, attendees=0, attending_user_ids=(), creator_id=1
     evt.starts_at = datetime.utcnow() + timedelta(days=1)
     evt.ends_at = None
     evt.cancelled_at = datetime.utcnow() if cancelled else None
+    evt.requires_payment = requires_payment
     evt.attendee_count.return_value = attendees
     evt.is_user_attending.side_effect = lambda uid: uid in attending_user_ids
     evt.to_dict.return_value = {'id': 1, 'title': 'Test Event'}
@@ -47,6 +56,28 @@ def test_attend_blocks_at_capacity_for_new_rsvp():
     assert status == 409
     assert result['code'] == 'AT_CAPACITY'
     svc.repo.attend.assert_not_called()
+
+
+def test_attend_blocks_paid_event_without_ticketing_flow():
+    paid = _make_event(capacity=10, attendees=0, requires_payment=True)
+    svc = _make_service(event=paid)
+    result, status = svc.attend(event_id=1, user_id=99)
+    assert status == 402
+    assert result['code'] == 'PAID_EVENT_UNSUPPORTED'
+    svc.repo.attend.assert_not_called()
+
+
+def test_attend_allows_existing_paid_attendee_to_reconfirm():
+    paid = _make_event(
+        capacity=10,
+        attendees=1,
+        attending_user_ids=(99,),
+        requires_payment=True,
+    )
+    svc = _make_service(event=paid)
+    result, status = svc.attend(event_id=1, user_id=99)
+    assert status == 200
+    svc.repo.attend.assert_called_once_with(1, 99)
 
 
 def test_attend_allows_re_rsvp_even_at_capacity():

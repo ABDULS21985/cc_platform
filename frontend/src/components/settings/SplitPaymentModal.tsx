@@ -7,201 +7,145 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+
+export interface SplitPaymentFormData {
+  splitMemberName: string;
+  splitPrimaryAmount: string;
+  splitSecondaryAmount: string;
+}
 
 interface SplitPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (data: any) => void;
+  onComplete: (data: SplitPaymentFormData) => void;
   title: string;
+  isSubmitting?: boolean;
 }
+
+const initialState: SplitPaymentFormData = {
+  splitMemberName: '',
+  splitPrimaryAmount: '',
+  splitSecondaryAmount: '',
+};
 
 export function SplitPaymentModal({
   isOpen,
   onClose,
   onComplete,
   title,
+  isSubmitting = false,
 }: SplitPaymentModalProps) {
-  const [selectPayments, setSelectPayments] = useState('Sherifat Mobalaji');
-  const [amount1, setAmount1] = useState('');
-  const [amount2, setAmount2] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [form, setForm] = useState<SplitPaymentFormData>(initialState);
 
-  const handleCreateInstructions = () => {
-    const formData = {
-      title,
-      selectPayments,
-      amount1,
-      amount2,
-      startDate,
-      endDate,
-    };
-    onComplete(formData);
+  const update = <K extends keyof SplitPaymentFormData>(
+    key: K,
+    value: SplitPaymentFormData[K],
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const complete = (data: SplitPaymentFormData) => {
+    onComplete({
+      splitMemberName: data.splitMemberName.trim(),
+      splitPrimaryAmount: data.splitPrimaryAmount.trim(),
+      splitSecondaryAmount: data.splitSecondaryAmount.trim(),
+    });
   };
 
   const handleCancel = () => {
+    setForm(initialState);
     onClose();
-    // Reset form
-    setSelectPayments('Sherifat Mobalaji');
-    setAmount1('');
-    setAmount2('');
-    setStartDate('');
-    setEndDate('');
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="p-0 bg-white rounded-lg w-full max-w-md overflow-hidden">
-        <DialogHeader className="p-4 border-b">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
+      <DialogContent className="w-full max-w-md overflow-hidden rounded-lg bg-white p-0">
+        <DialogHeader className="border-b p-4">
           <DialogTitle className="text-lg font-bold text-[#000000]">
             Split payment
           </DialogTitle>
         </DialogHeader>
 
-        <div className="p-4 space-y-4">
+        <div className="space-y-4 p-4">
           <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
+            <label htmlFor="split-title" className="mb-2 block text-sm font-medium text-[#000000]">
               Title
             </label>
             <Input
+              id="split-title"
               type="text"
               value={title}
               readOnly
-              className="w-full h-10 rounded-lg border border-gray-200 bg-gray-50 text-gray-600"
+              className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 text-gray-600"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
-              Select payments
+            <label htmlFor="split-member-name" className="mb-2 block text-sm font-medium text-[#000000]">
+              Member
             </label>
             <Input
+              id="split-member-name"
               type="text"
-              value={selectPayments}
-              onChange={(e) => setSelectPayments(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
+              placeholder="Sherifat Mobalaji"
+              value={form.splitMemberName}
+              onChange={(e) => update('splitMemberName', e.target.value)}
+              className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
-              Amount
-            </label>
-            <Input
-              type="text"
-              placeholder="Enter amount"
-              value={amount1}
-              onChange={(e) => setAmount1(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#000000] mb-2">
-              Amount
-            </label>
-            <Input
-              type="text"
-              placeholder="Enter amount"
-              value={amount2}
-              onChange={(e) => setAmount2(e.target.value)}
-              className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
-                Start date
+              <label htmlFor="split-primary-amount" className="mb-2 block text-sm font-medium text-[#000000]">
+                Member amount
               </label>
-              <Select value={startDate} onValueChange={setStartDate}>
-                <SelectTrigger className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-lg">
-                  <SelectItem
-                    value="today"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Today
-                  </SelectItem>
-                  <SelectItem
-                    value="tomorrow"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Tomorrow
-                  </SelectItem>
-                  <SelectItem
-                    value="next-week"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    Next Week
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="split-primary-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="9000"
+                value={form.splitPrimaryAmount}
+                onChange={(e) => update('splitPrimaryAmount', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#000000] mb-2">
-                End date
+              <label htmlFor="split-secondary-amount" className="mb-2 block text-sm font-medium text-[#000000]">
+                Remaining amount
               </label>
-              <Select value={endDate} onValueChange={setEndDate}>
-                <SelectTrigger className="w-full h-10 rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:ring-1 focus:ring-[#0E9DA5] focus:outline-none">
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-gray-200 rounded-lg">
-                  <SelectItem
-                    value="1-month"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    1 Month
-                  </SelectItem>
-                  <SelectItem
-                    value="3-months"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    3 Months
-                  </SelectItem>
-                  <SelectItem
-                    value="6-months"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    6 Months
-                  </SelectItem>
-                  <SelectItem
-                    value="1-year"
-                    className="cursor-pointer hover:bg-gray-50"
-                  >
-                    1 Year
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="split-secondary-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="9500"
+                value={form.splitSecondaryAmount}
+                onChange={(e) => update('splitSecondaryAmount', e.target.value)}
+                className="h-10 w-full rounded-lg border border-gray-200 focus:border-[#0E9DA5] focus:outline-none focus:ring-1 focus:ring-[#0E9DA5]"
+              />
             </div>
           </div>
         </div>
 
-        <div className="p-4 flex gap-3">
+        <div className="flex gap-3 p-4">
           <Button
-            onClick={handleCancel}
+            type="button"
+            onClick={() => complete(initialState)}
             variant="outline"
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+            disabled={isSubmitting}
+            className="flex-1 border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200"
           >
-            Cancel
+            Skip split
           </Button>
           <Button
-            onClick={handleCreateInstructions}
-            className="flex-1 bg-[#0E9DA5] hover:bg-[#0d8a91] text-white"
+            type="button"
+            onClick={() => complete(form)}
+            disabled={isSubmitting}
+            className="flex-1 bg-[#0E9DA5] text-white hover:bg-[#0d8a91]"
           >
-            Create instructions
+            {isSubmitting ? 'Creating...' : 'Create instructions'}
           </Button>
         </div>
       </DialogContent>

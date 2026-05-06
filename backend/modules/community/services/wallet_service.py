@@ -22,6 +22,7 @@ from modules.wallet.providers.base_payment_provider import TransferRequest, Virt
 from modules.wallet.providers.payment_providers import PaymentProviderContext
 from modules.wallet.models.wallet import Wallet
 from modules.wallet.models.wallet_transaction import WalletTransaction
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,34 @@ class CommunityWalletService:
         wallet = self.wallet_repo.find_by_community_id(community_id)
         if not wallet:
             return None
+
+        successful_statuses = ['successful', 'completed']
+        base_query = WalletTransaction.query.filter(
+            WalletTransaction.community_id == community_id,
+            WalletTransaction.status.in_(successful_statuses),
+        )
+        total_deposits = (
+            db.session.query(func.coalesce(func.sum(WalletTransaction.net_amount), 0))
+            .filter(
+                WalletTransaction.community_id == community_id,
+                WalletTransaction.status.in_(successful_statuses),
+                WalletTransaction.transaction_type.in_([
+                    'community_deposit',
+                    'membership_payment',
+                    'bill_payment',
+                ]),
+            )
+            .scalar()
+        )
+        total_withdrawals = (
+            db.session.query(func.coalesce(func.sum(WalletTransaction.net_amount), 0))
+            .filter(
+                WalletTransaction.community_id == community_id,
+                WalletTransaction.status.in_(successful_statuses),
+                WalletTransaction.transaction_type == 'community_transfer',
+            )
+            .scalar()
+        )
         
         return {
             'community_id': community_id,
@@ -132,6 +161,9 @@ class CommunityWalletService:
             'status': wallet.status,
             'account_number': wallet.account_number,
             'account_name': wallet.account_name,
+            'total_deposits': float(total_deposits or 0),
+            'total_withdrawals': float(total_withdrawals or 0),
+            'transaction_count': base_query.count(),
         }
     
     def deposit(self, community_id: int, amount: Decimal) -> Tuple[Optional[CommunityWallet], Optional[str]]:

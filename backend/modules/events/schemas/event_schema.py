@@ -22,6 +22,7 @@ class EventCreateSchema(Schema):
     capacity = fields.Integer(load_default=0, validate=validate.Range(min=0))
     ticket_price = fields.String(load_default=None, allow_none=True)
     cover_image = fields.String(load_default=None, allow_none=True)
+    auto_approve_members = fields.Boolean(load_default=False)
 
 
 class EventListQuerySchema(Schema):

@@ -33,7 +33,7 @@ interface Source {
 }
 
 interface FundingSourcesProps {
-  onAdd?: () => void;
+  onAdd: () => void;
   onSetPrimary?: (id: string) => void;
 }
 
@@ -59,7 +59,7 @@ export function FundingSources({ onAdd, onSetPrimary }: FundingSourcesProps) {
             type: 'bank',
             name: 'CCPay wallet',
             tail,
-            brand: 'Bell MFB',
+            brand: w.bank_name || 'Wallet account',
             tone: 'bg-brand text-primary-foreground',
             isPrimary: true,
             isVerified: w.status?.toLowerCase() === 'active',

@@ -49,6 +49,8 @@ class Subscription(db.Model):
     currency = db.Column(db.String(8), nullable=False, default='NGN')
 
     cadence = db.Column(db.String(16), nullable=False, default=SubscriptionCadence.MONTHLY)
+    start_at = db.Column(db.DateTime, nullable=True)
+    end_at = db.Column(db.DateTime, nullable=True)
     next_charge_at = db.Column(db.DateTime, nullable=True, index=True)
     last_charged_at = db.Column(db.DateTime, nullable=True)
 
@@ -63,6 +65,9 @@ class Subscription(db.Model):
     destination_account_number = db.Column(db.String(20), nullable=True)
     destination_bank_code = db.Column(db.String(20), nullable=True)
     destination_account_name = db.Column(db.String(200), nullable=True)
+    split_member_name = db.Column(db.String(200), nullable=True)
+    split_primary_amount = db.Column(db.Numeric(20, 2), nullable=True)
+    split_secondary_amount = db.Column(db.Numeric(20, 2), nullable=True)
     pin_required = db.Column(db.Boolean, nullable=False, default=False)
 
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False)
@@ -83,6 +88,8 @@ class Subscription(db.Model):
             'amount': float(self.amount) if self.amount is not None else 0.0,
             'currency': self.currency,
             'cadence': self.cadence,
+            'start_at': self.start_at.isoformat() if self.start_at else None,
+            'end_at': self.end_at.isoformat() if self.end_at else None,
             'next_charge_at': self.next_charge_at.isoformat() if self.next_charge_at else None,
             'last_charged_at': self.last_charged_at.isoformat() if self.last_charged_at else None,
             'status': self.status,
@@ -92,6 +99,9 @@ class Subscription(db.Model):
             'destination_account_number': self.destination_account_number,
             'destination_bank_code': self.destination_bank_code,
             'destination_account_name': self.destination_account_name,
+            'split_member_name': self.split_member_name,
+            'split_primary_amount': float(self.split_primary_amount) if self.split_primary_amount is not None else None,
+            'split_secondary_amount': float(self.split_secondary_amount) if self.split_secondary_amount is not None else None,
             'pin_required': self.pin_required,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,

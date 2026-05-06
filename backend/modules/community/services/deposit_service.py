@@ -19,6 +19,7 @@ from modules.community.models.community import Community
 from modules.community.models.community_member import CommunityMember
 from modules.auth_v2.models.user import User
 from modules.auth_v2.extensions import db
+from modules.wallet.models.wallet import Wallet
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,10 @@ class CommunityDepositService:
         wallet = self.wallet_repo.find_by_community_id(community_id)
         if not wallet:
             raise ValueError("Community wallet not found")
+
+        actor_wallet = Wallet.query.filter_by(user_id=user_id).first()
+        if not actor_wallet:
+            raise ValueError("User wallet not found")
         
         # Generate transaction reference
         reference = self._generate_reference(community_id, user_id)
@@ -111,7 +116,7 @@ class CommunityDepositService:
         signed_amount = TxnModel.compute_signed_amount(amount, 'credit')
         
         transaction = self.transaction_repo.create({
-            'wallet_id': wallet.id,
+            'wallet_id': actor_wallet.id,
             'community_id': community_id,
             'reference': reference,
             # SafeHaven session/account identifier used for verification
@@ -132,7 +137,8 @@ class CommunityDepositService:
             'status': 'pending',
             'meta': {
                 'user_id': user_id,
-                'community_name': community.name
+                'community_name': community.name,
+                'community_wallet_id': wallet.id,
             }
         })
         

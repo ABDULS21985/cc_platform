@@ -154,6 +154,7 @@ export interface WalletData {
   id: number;
   account_number: string;
   account_name: string;
+  bank_name?: string | null;
   balance: string;
   currency: string;
   status: string;
@@ -174,8 +175,14 @@ export interface TransactionData {
   fee: string;
   net_amount: string;
   description: string;
+  source_account_number?: string | null;
   source_account_name: string | null;
+  source_bank_code?: string | null;
   source_bank_name: string | null;
+  destination_account_number?: string | null;
+  destination_account_name?: string | null;
+  destination_bank_name?: string | null;
+  note?: string | null;
   status: string;
   completed_at: string | null;
   created_at: string;
@@ -233,6 +240,8 @@ export interface DepositData {
   reference: string;
   amount: string;
   status: string;
+  provider?: string;
+  using_fallback?: boolean;
   bank_details: BankDetails;
   instructions: string;
   message: string;
@@ -246,8 +255,11 @@ export interface DepositResponse {
 export interface WithdrawPayload {
   amount: number;
   bank_code: string;
+  bank_name?: string;
   account_number: string;
   account_name?: string;
+  note?: string;
+  pin: string;
 }
 
 export interface WithdrawData {
@@ -257,7 +269,9 @@ export interface WithdrawData {
   fee: string;
   net_amount: string;
   status: string;
+  provider_status?: string;
   destination_bank: string;
+  destination_bank_code?: string;
   destination_account: string;
   message: string;
 }
@@ -383,16 +397,44 @@ export interface BillData {
   community_id: number;
   created_at: string;
   creator_id: number;
+  creator?: {
+    id: number;
+    firstname?: string | null;
+    lastname?: string | null;
+    full_name?: string | null;
+    profile_photo?: string | null;
+  } | null;
   description?: string;
   due_date: string;
   id: number;
   is_recurring: boolean;
-  min_amount: string;
+  min_amount: number;
+  paid_member_count?: number;
+  expected_member_count?: number;
+  progress_percentage?: number;
+  member_payment_statuses?: BillMemberPaymentStatus[];
+  recent_transactions?: CommunityTransaction[];
   recurrence_type?: string;
   status: string;
   title: string;
   type: string;
   updated_at: string;
+}
+
+export interface BillMemberPaymentStatus {
+  member_id: number;
+  user_id: number;
+  role: string;
+  status: "paid" | "pending";
+  amount_paid: number;
+  paid_at?: string | null;
+  user?: {
+    id: number;
+    firstname?: string | null;
+    lastname?: string | null;
+    full_name?: string | null;
+    profile_photo?: string | null;
+  } | null;
 }
 
 export interface BillListData {
@@ -454,9 +496,25 @@ export interface PostData {
   created_at: string;
   updated_at: string;
   mention_count: number;
+  comments_count: number;
+  reactions_count: number;
+  current_user_reacted: boolean;
+  current_user_reaction_type: string | null;
   mentioned_user_ids: number[];
   author: PostAuthor;
   mentions: PostMention[];
+}
+
+export interface PostCommentData {
+  id: number;
+  post_id: number;
+  author_user_id: number;
+  body: string;
+  status: string;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
+  author: PostAuthor;
 }
 
 export interface PostListData {
@@ -470,22 +528,121 @@ export interface PostListResponse {
   data: PostListData;
 }
 
+export interface PostCommentListResponse {
+  success: boolean;
+  message: string;
+  data: {
+    comments: PostCommentData[];
+    pagination: Pagination;
+  };
+}
+
+export interface PostReactionResponse {
+  success: boolean;
+  message: string;
+  data: {
+    post_id: number;
+    reaction_type: string;
+    reacted: boolean;
+    reactions_count: number;
+  };
+}
+
 export interface PayBillPayload {
   amount: number;
-  payment_method: "wallet" | "transfer" | "card";
+  payment_method: "wallet";
   transaction_reference?: string | null;
   /** Required for `payment_method: 'wallet'` — backend verifies via TransactionPinService. */
   pin?: string;
 }
 
+export interface CommunityBalanceData {
+  community_id: number;
+  balance: number;
+  currency: string;
+  status?: string | null;
+  account_number?: string | null;
+  account_name?: string | null;
+  total_deposits?: number;
+  total_withdrawals?: number;
+  transaction_count?: number;
+}
+
+export interface CommunityBalanceResponse {
+  success: boolean;
+  message: string;
+  data: CommunityBalanceData;
+}
+
+export interface CommunityTransaction {
+  id: number;
+  reference: string;
+  type: string;
+  direction?: "credit" | "debit" | string;
+  amount: string | number;
+  signed_amount?: string | null;
+  net_amount?: string | number;
+  description?: string | null;
+  status: string;
+  transaction_type?: string | null;
+  community_id?: number | null;
+  bill_id?: number | null;
+  created_at: string;
+  completed_at?: string | null;
+  payer_name?: string | null;
+  payment_method?: string | null;
+  meta?: Record<string, any> | null;
+  user?: {
+    id: number;
+    full_name?: string | null;
+    email?: string | null;
+  } | null;
+  payer?: {
+    id: number;
+    firstname?: string | null;
+    lastname?: string | null;
+    full_name?: string | null;
+    profile_photo?: string | null;
+  } | null;
+  virtual_account?: {
+    account_number?: string | null;
+    account_name?: string | null;
+    bank_name?: string | null;
+  } | null;
+}
+
+export interface CommunityTransactionsResponse {
+  success: boolean;
+  message: string;
+  data: {
+    transactions: CommunityTransaction[];
+    pagination: Pagination;
+  };
+}
+
+export interface CommunityTransferPayload {
+  amount: number;
+  recipient_account: string;
+  recipient_name: string;
+  recipient_bank_code: string;
+  reason?: string;
+  pin: string;
+}
+
 export interface PaymentData {
   transaction_id: number;
-  reference: string;
-  amount: string;
+  bill_id?: number;
+  reference?: string;
+  amount: string | number;
   status: string;
-  account_details: any;
-  instructions: string;
-  expires_in: string;
+  account_details?: any;
+  instructions?: string;
+  expires_in?: string;
+  expires_in_seconds?: number;
+  expires_at?: string;
+  timestamp?: string;
+  duplicate?: boolean;
+  message?: string;
 }
 
 export interface PaymentResponse {
@@ -800,17 +957,24 @@ export const ApiService = {
       ),
 
     getBalance: (id: number) =>
-      axiosInstance.get<ApiResponse<any>>(`/v2/community/${id}/balance`),
+      axiosInstance.get<CommunityBalanceResponse>(`/v2/community/${id}/balance`),
 
-    transfer: (
+    getTransactions: (
       id: number,
-      data: {
-        amount: number;
-        recipient_account: string;
-        recipient_name: string;
-        reason?: string;
+      params?: {
+        limit?: number;
+        offset?: number;
+        type?: "credit" | "debit" | "deposit" | "withdrawal" | "transfer" | "payment";
+        status?: "pending" | "completed" | "failed" | "reversed" | "successful";
+        bill_id?: number;
       },
     ) =>
+      axiosInstance.get<CommunityTransactionsResponse>(
+        `/v2/community/${id}/transactions`,
+        { params },
+      ),
+
+    transfer: (id: number, data: CommunityTransferPayload) =>
       axiosInstance.post<ApiResponse<any>>(
         `/v2/community/${id}/transfer`,
         data,
@@ -874,6 +1038,49 @@ export const ApiService = {
       axiosInstance.post<ApiResponse<PostData>>(
         `/v2/community/${communityId}/posts`,
         data,
+      ),
+
+    uploadPostMedia: (formData: FormData) =>
+      axiosInstance.post<
+        ApiResponse<{
+          media: {
+            provider: string;
+            asset_id: string;
+            url: string;
+            width: number | null;
+            height: number | null;
+            format: string | null;
+            bytes: number | null;
+            original_filename: string | null;
+          }[];
+          count: number;
+        }>
+      >("/v2/community/posts/media/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }),
+
+    getPostComments: (
+      postId: number,
+      params?: { limit?: number; offset?: number },
+    ) =>
+      axiosInstance.get<PostCommentListResponse>(
+        `/v2/community/posts/${postId}/comments`,
+        { params },
+      ),
+
+    createPostComment: (postId: number, data: { body: string }) =>
+      axiosInstance.post<ApiResponse<PostCommentData>>(
+        `/v2/community/posts/${postId}/comments`,
+        data,
+      ),
+
+    togglePostReaction: (
+      postId: number,
+      data?: { reaction_type?: "like" },
+    ) =>
+      axiosInstance.post<PostReactionResponse>(
+        `/v2/community/posts/${postId}/reactions`,
+        data ?? { reaction_type: "like" },
       ),
 
     deletePost: (postId: number) =>
@@ -1006,7 +1213,7 @@ export const ApiService = {
       }>>("/v2/bookmarks/", { params }),
 
     create: (data: {
-      kind: "post" | "event" | "community" | "bill" | "transaction";
+      kind: "post" | "event" | "community" | "bill" | "transaction" | "member";
       target_ref: string;
       title: string;
       description?: string;
@@ -1055,8 +1262,26 @@ export const ApiService = {
       capacity?: number;
       ticket_price?: string | null;
       cover_image?: string | null;
+      auto_approve_members?: boolean;
     }) =>
       axiosInstance.post<ApiResponse<{ event: EventApi }>>("/v2/events/", data),
+
+    uploadCover: (formData: FormData) =>
+      axiosInstance.post<ApiResponse<{
+        cover_image: string;
+        media: {
+          provider?: string;
+          asset_id?: string;
+          url?: string;
+          width?: number;
+          height?: number;
+          format?: string;
+          bytes?: number;
+          original_filename?: string;
+        };
+      }>>("/v2/events/media/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      }),
 
     get: (id: number) =>
       axiosInstance.get<ApiResponse<{ event: EventApi }>>(`/v2/events/${id}`),
@@ -1129,6 +1354,12 @@ export const ApiService = {
         data,
       ),
 
+    verifyPin: (data: { pin: string }) =>
+      axiosInstance.post<ApiResponse<{ verified: boolean }>>(
+        "/v2/standing-instructions/pin/verify",
+        data,
+      ),
+
     setStatus: (id: number, status: 'active' | 'paused' | 'cancelled') =>
       axiosInstance.patch<ApiResponse<{ subscription: SubscriptionApi }>>(
         `/v2/standing-instructions/${id}`,
@@ -1191,6 +1422,10 @@ export interface EventApi {
   capacity: number;
   ticket_price: string | null;
   cover_image: string | null;
+  auto_approve_members?: boolean;
+  requires_payment?: boolean;
+  payment_supported?: boolean;
+  ticketing_status?: "free" | "paid_unsupported";
   community_name: string | null;
   community_initial: string;
   status: "upcoming" | "live" | "past";
@@ -1204,7 +1439,7 @@ export interface EventApi {
 export interface BookmarkApi {
   id: number;
   user_id: number;
-  kind: "post" | "event" | "community" | "bill" | "transaction";
+  kind: "post" | "event" | "community" | "bill" | "transaction" | "member";
   target_ref: string;
   title: string;
   description: string;
@@ -1240,6 +1475,8 @@ export interface SubscriptionApi {
   amount: number;
   currency: string;
   cadence: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  start_at: string | null;
+  end_at: string | null;
   next_charge_at: string | null;
   last_charged_at: string | null;
   status: 'active' | 'paused' | 'cancelled';
@@ -1249,6 +1486,9 @@ export interface SubscriptionApi {
   destination_account_number: string | null;
   destination_bank_code: string | null;
   destination_account_name: string | null;
+  split_member_name: string | null;
+  split_primary_amount: number | null;
+  split_secondary_amount: number | null;
   pin_required: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -1260,6 +1500,8 @@ export interface SubscriptionCreatePayload {
   amount: number | string;
   currency?: string;
   cadence?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  start_at?: string | null;
+  end_at?: string | null;
   next_charge_at?: string | null;
   counterparty_type?: string | null;
   counterparty_id?: number | null;
@@ -1270,6 +1512,10 @@ export interface StandingInstructionCreatePayload extends SubscriptionCreatePayl
   destination_account_number: string;
   destination_bank_code: string;
   destination_account_name: string;
+  split_member_name?: string | null;
+  split_primary_amount?: number | string | null;
+  split_secondary_amount?: number | string | null;
+  pin: string;
 }
 
 export interface AuthSessionApi {

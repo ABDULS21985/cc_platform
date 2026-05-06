@@ -16,6 +16,8 @@ import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ApiService, type CommunityData } from '@/services/api';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import { cn } from '@/lib/utils';
+import { useDemoData } from '@/lib/demo-mode';
+import { toast } from 'sonner';
 
 interface PostComment {
   id: number;
@@ -26,12 +28,16 @@ interface PostComment {
 
 interface Post {
   id: number;
+  communityId: number;
   author: { name: string; avatar: string; fallback: string };
   group: string;
   content: string;
   timeAgo: string;
   likes: number;
   comments: number;
+  commentsEnabled: boolean;
+  commentsLoaded: boolean;
+  currentUserReacted: boolean;
   hasImages: boolean;
   images: string[];
   commentsList: PostComment[];
@@ -59,6 +65,8 @@ interface ApiPost {
   media_urls?: string[];
   comments_count?: number;
   reactions_count?: number;
+  comments_enabled?: boolean;
+  current_user_reacted?: boolean;
   created_at?: string;
   author?: {
     id?: number;
@@ -77,6 +85,7 @@ function mapApiPost(p: ApiPost, communityName: string): Post {
   const initial = (authorName.match(/\b\w/g) ?? ['M', 'B']).slice(0, 2).join('').toUpperCase();
   return {
     id: p.id,
+    communityId: p.community_id,
     author: {
       name: `@${(p.author?.firstname ?? authorName).toLowerCase().replace(/\s+/g, '')}`,
       avatar: p.author?.profile_photo ?? '/images/image.png',
@@ -87,6 +96,9 @@ function mapApiPost(p: ApiPost, communityName: string): Post {
     timeAgo: relativeTime(p.created_at ?? new Date().toISOString()),
     likes: p.reactions_count ?? 0,
     comments: p.comments_count ?? 0,
+    commentsEnabled: p.comments_enabled ?? true,
+    commentsLoaded: false,
+    currentUserReacted: Boolean(p.current_user_reacted),
     hasImages: (p.media_urls ?? []).length > 0,
     images: p.media_urls ?? [],
     commentsList: [],
@@ -96,6 +108,7 @@ function mapApiPost(p: ApiPost, communityName: string): Post {
 const INITIAL_POSTS: Post[] = [
   {
     id: 1,
+    communityId: 1,
     author: {
       name: '@aishaadwan',
       avatar:
@@ -108,6 +121,9 @@ const INITIAL_POSTS: Post[] = [
     timeAgo: '20m ago',
     likes: 15,
     comments: 2,
+    commentsEnabled: true,
+    commentsLoaded: true,
+    currentUserReacted: false,
     hasImages: true,
     images: [
       'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?w=600&auto=format&fit=crop',
@@ -120,6 +136,7 @@ const INITIAL_POSTS: Post[] = [
   },
   {
     id: 2,
+    communityId: 2,
     author: {
       name: '@johnsmith',
       avatar:
@@ -132,6 +149,9 @@ const INITIAL_POSTS: Post[] = [
     timeAgo: '1h ago',
     likes: 8,
     comments: 0,
+    commentsEnabled: true,
+    commentsLoaded: true,
+    currentUserReacted: false,
     hasImages: true,
     images: [
       'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=600&auto=format&fit=crop',
@@ -140,6 +160,7 @@ const INITIAL_POSTS: Post[] = [
   },
   {
     id: 3,
+    communityId: 3,
     author: {
       name: '@sarahwilson',
       avatar:
@@ -151,6 +172,9 @@ const INITIAL_POSTS: Post[] = [
     timeAgo: '2h ago',
     likes: 23,
     comments: 1,
+    commentsEnabled: true,
+    commentsLoaded: true,
+    currentUserReacted: false,
     hasImages: true,
     images: [
       'https://images.unsplash.com/photo-1561070791-2526d30994b5?w=600&auto=format&fit=crop',
@@ -198,6 +222,7 @@ interface PostCardProps {
   onToggleComments: () => void;
   onCommentChange: (v: string) => void;
   onCommentSubmit: () => void;
+  onShare: () => void;
 }
 
 function PostCard({
@@ -209,6 +234,7 @@ function PostCard({
   onToggleComments,
   onCommentChange,
   onCommentSubmit,
+  onShare,
 }: PostCardProps) {
   return (
     <Card variant="default">
@@ -304,6 +330,7 @@ function PostCard({
           </button>
           <button
             type="button"
+            onClick={onShare}
             aria-label="Share post"
             className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -371,18 +398,19 @@ function PostCard({
               type="text"
               value={commentDraft}
               onChange={(e) => onCommentChange(e.target.value)}
-              placeholder="Write a comment…"
+              disabled={!post.commentsEnabled}
+              placeholder={post.commentsEnabled ? 'Write a comment…' : 'Comments are disabled'}
               aria-label="Write a comment"
-              className="h-10 w-full rounded-full border border-border bg-muted/40 pl-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground transition-colors hover:border-input focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="h-10 w-full rounded-full border border-border bg-muted/40 pl-4 pr-12 text-sm text-foreground placeholder:text-muted-foreground transition-colors hover:border-input focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
             />
             <button
               type="submit"
-              disabled={!commentDraft.trim()}
+              disabled={!post.commentsEnabled || !commentDraft.trim()}
               aria-label="Post comment"
               className={cn(
                 'absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-full transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                commentDraft.trim()
+                post.commentsEnabled && commentDraft.trim()
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'cursor-not-allowed bg-muted text-muted-foreground'
               )}
@@ -394,6 +422,28 @@ function PostCard({
       </CardContent>
     </Card>
   );
+}
+
+function mapApiComment(comment: {
+  id: number;
+  body: string;
+  created_at?: string;
+  author?: {
+    firstname?: string;
+    lastname?: string;
+    full_name?: string;
+  };
+}): PostComment {
+  const author =
+    comment.author?.full_name ||
+    [comment.author?.firstname, comment.author?.lastname].filter(Boolean).join(' ') ||
+    'Member';
+  return {
+    id: comment.id,
+    author,
+    content: comment.body,
+    time: relativeTime(comment.created_at ?? new Date().toISOString()),
+  };
 }
 
 export function PostFeedSkeleton() {
@@ -437,8 +487,8 @@ export default function PostFeed() {
         const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
         if (joined.length === 0) {
           if (!cancelled) {
-            // No communities yet — show the seed posts so the dashboard feels alive.
-            setPosts(INITIAL_POSTS);
+            setPosts(useDemoData() ? INITIAL_POSTS : []);
+            setLikedPosts(new Set());
           }
           return;
         }
@@ -457,11 +507,18 @@ export default function PostFeed() {
           // Sort by relative time string is unstable; fall back to id desc as a proxy.
           return b.id - a.id;
         });
-        if (!cancelled) setPosts(merged.length > 0 ? merged : INITIAL_POSTS);
+        if (!cancelled) {
+          const nextPosts = merged.length > 0 ? merged : useDemoData() ? INITIAL_POSTS : [];
+          setPosts(nextPosts);
+          setLikedPosts(
+            new Set(nextPosts.filter((post) => post.currentUserReacted).map((post) => post.id))
+          );
+        }
       } catch (err) {
         if (!cancelled) {
           toastAxiosError(err, 'Failed to load community feed.');
-          setPosts(INITIAL_POSTS);
+          setPosts(useDemoData() ? INITIAL_POSTS : []);
+          setLikedPosts(new Set());
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -472,62 +529,125 @@ export default function PostFeed() {
     };
   }, []);
 
-  const toggleLike = (id: number) => {
-    setLikedPosts((prev) => {
-      const next = new Set(prev);
-      const wasLiked = next.has(id);
-      setPosts((p) =>
-        p.map((post) =>
+  const toggleLike = async (id: number) => {
+    try {
+      const response = await ApiService.communities.togglePostReaction(id, {
+        reaction_type: 'like',
+      });
+      const reaction = response.data.data;
+      setLikedPosts((prev) => {
+        const next = new Set(prev);
+        if (reaction.reacted) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      setPosts((prev) =>
+        prev.map((post) =>
           post.id === id
-            ? { ...post, likes: post.likes + (wasLiked ? -1 : 1) }
+            ? {
+                ...post,
+                likes: reaction.reactions_count,
+                currentUserReacted: reaction.reacted,
+              }
             : post
         )
       );
-      if (wasLiked) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    } catch (error) {
+      toastAxiosError(error, 'Failed to update reaction.');
+    }
   };
+
+  const loadComments = React.useCallback(async (id: number) => {
+    try {
+      const response = await ApiService.communities.getPostComments(id, {
+        limit: 50,
+        offset: 0,
+      });
+      const comments = response.data.data.comments.map(mapApiComment);
+      const total = response.data.data.pagination?.total ?? comments.length;
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.id === id
+            ? {
+                ...post,
+                comments: total,
+                commentsList: comments,
+                commentsLoaded: true,
+              }
+            : post
+        )
+      );
+    } catch (error) {
+      toastAxiosError(error, 'Failed to load comments.');
+    }
+  }, []);
 
   const toggleComments = (id: number) => {
+    let opening = false;
     setOpenComments((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      opening = !next.has(id);
+      if (opening) next.add(id);
+      else next.delete(id);
       return next;
     });
+    const post = posts.find((p) => p.id === id);
+    if (opening && post && !post.commentsLoaded) {
+      void loadComments(id);
+    }
   };
 
-  const submitComment = (id: number) => {
-    const draft = commentInputs[id];
-    if (!draft?.trim()) return;
-    setPosts((p) =>
-      p.map((post) =>
-        post.id === id
-          ? {
-              ...post,
-              comments: post.comments + 1,
-              commentsList: [
-                ...post.commentsList,
-                {
-                  id: Date.now(),
-                  author: 'You',
-                  content: draft,
-                  time: 'Just now',
-                },
-              ],
-            }
-          : post
-      )
-    );
-    setCommentInputs((s) => ({ ...s, [id]: '' }));
-    // Auto-open comments after posting if they were collapsed.
-    setOpenComments((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
+  const submitComment = async (id: number) => {
+    const draft = commentInputs[id]?.trim();
+    if (!draft) return;
+    try {
+      await ApiService.communities.createPostComment(id, { body: draft });
+      setCommentInputs((s) => ({ ...s, [id]: '' }));
+      setOpenComments((prev) => {
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      await loadComments(id);
+    } catch (error) {
+      toastAxiosError(error, 'Failed to post comment.');
+    }
   };
+
+  const sharePost = async (post: Post) => {
+    const href = `${window.location.origin}/dashboard/community/${post.communityId}?post=${post.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: post.group,
+          text: post.content,
+          url: href,
+        });
+      } else {
+        await navigator.clipboard.writeText(href);
+        toast.success('Post link copied');
+      }
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') {
+        toast.error('Unable to share post');
+      }
+    }
+  };
+
+  if (loading) {
+    return <PostFeedSkeleton />;
+  }
+
+  if (posts.length === 0) {
+    return (
+      <Card variant="default">
+        <CardContent className="px-5 text-center text-sm text-muted-foreground sm:px-6">
+          No community posts yet. Join a circle or start a conversation from a
+          community page.
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -538,12 +658,13 @@ export default function PostFeed() {
           liked={likedPosts.has(post.id)}
           commentsOpen={openComments.has(post.id)}
           commentDraft={commentInputs[post.id] || ''}
-          onLike={() => toggleLike(post.id)}
+          onLike={() => void toggleLike(post.id)}
           onToggleComments={() => toggleComments(post.id)}
           onCommentChange={(v) =>
             setCommentInputs((s) => ({ ...s, [post.id]: v }))
           }
-          onCommentSubmit={() => submitComment(post.id)}
+          onCommentSubmit={() => void submitComment(post.id)}
+          onShare={() => void sharePost(post)}
         />
       ))}
     </div>

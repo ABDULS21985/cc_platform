@@ -33,6 +33,7 @@ interface CommunityViewItem {
   isJoined: boolean;
   isOwner: boolean;
   avatar: string;
+  cover?: string | null;
 }
 
 export function TrendingRow({ categoryLabel, search }: TrendingRowProps) {
@@ -46,7 +47,10 @@ export function TrendingRow({ categoryLabel, search }: TrendingRowProps) {
     const load = async () => {
       setLoading(true);
       try {
-        const params: { query?: string; limit: number } = { limit: 8 };
+        const params: { query?: string; limit: number; sort: 'popular' } = {
+          limit: 8,
+          sort: 'popular',
+        };
         if (search?.trim()) params.query = search.trim();
         const res = await ApiService.communities.list(params);
         if (cancelled) return;
@@ -59,11 +63,12 @@ export function TrendingRow({ categoryLabel, search }: TrendingRowProps) {
               description:
                 c.description || 'No description provided for this circle.',
               members: c.member_count || 0,
-              posts: 0,
+              posts: c.posts_count ?? 0,
               isPrivate: c.visibility === 'private',
               isJoined: !!c.is_joined,
               isOwner: c.created_by === userData?.id,
-              avatar: '/images/image.png',
+              avatar: c.community_profile_picture || '/images/image.png',
+              cover: c.community_cover_photo || c.banner_url || null,
             })
           )
         );

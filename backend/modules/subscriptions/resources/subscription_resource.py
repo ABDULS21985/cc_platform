@@ -89,7 +89,12 @@ class SubscriptionItem(MethodView):
     @subscription_blp.alt_response(404, schema=ApiErrorEnvelopeSchema)
     def patch(self, data, sub_id):
         try:
-            result, status = _service().update_status(sub_id, current_user.id, data['status'])
+            result, status = _service().update_status(
+                sub_id,
+                current_user.id,
+                data['status'],
+                kind=SubscriptionKind.SUBSCRIPTION,
+            )
             if status >= 400:
                 abort(status, message=result.get('error', 'Update failed'))
             return result, status
@@ -103,7 +108,11 @@ class SubscriptionItem(MethodView):
     @subscription_blp.alt_response(404, schema=ApiErrorEnvelopeSchema)
     def delete(self, sub_id):
         try:
-            result, status = _service().delete(sub_id, current_user.id)
+            result, status = _service().delete(
+                sub_id,
+                current_user.id,
+                kind=SubscriptionKind.SUBSCRIPTION,
+            )
             if status >= 400:
                 abort(status, message=result.get('error', 'Delete failed'))
             return result, status

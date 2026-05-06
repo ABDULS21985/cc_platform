@@ -167,9 +167,9 @@ class PayBillSchema(Schema):
     
     payment_method = fields.String(
         required=True,
-        validate=validate.OneOf(['wallet', 'transfer', 'card']),
+        validate=validate.OneOf(['wallet']),
         metadata={
-            'description': 'Payment method',
+            'description': 'Payment method. Only wallet payments are currently supported.',
             'example': 'wallet'
         }
     )
@@ -255,6 +255,14 @@ class BillDataSchema(Schema):
         metadata={
             'description': 'Bill creator summary: id, firstname, lastname, full_name, profile_photo',
         },
+    )
+    member_payment_statuses = fields.List(
+        fields.Dict(),
+        metadata={'description': 'Bill detail member payment statuses'},
+    )
+    recent_transactions = fields.List(
+        fields.Dict(),
+        metadata={'description': 'Recent successful bill payment transactions'},
     )
     created_at = fields.String(metadata={'description': 'Creation timestamp'})
     updated_at = fields.String(metadata={'description': 'Last update timestamp'})

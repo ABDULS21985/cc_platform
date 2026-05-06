@@ -6,8 +6,10 @@ import { ArrowRight, Calendar, Clock, MapPin, Users } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { ApiService, type EventApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 
 interface CommunityEvent {
   id: number;
@@ -95,7 +97,7 @@ function mapApi(e: EventApi): CommunityEvent {
 }
 
 export default function OngoingEvents({ loading: loadingProp = false }: { loading?: boolean }) {
-  const [items, setItems] = React.useState<CommunityEvent[]>(EVENTS);
+  const [items, setItems] = React.useState<CommunityEvent[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -110,12 +112,12 @@ export default function OngoingEvents({ loading: loadingProp = false }: { loadin
           .filter((e) => e.status !== 'past')
           .slice(0, 3);
         if (ongoing.length === 0) {
-          setItems(EVENTS);
+          setItems(useDemoData() ? EVENTS : []);
         } else {
           setItems(ongoing.map(mapApi));
         }
       } catch {
-        if (!cancelled) setItems(EVENTS);
+        if (!cancelled) setItems(useDemoData() ? EVENTS : []);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -157,6 +159,12 @@ export default function OngoingEvents({ loading: loadingProp = false }: { loadin
               </li>
             ))}
           </ul>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<Calendar className="size-5" aria-hidden="true" />}
+            title="No ongoing events"
+            description="Upcoming and live events from your communities will show here."
+          />
         ) : (
           <ul role="list" className="space-y-3">
             {items.map((e) => {

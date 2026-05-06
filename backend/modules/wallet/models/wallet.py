@@ -111,6 +111,7 @@ class Wallet(db.Model):
             "id": self.id,
             "account_number": self.account_number,
             "account_name": self.account_name,
+            "bank_name": self.bank_name,
             "balance": str(self.balance),  # Convert Decimal to string for JSON
             "currency": self.currency,
             "status": self.status,
@@ -196,3 +197,10 @@ class Wallet(db.Model):
     def formatted_balance(self) -> str:
         """Get formatted balance with currency symbol."""
         return f"₦{self.balance:,.2f}"
+
+    @property
+    def bank_name(self) -> Optional[str]:
+        """Best available bank label for the wallet's virtual account."""
+        if not self.account_number:
+            return None
+        return "Bell MFB"

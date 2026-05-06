@@ -32,7 +32,7 @@ export function TransactionPinModal({
     if (!isOpen) setPin('');
   }, [isOpen]);
 
-  const isValid = pin.length >= 4;
+  const isValid = pin.length === 4;
 
   const handleConfirm = () => {
     if (!isValid || loading) return;
@@ -58,7 +58,7 @@ export function TransactionPinModal({
               type="password"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={4}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               onKeyDown={(e) => {
@@ -66,7 +66,7 @@ export function TransactionPinModal({
               }}
             />
             <p className="mt-1 text-[11px] text-muted-foreground">
-              4–6 digit transaction PIN.
+              4 digit transaction PIN.
             </p>
           </div>
         </div>

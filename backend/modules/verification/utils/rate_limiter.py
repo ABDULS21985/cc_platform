@@ -46,12 +46,17 @@ def rate_limit(max_requests: int, window_minutes: int = 60, key_prefix: str = "r
             # In local development, rate limiting makes iterative testing painful.
             # Keep it enabled in production, but bypass in non-production.
             # NOTE: `ENV` defaults to "development" in config.py if not provided.
-            if str(os.getenv("ENV", "development")).lower() != "production":
+            is_production = str(os.getenv("ENV", "development")).lower() == "production"
+            if not is_production:
                 return f(*args, **kwargs)
 
             if not ext.redis_client:
-                logger.warning("Rate limiting skipped - Redis not available")
-                return f(*args, **kwargs)
+                logger.error("Rate limiting unavailable in production - Redis not available")
+                return jsonify({
+                    'success': False,
+                    'error': 'rate_limit_unavailable',
+                    'message': 'Rate limiting is unavailable. Please try again later.',
+                }), 503
 
             injected_user = kwargs.get('current_user')
             if injected_user is not None:
@@ -98,7 +103,11 @@ def rate_limit(max_requests: int, window_minutes: int = 60, key_prefix: str = "r
 
             except Exception as e:
                 logger.error(f"Rate limiting error: {str(e)}")
-                return f(*args, **kwargs)
+                return jsonify({
+                    'success': False,
+                    'error': 'rate_limit_unavailable',
+                    'message': 'Rate limiting is unavailable. Please try again later.',
+                }), 503
 
         return wrapped
     return decorator

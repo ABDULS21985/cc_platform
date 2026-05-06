@@ -1,6 +1,7 @@
 """Event REST resource."""
 import logging
 
+from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint
 
@@ -71,6 +72,7 @@ class EventCollectionResource(MethodView):
                 ticket_price=data.get('ticket_price'),
                 duration_label=data.get('duration_label'),
                 cover_image=data.get('cover_image'),
+                auto_approve_members=data.get('auto_approve_members', False),
             )
             if status >= 400:
                 return format_error(
@@ -125,6 +127,7 @@ class EventAttendResource(MethodView):
     @token_required
     @event_blp.response(200, EventResponseSchema)
     @event_blp.alt_response(404, schema=EventErrorSchema)
+    @event_blp.alt_response(402, schema=EventErrorSchema)
     @event_blp.alt_response(409, schema=EventErrorSchema)
     def post(self, event_id, current_user=None):
         try:
@@ -153,4 +156,44 @@ class EventAttendResource(MethodView):
             return format_data(data=result, message='Attendance cancelled', status_code=status)
         except Exception as exc:
             logger.error('Error cancelling attendance: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
+@event_blp.route('/media/upload')
+class EventMediaUploadResource(MethodView):
+    """Upload an event cover image and return a persisted media URL."""
+
+    @token_required
+    @event_blp.response(200, EventResponseSchema)
+    @event_blp.alt_response(400, schema=EventErrorSchema)
+    def post(self, current_user=None):
+        try:
+            from modules.events.services.event_media_service import EventMediaService
+
+            file = request.files.get('file')
+            if file is None:
+                files = request.files.getlist('files')
+                file = files[0] if files else None
+
+            media, error = EventMediaService().upload_cover(file=file, user_id=current_user.id)
+            if error:
+                return format_error(
+                    error='media_upload_failed',
+                    message=error,
+                    status_code=400,
+                )
+            if not media:
+                return format_error(
+                    error='media_upload_failed',
+                    message='Upload provider returned no media',
+                    status_code=400,
+                )
+
+            return format_data(
+                data={'cover_image': media.get('url'), 'media': media},
+                message='Event cover uploaded',
+                status_code=200,
+            )
+        except Exception as exc:
+            logger.error('Error uploading event cover: %s', exc, exc_info=True)
             return format_internal_error(str(exc))

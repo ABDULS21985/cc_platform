@@ -16,6 +16,7 @@ from modules.auth_v2.extensions import db
 from modules.community.constants import BillSessionStatus, BillStatus
 from modules.community.models.bill import Bill, BillSession
 from modules.wallet.models.wallet_transaction import WalletTransaction
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -151,11 +152,57 @@ class BillRepository:
             .filter(
                 WalletTransaction.bill_id == bill_id,
                 WalletTransaction.transaction_type == 'bill_payment',
-                WalletTransaction.status == 'successful',
+                WalletTransaction.status.in_(['successful', 'completed']),
                 WalletTransaction.meta.isnot(None),
             )
             .distinct()
             .count()
+        )
+
+    def get_payment_summary_by_user(self, bill_id: int) -> Dict[int, Dict[str, Any]]:
+        """Return successful bill payment totals keyed by payer user_id."""
+        user_id_expr = WalletTransaction.meta['user_id'].astext
+        rows = (
+            db.session.query(
+                user_id_expr.label('user_id'),
+                func.coalesce(func.sum(WalletTransaction.amount), 0).label('amount_paid'),
+                func.max(WalletTransaction.created_at).label('paid_at'),
+            )
+            .filter(
+                WalletTransaction.bill_id == bill_id,
+                WalletTransaction.transaction_type == 'bill_payment',
+                WalletTransaction.status.in_(['successful', 'completed']),
+                WalletTransaction.meta.isnot(None),
+                user_id_expr.isnot(None),
+            )
+            .group_by(user_id_expr)
+            .all()
+        )
+
+        summary: Dict[int, Dict[str, Any]] = {}
+        for row in rows:
+            try:
+                user_id = int(row.user_id)
+            except (TypeError, ValueError):
+                continue
+
+            summary[user_id] = {
+                'amount_paid': row.amount_paid or 0,
+                'paid_at': row.paid_at,
+            }
+        return summary
+
+    def find_recent_transactions(self, bill_id: int, limit: int = 5) -> List[WalletTransaction]:
+        """Return recent successful transactions for a bill."""
+        return (
+            WalletTransaction.query.filter(
+                WalletTransaction.bill_id == bill_id,
+                WalletTransaction.transaction_type == 'bill_payment',
+                WalletTransaction.status.in_(['successful', 'completed']),
+            )
+            .order_by(WalletTransaction.created_at.desc())
+            .limit(limit)
+            .all()
         )
 
 

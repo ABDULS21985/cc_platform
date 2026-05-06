@@ -19,6 +19,7 @@ import { ApiService, type EventApi } from '@/services/api';
 interface FeaturedEventCardProps {
   title: string;
   community: string;
+  communityId: number | null;
   date: { day: number; month: string };
   time: string;
   location: string;
@@ -53,6 +54,7 @@ function eventToProps(ev: EventApi): FeaturedEventCardProps {
   return {
     title: ev.title,
     community: ev.community_name ?? 'Public',
+    communityId: ev.community_id,
     date: { day: start.getDate(), month: MONTHS_SHORT[start.getMonth()] },
     time,
     location: ev.location || (ev.is_online ? 'Online' : 'TBA'),
@@ -259,7 +261,7 @@ export function FeaturedEvent() {
               </Button>
             </Link>
             <Link
-              href={`/dashboard/community/${e.community.toLowerCase().replace(/\s+/g, '-')}`}
+              href={e.communityId ? `/dashboard/community/${e.communityId}` : '/dashboard/community'}
               className="text-center text-xs font-medium text-white/70 hover:text-white sm:text-right"
             >
               <Calendar className="mr-1 inline-block size-3" aria-hidden="true" />

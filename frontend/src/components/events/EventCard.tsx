@@ -25,6 +25,7 @@ export interface EventItem {
   title: string;
   community: string;
   communityInitial: string;
+  communityId?: number | null;
   isPrivate: boolean;
   /** ISO timestamp. */
   startsAt: string;
@@ -37,6 +38,11 @@ export interface EventItem {
   status: 'live' | 'upcoming' | 'past';
   isAttending: boolean;
   isHosting: boolean;
+  isBookmarked?: boolean;
+  bookmarkId?: number | null;
+  requiresPayment?: boolean;
+  paymentSupported?: boolean;
+  ticketingStatus?: 'free' | 'paid_unsupported';
   /** Optional category label rendered as a small chip. */
   category?: string;
 }
@@ -44,6 +50,7 @@ export interface EventItem {
 interface EventCardProps {
   event: EventItem;
   onToggleAttend?: (id: string) => void;
+  onToggleBookmark?: (id: string) => void;
 }
 
 const STATUS_CONFIG: Record<
@@ -71,12 +78,23 @@ function formatDateTime(iso: string): { day: string; month: string; time: string
   return { day, month, time };
 }
 
-export function EventCard({ event, onToggleAttend }: EventCardProps) {
+function eventRequiresPayment(event: EventItem): boolean {
+  if (typeof event.requiresPayment === 'boolean') return event.requiresPayment;
+  if (event.ticketPrice === null || event.ticketPrice === '' || event.ticketPrice === '0') return false;
+  return true;
+}
+
+export function EventCard({ event, onToggleAttend, onToggleBookmark }: EventCardProps) {
   const router = useRouter();
   const dt = formatDateTime(event.startsAt);
   const status = STATUS_CONFIG[event.status];
-  const pct = Math.min(100, Math.round((event.attendees / event.capacity) * 100));
-  const isFull = event.attendees >= event.capacity;
+  const capacity = Math.max(event.capacity, event.attendees, 1);
+  const pct = Math.min(100, Math.round((event.attendees / capacity) * 100));
+  const isFull = event.capacity > 0 && event.attendees >= event.capacity;
+  const paidTicketingUnavailable =
+    !event.isAttending &&
+    eventRequiresPayment(event) &&
+    event.paymentSupported !== true;
 
   const navigate = () => router.push(`/dashboard/events/${event.id}`);
 
@@ -195,7 +213,7 @@ export function EventCard({ event, onToggleAttend }: EventCardProps) {
               <li className="inline-flex items-center gap-1">
                 <Users className="size-3.5" aria-hidden="true" />
                 <span className="tabular-nums">
-                  {event.attendees}/{event.capacity}
+                  {event.attendees}/{capacity}
                 </span>
               </li>
               {event.ticketPrice !== null && (
@@ -230,7 +248,7 @@ export function EventCard({ event, onToggleAttend }: EventCardProps) {
                 <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                   {isFull
                     ? 'Sold out · Waitlist open'
-                    : `${pct}% sold · ${event.capacity - event.attendees} tickets left`}
+                    : `${pct}% sold · ${Math.max(capacity - event.attendees, 0)} tickets left`}
                 </p>
               </div>
             )}
@@ -255,6 +273,7 @@ export function EventCard({ event, onToggleAttend }: EventCardProps) {
                     type="button"
                     size="sm"
                     variant={event.isAttending ? 'soft' : 'default'}
+                    disabled={paidTicketingUnavailable}
                     onClick={() => onToggleAttend?.(event.id)}
                     leadingIcon={
                       event.isAttending ? (
@@ -264,7 +283,11 @@ export function EventCard({ event, onToggleAttend }: EventCardProps) {
                       )
                     }
                   >
-                    {event.isAttending ? "You're going" : 'Get ticket'}
+                    {event.isAttending
+                      ? "You're going"
+                      : paidTicketingUnavailable
+                        ? 'Paid unavailable'
+                        : 'Get ticket'}
                   </Button>
                 </motion.div>
               )}
@@ -274,13 +297,20 @@ export function EventCard({ event, onToggleAttend }: EventCardProps) {
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  aria-label="Save event"
+                  aria-label={event.isBookmarked ? 'Unsave event' : 'Save event'}
+                  aria-pressed={!!event.isBookmarked}
                   onClick={(e) => {
                     e.stopPropagation();
-                    /* todo: wire bookmarks API */
+                    onToggleBookmark?.(event.id);
                   }}
                 >
-                  <Bookmark className="size-4" aria-hidden="true" />
+                  <Bookmark
+                    className={cn(
+                      'size-4',
+                      event.isBookmarked && 'fill-primary text-primary'
+                    )}
+                    aria-hidden="true"
+                  />
                 </Button>
                 <Button
                   type="button"

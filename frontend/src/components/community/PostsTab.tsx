@@ -27,8 +27,8 @@ import {
   Trash2,
   AlertCircle,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { ApiService, type PostData } from '@/services/api';
+import { type Dispatch, type SetStateAction, useEffect, useState } from 'react';
+import { ApiService, type PostCommentData, type PostData } from '@/services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { toastAxiosError } from '@/hooks/useAxiosError';
 import useUserData from '@/hooks/useUserData';
@@ -60,6 +60,14 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [postToDelete, setPostToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [openComments, setOpenComments] = useState<Set<number>>(new Set());
+  const [commentsByPost, setCommentsByPost] = useState<Record<number, PostCommentData[]>>({});
+  const [loadedComments, setLoadedComments] = useState<Set<number>>(new Set());
+  const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
+  const [commentLoading, setCommentLoading] = useState<Set<number>>(new Set());
+  const [commentSubmitting, setCommentSubmitting] = useState<Set<number>>(new Set());
+  const [reactingPosts, setReactingPosts] = useState<Set<number>>(new Set());
+  const [savingBookmarks, setSavingBookmarks] = useState<Set<number>>(new Set());
   const userData = useUserData();
 
   const toggleCreatePost = () => setIsCreatePostOpen((s) => !s);
@@ -103,6 +111,143 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
     }
   };
 
+  const setPostSetState = (
+    setter: Dispatch<SetStateAction<Set<number>>>,
+    id: number,
+    present: boolean,
+  ) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (present) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const loadComments = async (postId: number) => {
+    setPostSetState(setCommentLoading, postId, true);
+    try {
+      const response = await ApiService.communities.getPostComments(postId, {
+        limit: 50,
+        offset: 0,
+      });
+      const comments = response.data.data.comments;
+      const total = response.data.data.pagination?.total ?? comments.length;
+      setCommentsByPost((prev) => ({ ...prev, [postId]: comments }));
+      setLoadedComments((prev) => new Set(prev).add(postId));
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.id === postId ? { ...post, comments_count: total } : post,
+        ),
+      );
+    } catch (error) {
+      toastAxiosError(error, 'Failed to load comments.');
+    } finally {
+      setPostSetState(setCommentLoading, postId, false);
+    }
+  };
+
+  const handleToggleComments = (post: PostData) => {
+    const shouldOpen = !openComments.has(post.id);
+    setOpenComments((prev) => {
+      const next = new Set(prev);
+      if (shouldOpen) next.add(post.id);
+      else next.delete(post.id);
+      return next;
+    });
+    if (shouldOpen && !loadedComments.has(post.id)) {
+      void loadComments(post.id);
+    }
+  };
+
+  const handleSubmitComment = async (post: PostData) => {
+    if (!post.comments_enabled) return;
+    const draft = commentDrafts[post.id]?.trim();
+    if (!draft) return;
+    setPostSetState(setCommentSubmitting, post.id, true);
+    try {
+      await ApiService.communities.createPostComment(post.id, { body: draft });
+      setCommentDrafts((prev) => ({ ...prev, [post.id]: '' }));
+      setOpenComments((prev) => new Set(prev).add(post.id));
+      await loadComments(post.id);
+    } catch (error) {
+      toastAxiosError(error, 'Failed to post comment.');
+    } finally {
+      setPostSetState(setCommentSubmitting, post.id, false);
+    }
+  };
+
+  const handleToggleReaction = async (post: PostData) => {
+    setPostSetState(setReactingPosts, post.id, true);
+    try {
+      const response = await ApiService.communities.togglePostReaction(post.id, {
+        reaction_type: 'like',
+      });
+      const reaction = response.data.data;
+      setPosts((prev) =>
+        prev.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                reactions_count: reaction.reactions_count,
+                current_user_reacted: reaction.reacted,
+                current_user_reaction_type: reaction.reacted
+                  ? reaction.reaction_type
+                  : null,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      toastAxiosError(error, 'Failed to update reaction.');
+    } finally {
+      setPostSetState(setReactingPosts, post.id, false);
+    }
+  };
+
+  const handleSharePost = async (post: PostData) => {
+    const href = `${window.location.origin}/dashboard/community/${communityId}?post=${post.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: communityName,
+          text: post.body || `Post from ${communityName}`,
+          url: href,
+        });
+      } else {
+        await navigator.clipboard.writeText(href);
+        toast.success('Post link copied');
+      }
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') {
+        toast.error('Unable to share post');
+      }
+    }
+  };
+
+  const handleBookmarkPost = async (post: PostData) => {
+    setPostSetState(setSavingBookmarks, post.id, true);
+    try {
+      const response = await ApiService.bookmarks.create({
+        kind: 'post',
+        target_ref: `post:${post.id}`,
+        title: post.body?.slice(0, 80) || `Post in ${communityName}`,
+        description: post.body || '',
+        source: communityName,
+        href: `/dashboard/community/${communityId}?post=${post.id}`,
+        community_id: communityId,
+        community_name: communityName,
+      });
+      toast.success(
+        response.data.data.already_saved ? 'Post already saved' : 'Post saved',
+      );
+    } catch (error) {
+      toastAxiosError(error, 'Failed to save post.');
+    } finally {
+      setPostSetState(setSavingBookmarks, post.id, false);
+    }
+  };
+
   useEffect(() => {
     fetchPosts();
   }, [communityId]);
@@ -138,7 +283,13 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
                   readOnly
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-teal-50 hover:text-[#0E9DA5] text-gray-400 transition-colors">
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     onClick={toggleCreatePost}
+                     aria-label="Add image to post"
+                     className="h-10 w-10 rounded-xl hover:bg-teal-50 hover:text-[#0E9DA5] text-gray-400 transition-colors"
+                   >
                      <ImageIcon className="w-5 h-5" />
                    </Button>
                 </div>
@@ -146,11 +297,22 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
              
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" className="rounded-full text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 font-bold text-xs gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleCreatePost}
+                    className="rounded-full text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 font-bold text-xs gap-2"
+                  >
                     <Paperclip className="w-4 h-4" />
                     Attach
                   </Button>
-                  <Button variant="ghost" size="sm" className="rounded-full text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 font-bold text-xs gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    title="Emoji picker is not supported yet"
+                    className="rounded-full text-gray-400 font-bold text-xs gap-2"
+                  >
                     <Smile className="w-4 h-4" />
                     Emoji
                   </Button>
@@ -223,15 +385,15 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 border-2 border-white shadow-soft rounded-2xl overflow-hidden transition-transform group-hover:scale-105">
-                    <AvatarImage src={post.author.profile_photo || "/images/image.png"} className="object-cover" />
+                    <AvatarImage src={post.author?.profile_photo || "/images/image.png"} className="object-cover" />
                     <AvatarFallback className="bg-teal-50 text-[#0E9DA5] font-bold">
-                      {post.author.firstname.charAt(0)}
+                      {(post.author?.firstname || post.author?.full_name || 'M').charAt(0)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="flex items-center gap-2">
                        <h4 className="font-extrabold text-gray-900 tracking-tight leading-none">
-                         {post.author.full_name}
+                         {post.author?.full_name || 'Member'}
                        </h4>
                        {post.is_pinned && (
                          <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full text-[10px] font-bold uppercase tracking-wider">
@@ -240,7 +402,7 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
                        )}
                     </div>
                     <p className="text-xs font-bold text-gray-400 mt-1 uppercase tracking-widest flex items-center gap-1.5">
-                      <span>@{post.author.firstname.toLowerCase()}</span>
+                      <span>@{(post.author?.firstname || 'member').toLowerCase()}</span>
                       <span className="w-1 h-1 bg-gray-200 rounded-full" />
                       <span>{formatDistanceToNow(new Date(post.created_at))} ago</span>
                     </p>
@@ -299,22 +461,51 @@ export function PostsTab({ communityName, communityId, isOwner }: PostsTabProps)
               {/* Post Interactions */}
               <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                 <div className="flex items-center gap-1 sm:gap-2">
-                  <Button variant="ghost" className="h-10 rounded-xl px-4 gap-2 text-gray-500 hover:text-red-500 hover:bg-red-50 transition-all group/btn">
-                    <Heart className="w-5 h-5 transition-transform group-hover/btn:scale-125" />
-                    <span className="text-sm font-bold">24</span>
+                  <Button
+                    variant="ghost"
+                    disabled={reactingPosts.has(post.id)}
+                    onClick={() => void handleToggleReaction(post)}
+                    aria-pressed={post.current_user_reacted}
+                    className={`h-10 rounded-xl px-4 gap-2 transition-all group/btn ${
+                      post.current_user_reacted
+                        ? 'text-red-500 bg-red-50 hover:bg-red-100'
+                        : 'text-gray-500 hover:text-red-500 hover:bg-red-50'
+                    }`}
+                  >
+                    <Heart className={`w-5 h-5 transition-transform group-hover/btn:scale-125 ${
+                      post.current_user_reacted ? 'fill-current' : ''
+                    }`} />
+                    <span className="text-sm font-bold">{post.reactions_count ?? 0}</span>
                   </Button>
-                  <Button variant="ghost" className="h-10 rounded-xl px-4 gap-2 text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all group/btn">
+                  <Button
+                    variant="ghost"
+                    onClick={() => handleToggleComments(post)}
+                    aria-expanded={openComments.has(post.id)}
+                    aria-controls={`post-${post.id}-comments`}
+                    className="h-10 rounded-xl px-4 gap-2 text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all group/btn"
+                  >
                     <MessageCircle className="w-5 h-5 transition-transform group-hover/btn:scale-125" />
-                    <span className="text-sm font-bold">12</span>
+                    <span className="text-sm font-bold">{post.comments_count ?? 0}</span>
                   </Button>
-                  <Button variant="ghost" className="h-10 rounded-xl px-4 gap-2 text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all group/btn">
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleSharePost(post)}
+                    className="h-10 rounded-xl px-4 gap-2 text-gray-500 hover:text-[#0E9DA5] hover:bg-teal-50 transition-all group/btn"
+                  >
                     <Share2 className="w-5 h-5 transition-transform group-hover/btn:scale-125" />
                     <span className="text-sm font-bold hidden sm:inline">Share</span>
                   </Button>
                 </div>
                 
                 <div className="flex items-center gap-1">
-                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-gray-400 hover:text-[#0E9DA5] hover:bg-teal-50">
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     disabled={savingBookmarks.has(post.id)}
+                     onClick={() => void handleBookmarkPost(post)}
+                     title="Save post"
+                     className="h-10 w-10 rounded-xl text-gray-400 hover:text-[#0E9DA5] hover:bg-teal-50"
+                   >
                      <Bookmark className="w-5 h-5" />
                    </Button>
                 </div>

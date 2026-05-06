@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { ArrowRight, Flame, Hash, TrendingUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { ApiService, type TrendingTopicApi } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
 
 interface Topic {
   id: number;
@@ -47,7 +49,7 @@ function mapApiTopic(t: TrendingTopicApi, idx: number): Topic {
 }
 
 export default function TrendingTopics({ loading: loadingProp = false }: { loading?: boolean }) {
-  const [topics, setTopics] = React.useState<Topic[]>(TOPICS);
+  const [topics, setTopics] = React.useState<Topic[]>([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -59,12 +61,12 @@ export default function TrendingTopics({ loading: loadingProp = false }: { loadi
         const list = res.data?.data?.topics ?? [];
         if (cancelled) return;
         if (list.length === 0) {
-          setTopics(TOPICS);
+          setTopics(useDemoData() ? TOPICS : []);
         } else {
           setTopics(list.map(mapApiTopic));
         }
       } catch {
-        if (!cancelled) setTopics(TOPICS);
+        if (!cancelled) setTopics(useDemoData() ? TOPICS : []);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -106,6 +108,12 @@ export default function TrendingTopics({ loading: loadingProp = false }: { loadi
               </li>
             ))}
           </ul>
+        ) : topics.length === 0 ? (
+          <EmptyState
+            icon={<TrendingUp className="size-5" aria-hidden="true" />}
+            title="No trending topics yet"
+            description="New hashtags will appear here once your communities start posting."
+          />
         ) : (
           <ul role="list" className="-mx-2 space-y-0.5">
             {topics.map((t, i) => {

@@ -11,6 +11,7 @@ from decimal import Decimal
 import json
 
 from modules.wallet.services.bell_mfb_service import BellMFBService
+from modules.wallet.providers.safehaven_provider import SafeHavenProvider
 from modules.wallet.repositories.wallet_repository import WalletRepository
 from modules.wallet.repositories.wallet_transaction_repository import WalletTransactionRepository
 from modules.auth_v2.extensions import db
@@ -53,6 +54,13 @@ class WebhookResource(MethodView):
             # SafeHaven may also send signature-like headers; we must not mis-route based on header name alone.
             signature = request.headers.get('X-Signature') or request.headers.get('X-Bell-Signature')
             bell_signature = request.headers.get('X-Bell-Signature')  # strongest signal it's Bell
+            safehaven_signature = (
+                request.headers.get('X-SafeHaven-Signature')
+                or request.headers.get('X-Safehaven-Signature')
+                or request.headers.get('X-SafeHaven-Webhook-Secret')
+                or request.headers.get('X-Webhook-Secret')
+                or request.headers.get('X-Signature')
+            )
 
             # Best-effort JSON parse:
             # - Providers should send Content-Type: application/json, but some don't.
@@ -94,10 +102,24 @@ class WebhookResource(MethodView):
             )
 
             if looks_like_safehaven and not looks_like_bell:
+                if not SafeHavenProvider().verify_webhook_signature(raw_body, safehaven_signature):
+                    response, status = format_error(
+                        error="invalid_signature",
+                        message="SafeHaven webhook signature verification failed",
+                        status_code=401,
+                    )
+                    return response, status
                 return self._handle_safehaven_callback(data)
 
             # If we can't confidently identify Bell, prefer SafeHaven handler (it will validate fields and fail safely).
             if not looks_like_bell:
+                if not SafeHavenProvider().verify_webhook_signature(raw_body, safehaven_signature):
+                    response, status = format_error(
+                        error="invalid_signature",
+                        message="SafeHaven webhook signature verification failed",
+                        status_code=401,
+                    )
+                    return response, status
                 return self._handle_safehaven_callback(data)
             
             # Verify signature
@@ -108,6 +130,13 @@ class WebhookResource(MethodView):
                 # This prevents SafeHaven callbacks that include X-Signature from being mis-routed.
                 if looks_like_safehaven:
                     logger.info("Signature invalid for Bell; attempting SafeHaven callback handling")
+                    if not SafeHavenProvider().verify_webhook_signature(raw_body, safehaven_signature):
+                        response, status = format_error(
+                            error="invalid_signature",
+                            message="SafeHaven webhook signature verification failed",
+                            status_code=401,
+                        )
+                        return response, status
                     return self._handle_safehaven_callback(data)
 
                 response, status = format_error(

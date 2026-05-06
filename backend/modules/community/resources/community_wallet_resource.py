@@ -97,6 +97,12 @@ class CommunityTransactionsResource(MethodView):
             items = []
             for txn, user in rows:
                 payload = txn.to_dict()
+                if txn.transaction_type in {"community_deposit", "membership_payment", "bill_payment"} or txn.type == "deposit":
+                    payload["direction"] = "credit"
+                elif txn.transaction_type == "community_transfer" or txn.type in {"withdrawal", "transfer", "payment"}:
+                    payload["direction"] = "debit"
+                else:
+                    payload["direction"] = txn.type
                 payload["payer_name"] = user.full_name
                 payload["user"] = {
                     "id": user.id,

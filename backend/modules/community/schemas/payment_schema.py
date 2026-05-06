@@ -185,12 +185,18 @@ class AccountDetailsSchema(Schema):
 class PaymentDataSchema(Schema):
     """Payment response data schema"""
     transaction_id = fields.Integer(metadata={'description': 'Transaction ID'})
-    reference = fields.String(metadata={'description': 'Transaction reference'})
-    amount = fields.String(metadata={'description': 'Amount'})
+    bill_id = fields.Integer(allow_none=True, metadata={'description': 'Bill ID for bill payments'})
+    reference = fields.String(allow_none=True, metadata={'description': 'Transaction reference'})
+    amount = fields.Raw(metadata={'description': 'Amount'})
     status = fields.String(metadata={'description': 'Payment status'})
-    account_details = fields.Nested(AccountDetailsSchema)
-    instructions = fields.String(metadata={'description': 'Payment instructions'})
-    expires_in = fields.String(metadata={'description': 'Expiry time'})
+    account_details = fields.Nested(AccountDetailsSchema, allow_none=True)
+    instructions = fields.String(allow_none=True, metadata={'description': 'Payment instructions'})
+    expires_in = fields.String(allow_none=True, metadata={'description': 'Expiry time'})
+    expires_in_seconds = fields.Integer(allow_none=True, metadata={'description': 'Expiry time in seconds'})
+    expires_at = fields.String(allow_none=True, metadata={'description': 'Expiry timestamp'})
+    timestamp = fields.String(allow_none=True, metadata={'description': 'Payment timestamp'})
+    duplicate = fields.Boolean(allow_none=True, metadata={'description': 'Whether payment was deduplicated'})
+    message = fields.String(allow_none=True, metadata={'description': 'Provider-facing payment message'})
 
 
 class PaymentResponseSchema(Schema):
@@ -233,10 +239,14 @@ class TransferResponseSchema(Schema):
 class BalanceDataSchema(Schema):
     """Community balance data schema"""
     community_id = fields.Integer(metadata={'description': 'Community ID'})
-    balance = fields.String(metadata={'description': 'Current balance'})
+    balance = fields.Float(metadata={'description': 'Current balance'})
     currency = fields.String(metadata={'description': 'Currency code'})
-    total_deposits = fields.String(metadata={'description': 'Total deposits'})
-    total_withdrawals = fields.String(metadata={'description': 'Total withdrawals'})
+    status = fields.String(allow_none=True, metadata={'description': 'Wallet status'})
+    account_number = fields.String(allow_none=True, metadata={'description': 'Community wallet account number'})
+    account_name = fields.String(allow_none=True, metadata={'description': 'Community wallet account name'})
+    total_deposits = fields.Float(metadata={'description': 'Total deposits'})
+    total_withdrawals = fields.Float(metadata={'description': 'Total withdrawals'})
+    transaction_count = fields.Integer(metadata={'description': 'Successful transaction count'})
 
 
 class BalanceResponseSchema(Schema):

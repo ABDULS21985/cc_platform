@@ -23,6 +23,8 @@ class SubscriptionCreateSchema(Schema):
         load_default=SubscriptionKind.SUBSCRIPTION,
         validate=validate.OneOf(list(SubscriptionKind.ALL)),
     )
+    start_at = fields.DateTime(load_default=None)
+    end_at = fields.DateTime(load_default=None)
     next_charge_at = fields.DateTime(load_default=None)
 
     counterparty_type = fields.String(load_default=None)
@@ -32,6 +34,10 @@ class SubscriptionCreateSchema(Schema):
     destination_account_number = fields.String(load_default=None, validate=validate.Length(max=20))
     destination_bank_code = fields.String(load_default=None, validate=validate.Length(max=20))
     destination_account_name = fields.String(load_default=None, validate=validate.Length(max=200))
+    split_member_name = fields.String(load_default=None, validate=validate.Length(max=200))
+    split_primary_amount = fields.Decimal(load_default=None, allow_none=True, as_string=True)
+    split_secondary_amount = fields.Decimal(load_default=None, allow_none=True, as_string=True)
+    pin = fields.String(load_default=None, load_only=True, validate=validate.Length(equal=4))
 
 
 class SubscriptionStatusUpdateSchema(Schema):
@@ -51,6 +57,10 @@ class SubscriptionListQuerySchema(Schema):
     )
     limit = fields.Integer(load_default=100, validate=validate.Range(min=1, max=200))
     offset = fields.Integer(load_default=0, validate=validate.Range(min=0))
+
+
+class TransactionPinVerifySchema(Schema):
+    pin = fields.String(required=True, validate=validate.Length(equal=4))
 
 
 class SubscriptionListResponseSchema(Schema):

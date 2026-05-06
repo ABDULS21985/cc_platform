@@ -135,13 +135,20 @@ class BillService:
             return None, 'Bill not found'
         return bill, None
 
-    def serialize_bill_data(self, bill: Bill) -> Dict[str, Any]:
-        """Serialize a bill with collection progress and member payment counts."""
+    def serialize_bill_data(
+        self,
+        bill: Bill,
+        *,
+        include_detail: bool = False,
+        recent_transaction_limit: int = 5,
+    ) -> Dict[str, Any]:
+        """Serialize a bill with collection progress and optional detail data."""
         data = bill.to_dict()
         expected_member_count = self.member_repo.count_non_owner_members(
             bill.community_id,
             status='active',
         )
+        payment_summary = self.bill_repo.get_payment_summary_by_user(bill.id)
         paid_member_count = self.bill_repo.count_distinct_payers(bill.id)
         progress_percentage = 0
         if expected_member_count > 0:
@@ -155,7 +162,105 @@ class BillService:
             'expected_member_count': expected_member_count,
             'progress_percentage': progress_percentage,
         })
+
+        if include_detail:
+            members, _ = self.member_repo.find_by_community(
+                bill.community_id,
+                status='active',
+                limit=1000,
+                offset=0,
+            )
+            expected_members = [member for member in members if member.role != 'owner']
+            paid_member_count = sum(
+                1 for member in expected_members if member.user_id in payment_summary
+            )
+            if expected_member_count > 0:
+                progress_percentage = min(
+                    100,
+                    int((paid_member_count / expected_member_count) * 100),
+                )
+            data.update({
+                'paid_member_count': paid_member_count,
+                'progress_percentage': progress_percentage,
+                'member_payment_statuses': [
+                    self._serialize_member_payment_status(member, payment_summary)
+                    for member in expected_members
+                ],
+                'recent_transactions': self._serialize_recent_bill_transactions(
+                    bill.id,
+                    limit=recent_transaction_limit,
+                ),
+            })
         return data
+
+    def _serialize_member_payment_status(
+        self,
+        member,
+        payment_summary: Dict[int, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Serialize one member's payment status for a bill detail response."""
+        payment = payment_summary.get(member.user_id)
+        amount_paid = Decimal(str(payment['amount_paid'])) if payment else Decimal('0')
+        paid_at = payment.get('paid_at') if payment else None
+        user = member.user
+
+        return {
+            'member_id': member.id,
+            'user_id': member.user_id,
+            'role': member.role,
+            'status': 'paid' if amount_paid > 0 else 'pending',
+            'amount_paid': float(amount_paid),
+            'paid_at': paid_at.isoformat() if paid_at else None,
+            'user': {
+                'id': user.id,
+                'firstname': user.firstname,
+                'lastname': user.lastname,
+                'full_name': user.full_name,
+                'profile_photo': getattr(user, 'profile_photo', None),
+            } if user else None,
+        }
+
+    def _serialize_recent_bill_transactions(self, bill_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+        """Serialize recent successful bill payment transactions with payer names."""
+        transactions = self.bill_repo.find_recent_transactions(bill_id, limit=limit)
+        user_ids = []
+        for transaction in transactions:
+            meta = transaction.meta or {}
+            try:
+                user_ids.append(int(meta.get('user_id')))
+            except (TypeError, ValueError):
+                continue
+
+        users_by_id = {}
+        if user_ids:
+            from modules.auth_v2.models.user import User
+
+            users = User.query.filter(User.id.in_(set(user_ids))).all()
+            users_by_id = {user.id: user for user in users}
+
+        items = []
+        for transaction in transactions:
+            payload = transaction.to_dict()
+            meta = transaction.meta or {}
+            payer = None
+            try:
+                payer = users_by_id.get(int(meta.get('user_id')))
+            except (TypeError, ValueError):
+                payer = None
+
+            payload.update({
+                'payer_name': payer.full_name if payer else None,
+                'payer': {
+                    'id': payer.id,
+                    'firstname': payer.firstname,
+                    'lastname': payer.lastname,
+                    'full_name': payer.full_name,
+                    'profile_photo': getattr(payer, 'profile_photo', None),
+                } if payer else None,
+                'payment_method': 'wallet',
+            })
+            items.append(payload)
+        return items
     
     def get_community_bills(
         self,

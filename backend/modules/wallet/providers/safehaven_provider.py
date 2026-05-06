@@ -356,13 +356,34 @@ class SafeHavenProvider(PaymentProvider):
                 )
                 return False
             
-            # Log signature header if present (for debugging)
-            if signature:
-                logger.debug(
-                    "SafeHaven webhook signature header present",
-                    extra={"signature_preview": signature[:30] + "..."}
-                )
-            
+            secret = os.getenv("SAFEHAVEN_WEBHOOK_SECRET") or os.getenv("SAFEHEAVEN_WEBHOOK_SECRET")
+            is_production = os.getenv("ENV", "development").lower() == "production"
+            if not secret:
+                if is_production:
+                    logger.error("SAFEHAVEN_WEBHOOK_SECRET is required in production")
+                    return False
+                logger.warning("SafeHaven webhook accepted without shared secret outside production")
+                return True
+
+            if not signature:
+                logger.warning("SafeHaven webhook missing signature header")
+                return False
+
+            provided = signature.strip()
+            expected_hex = hmac.new(
+                secret.encode("utf-8"),
+                payload.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            expected_values = {
+                expected_hex,
+                f"sha256={expected_hex}",
+                secret,
+            }
+            if not any(hmac.compare_digest(provided, expected) for expected in expected_values):
+                logger.warning("SafeHaven webhook signature verification failed")
+                return False
+
             return True
             
         except json.JSONDecodeError as e:

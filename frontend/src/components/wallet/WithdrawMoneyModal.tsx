@@ -11,12 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import type { WalletTransferDraft } from './SendMoneyModal';
 
 interface WithdrawMoneyModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (amount: string) => void;
+  onConfirm: (draft: WalletTransferDraft) => void;
 }
+
+const BANK_OPTIONS = [
+  { code: '058', name: 'GTBank' },
+  { code: '057', name: 'Zenith Bank' },
+  { code: '044', name: 'Access Bank' },
+  { code: '011', name: 'First Bank' },
+  { code: '000', name: 'Bell MFB' },
+];
 
 export function WithdrawMoneyModal({
   isOpen,
@@ -25,11 +34,21 @@ export function WithdrawMoneyModal({
 }: WithdrawMoneyModalProps) {
   const [account, setAccount] = useState('');
   const [bank, setBank] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
 
   const handleWithdraw = () => {
     if (account && bank && amount) {
-      onConfirm(amount);
+      const selectedBank = BANK_OPTIONS.find((b) => b.code === bank);
+      onConfirm({
+        amount,
+        account_number: account,
+        bank_code: bank,
+        bank_name: selectedBank?.name || bank,
+        account_name: accountName.trim() || undefined,
+        note: note.trim() || undefined,
+      });
     }
   };
 
@@ -58,6 +77,18 @@ export function WithdrawMoneyModal({
 
           <div>
             <label className="block text-sm font-medium text-[#959595] mb-2">
+              Account name
+            </label>
+            <Input
+              placeholder="Enter account name"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+              className="w-full rounded-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#959595] mb-2">
               Select bank
             </label>
             <Select value={bank} onValueChange={setBank}>
@@ -65,11 +96,11 @@ export function WithdrawMoneyModal({
                 <SelectValue placeholder="Select bank" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="bellbank">Bellbank</SelectItem>
-                <SelectItem value="gtbank">GTBank</SelectItem>
-                <SelectItem value="zenith">Zenith Bank</SelectItem>
-                <SelectItem value="access">Access Bank</SelectItem>
-                <SelectItem value="firstbank">First Bank</SelectItem>
+                {BANK_OPTIONS.map((option) => (
+                  <SelectItem key={option.code} value={option.code}>
+                    {option.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -86,6 +117,18 @@ export function WithdrawMoneyModal({
               type="number"
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[#959595] mb-2">
+              Note (Optional)
+            </label>
+            <Input
+              placeholder="Write note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full rounded-full"
+            />
+          </div>
         </div>
 
         <div className="p-4 flex gap-3">
@@ -98,9 +141,10 @@ export function WithdrawMoneyModal({
           </Button>
           <Button
             onClick={handleWithdraw}
+            disabled={!account || !bank || !amount}
             className="flex-1 bg-teal-600 hover:bg-teal-700 text-white"
           >
-            Confirm
+            Continue
           </Button>
         </div>
       </DialogContent>

@@ -7,7 +7,12 @@ from modules.community.models.community_member import CommunityMember
 from modules.community.models.community_wallet import CommunityWallet
 from modules.community.models.community_interest import Interest, community_interests
 from modules.community.models.bill import Bill, BillSession
-from modules.community.models.community_post import CommunityPost, CommunityPostMention
+from modules.community.models.community_post import (
+    CommunityPost,
+    CommunityPostComment,
+    CommunityPostMention,
+    CommunityPostReaction,
+)
 from modules.community.models.institution import Institution
 from modules.community.models.organization import Organization
 from modules.community.models.institution_member import InstitutionMember
@@ -22,6 +27,8 @@ __all__ = [
     'BillSession',
     'CommunityPost',
     'CommunityPostMention',
+    'CommunityPostComment',
+    'CommunityPostReaction',
     'Institution',
     'Organization',
     'InstitutionMember',

@@ -17,6 +17,7 @@ from modules.subscriptions.schemas.subscription_schema import (
     SubscriptionListResponseSchema,
     SubscriptionResponseSchema,
     SubscriptionStatusUpdateSchema,
+    TransactionPinVerifySchema,
 )
 from modules.subscriptions.services.subscription_service import SubscriptionService
 
@@ -76,6 +77,26 @@ class StandingInstructionCollection(MethodView):
             abort(500, message='An unexpected error occurred.')
 
 
+@standing_instruction_blp.route('/pin/verify')
+class StandingInstructionPinVerification(MethodView):
+    decorators = [login_required]
+
+    @standing_instruction_blp.arguments(TransactionPinVerifySchema)
+    @standing_instruction_blp.response(200, SubscriptionResponseSchema)
+    @standing_instruction_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    def post(self, data):
+        try:
+            result, status = _service().verify_transaction_pin(current_user.id, data['pin'])
+            if status >= 400:
+                abort(status, message=result.get('error', 'PIN verification failed'))
+            return result, status
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(f"Error verifying standing instruction PIN: {exc}", exc_info=True)
+            abort(500, message='An unexpected error occurred.')
+
+
 @standing_instruction_blp.route('/<int:sub_id>')
 class StandingInstructionItem(MethodView):
     decorators = [login_required]
@@ -85,7 +106,12 @@ class StandingInstructionItem(MethodView):
     @standing_instruction_blp.alt_response(404, schema=ApiErrorEnvelopeSchema)
     def patch(self, data, sub_id):
         try:
-            result, status = _service().update_status(sub_id, current_user.id, data['status'])
+            result, status = _service().update_status(
+                sub_id,
+                current_user.id,
+                data['status'],
+                kind=SubscriptionKind.STANDING_INSTRUCTION,
+            )
             if status >= 400:
                 abort(status, message=result.get('error', 'Update failed'))
             return result, status
@@ -99,7 +125,11 @@ class StandingInstructionItem(MethodView):
     @standing_instruction_blp.alt_response(404, schema=ApiErrorEnvelopeSchema)
     def delete(self, sub_id):
         try:
-            result, status = _service().delete(sub_id, current_user.id)
+            result, status = _service().delete(
+                sub_id,
+                current_user.id,
+                kind=SubscriptionKind.STANDING_INSTRUCTION,
+            )
             if status >= 400:
                 abort(status, message=result.get('error', 'Delete failed'))
             return result, status

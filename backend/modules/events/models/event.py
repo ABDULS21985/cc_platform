@@ -33,6 +33,7 @@ class Event(db.Model):
     capacity = db.Column(db.Integer, nullable=False, default=0)
     ticket_price = db.Column(db.String(64), nullable=True)
     cover_image = db.Column(db.String(512), nullable=True)
+    auto_approve_members = db.Column(db.Boolean, default=False, nullable=False)
     cancelled_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, server_default=func.now(), nullable=False, index=True)
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
@@ -62,8 +63,19 @@ class Event(db.Model):
             is not None
         )
 
+    @property
+    def requires_payment(self) -> bool:
+        if self.ticket_price in (None, ''):
+            return False
+        try:
+            normalized = str(self.ticket_price).replace(',', '').strip()
+            return float(normalized) > 0
+        except (TypeError, ValueError):
+            return True
+
     def to_dict(self, current_user_id: int | None = None, community_name: str | None = None) -> dict:
         community_initial = (community_name or 'C').strip()[:1].upper() or 'C'
+        requires_payment = self.requires_payment
         return {
             'id': self.id,
             'community_id': self.community_id,
@@ -80,6 +92,12 @@ class Event(db.Model):
             'capacity': self.capacity,
             'ticket_price': self.ticket_price,
             'cover_image': self.cover_image,
+            'auto_approve_members': self.auto_approve_members,
+            'requires_payment': requires_payment,
+            # Event ticketing is intentionally gated until a real payment
+            # flow exists. The attend endpoint enforces this same state.
+            'payment_supported': not requires_payment,
+            'ticketing_status': 'paid_unsupported' if requires_payment else 'free',
             'community_name': community_name,
             'community_initial': community_initial,
             'status': self.status,

@@ -304,6 +304,16 @@ class TaskStatusResource(MethodView):
         Task results auto-expire after 1 hour.
         """
         try:
+            repo = VerificationRepository()
+            verification = repo.find_by_task_id_for_user(task_id, current_user.id)
+            if not verification:
+                resp, code = format_error(
+                    error="task_not_found",
+                    message="Verification task was not found for this user",
+                    status_code=404,
+                )
+                return resp, code
+
             task_result = celery.AsyncResult(task_id)
             
             response = {
@@ -345,18 +355,13 @@ class TaskStatusResource(MethodView):
                 if task_result.info and isinstance(task_result.info, dict):
                     response['retry_count'] = task_result.info.get('retries', 0)
             
-            # Get verification record for additional context
-            repo = VerificationRepository()
-            verification = repo.find_by_user_id(current_user.id)
-            
-            if verification:
-                response['verification'] = {
-                    'id': verification.id,
-                    'status': verification.status,
-                    'verification_type': verification.verification_type,
-                    'verified_at': verification.verified_at.isoformat() if verification.verified_at else None,
-                    'error_message': verification.error_message
-                }
+            response['verification'] = {
+                'id': verification.id,
+                'status': verification.status,
+                'verification_type': verification.verification_type,
+                'verified_at': verification.verified_at.isoformat() if verification.verified_at else None,
+                'error_message': verification.error_message
+            }
             
             resp, code = format_data(data=response, message="Task status retrieved", status_code=200)
             return resp, code

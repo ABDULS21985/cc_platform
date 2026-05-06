@@ -135,6 +135,13 @@ class WalletTransaction(db.Model):
         Returns:
             Dictionary representation
         """
+        meta = self.meta or {}
+        destination_bank_name = (
+            meta.get("destination_bank_name")
+            or meta.get("bank_name")
+            or meta.get("destination_bank")
+        )
+
         return {
             "id": self.id,
             "reference": self.reference,
@@ -148,15 +155,20 @@ class WalletTransaction(db.Model):
             "balance_before": str(self.balance_before) if self.balance_before is not None else None,
             "balance_after": str(self.balance_after) if self.balance_after is not None else None,
             "description": self.description,
+            "source_account_number": self.source_account_number,
             "source_account_name": self.source_account_name,
+            "source_bank_code": self.source_bank_code,
             "source_bank_name": self.source_bank_name,
+            "destination_account_number": self.destination_account_number,
             "destination_account_name": self.destination_account_name,
+            "destination_bank_name": destination_bank_name,
             "status": self.status,
             "community_id": self.community_id,
             "bill_id": self.bill_id,
             "bill_session_id": self.bill_session_id,
             "transaction_type": self.transaction_type,
             "meta": self.meta,
+            "note": meta.get("note"),
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -249,7 +261,16 @@ class WalletTransaction(db.Model):
             Signed amount (positive for credit, negative for debit)
         """
         abs_amount = abs(amount)
-        if transaction_type == 'debit':
+        debit_types = {
+            'debit',
+            'withdrawal',
+            'transfer',
+            'payment',
+            'bill_payment',
+            'membership_payment',
+        }
+
+        if str(transaction_type).lower() in debit_types:
             return -abs_amount
         return abs_amount
     

@@ -6,14 +6,12 @@ import { Button } from '@/components/ui/button';
 interface PaymentDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onPay: () => void;
   amount: string;
 }
 
 export function PaymentDialog({
   isOpen,
   onClose,
-  onPay,
   amount,
 }: PaymentDialogProps) {
   return (
@@ -24,26 +22,20 @@ export function PaymentDialog({
       >
         <div className="p-6 text-center space-y-4">
           <h2 className="text-xl font-bold text-[#000000]">
-            Payment of {amount} required
+            Paid tickets unavailable
           </h2>
           <p className="text-sm text-[#959595]">
-            This is a private community, make payment to access event
+            This event requires a payment of ₦{amount}, but event ticket
+            payments are not supported yet.
           </p>
         </div>
 
         <div className="p-6 flex gap-3">
           <Button
             onClick={onClose}
-            variant="outline"
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 rounded-lg"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={onPay}
             className="flex-1 bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white rounded-lg"
           >
-            Pay now
+            Close
           </Button>
         </div>
       </DialogContent>

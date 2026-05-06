@@ -43,15 +43,15 @@ export default function CreateBillDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [type, setType] = useState<BillType>();
+  const [type, setType] = useState<BillType>("fixed");
   const [minAmount, setMinAmount] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState<RecurrenceType>();
   const [dueDate, setDueDate] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const billTypes = ["fixed", "percentage"];
-  const recurrenceTypes = ["daily", "weekly", "monthly"];
+  const billTypes: BillType[] = ["fixed", "free_will"];
+  const recurrenceTypes: RecurrenceType[] = ["weekly", "monthly", "yearly"];
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -62,9 +62,10 @@ export default function CreateBillDialog({
     }
     if (!type) newErrors.type = "Bill type is required";
     if (
-      !minAmount.trim() ||
-      isNaN(Number(minAmount)) ||
-      Number(minAmount) <= 0
+      type === "free_will" &&
+      (!minAmount.trim() ||
+        isNaN(Number(minAmount)) ||
+        Number(minAmount) <= 0)
     ) {
       newErrors.minAmount = "Valid min amount is required";
     }
@@ -82,6 +83,13 @@ export default function CreateBillDialog({
   const onBillTypeValueChange = (value: string) => {
     if (billTypes.includes(value as BillType)) {
       setType(value as BillType);
+      if (value === "fixed") {
+        setMinAmount("");
+        setErrors((prev) => {
+          const { minAmount: _minAmount, ...rest } = prev;
+          return rest;
+        });
+      }
     }
   };
 
@@ -101,11 +109,13 @@ export default function CreateBillDialog({
         description: description.trim(),
         amount: Number(amount),
         type,
-        min_amount: Number(minAmount),
         is_recurring: isRecurring,
-        recurrence_type: recurrenceType,
+        recurrence_type: isRecurring ? recurrenceType : null,
         due_date: dueDate.trim(),
       };
+      if (type === "free_will") {
+        payload.min_amount = Number(minAmount);
+      }
 
       await ApiService.communities.createBill(communityId, payload);
       toast.success("Bill created successfully");
@@ -114,7 +124,7 @@ export default function CreateBillDialog({
       setTitle("");
       setDescription("");
       setAmount("");
-      setType(undefined);
+      setType("fixed");
       setMinAmount("");
       setIsRecurring(false);
       setRecurrenceType(undefined);
@@ -216,7 +226,7 @@ export default function CreateBillDialog({
                     value={bType}
                     className="cursor-pointer capitalize"
                   >
-                    {bType}
+                    {bType === "free_will" ? "Free will" : "Fixed"}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -226,23 +236,24 @@ export default function CreateBillDialog({
             )}
           </div>
 
-          {/* Min Amount */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="minAmount">
-              Min Amount <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="minAmount"
-              placeholder="Enter min amount"
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-              className={errors.minAmount && "border-red-500"}
-              disabled={isLoading}
-            />
-            {errors.minAmount && (
-              <p className="text-xs text-red-500">{errors.minAmount}</p>
-            )}
-          </div>
+          {type === "free_will" && (
+            <div className="grid gap-1.5">
+              <Label htmlFor="minAmount">
+                Min Amount <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="minAmount"
+                placeholder="Enter min amount"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+                className={errors.minAmount && "border-red-500"}
+                disabled={isLoading}
+              />
+              {errors.minAmount && (
+                <p className="text-xs text-red-500">{errors.minAmount}</p>
+              )}
+            </div>
+          )}
 
           {/* Due Date */}
           <div className="grid gap-1.5">

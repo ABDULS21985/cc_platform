@@ -267,6 +267,7 @@ function mapApiEvent(e: EventApi): EventItem {
     title: e.title,
     community: e.community_name ?? 'Public',
     communityInitial: e.community_initial,
+    communityId: e.community_id,
     isPrivate: e.is_private,
     startsAt: e.starts_at,
     duration: e.duration_label ?? '',
@@ -278,6 +279,9 @@ function mapApiEvent(e: EventApi): EventItem {
     status: e.status,
     isAttending: e.is_attending,
     isHosting: e.is_hosting,
+    requiresPayment: e.requires_payment,
+    paymentSupported: e.payment_supported,
+    ticketingStatus: e.ticketing_status,
     category: e.category ?? undefined,
   };
 }
@@ -285,6 +289,34 @@ function mapApiEvent(e: EventApi): EventItem {
 const SRV_PREFIX = 'srv-';
 const isServerId = (id: string) => id.startsWith(SRV_PREFIX);
 const serverIdNum = (id: string) => Number(id.slice(SRV_PREFIX.length));
+const eventTargetRef = (id: number) => `event:${id}`;
+
+function eventRequiresPayment(event: EventItem): boolean {
+  if (typeof event.requiresPayment === 'boolean') return event.requiresPayment;
+  return !!(
+    event.ticketPrice &&
+    event.ticketPrice !== '0' &&
+    event.ticketPrice.trim() !== ''
+  );
+}
+
+function applyEventBookmarks(
+  items: EventItem[],
+  bookmarks: Array<{ id: number; target_ref: string }>
+): EventItem[] {
+  const byRef = new Map(bookmarks.map((b) => [b.target_ref, b.id]));
+  return items.map((event) => {
+    if (!isServerId(event.id)) return event;
+    const numericId = serverIdNum(event.id);
+    const bookmarkId =
+      byRef.get(eventTargetRef(numericId)) ?? byRef.get(String(numericId));
+    return {
+      ...event,
+      isBookmarked: bookmarkId !== undefined,
+      bookmarkId: bookmarkId ?? null,
+    };
+  });
+}
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -301,12 +333,22 @@ export default function EventsPage() {
       try {
         const res = await ApiService.events.list({ scope: 'all', limit: 200 });
         const list = res.data?.data?.events ?? [];
+        let eventBookmarks: Array<{ id: number; target_ref: string }> = [];
+        try {
+          const bookmarkRes = await ApiService.bookmarks.list({
+            kind: 'event',
+            limit: 200,
+          });
+          eventBookmarks = bookmarkRes.data?.data?.bookmarks ?? [];
+        } catch {
+          eventBookmarks = [];
+        }
         if (cancelled) return;
         if (list.length === 0) {
           setEvents(useDemoData() ? MOCK_EVENTS : []);
           setUsingMock(useDemoData());
         } else {
-          setEvents(list.map(mapApiEvent));
+          setEvents(applyEventBookmarks(list.map(mapApiEvent), eventBookmarks));
           setUsingMock(false);
         }
       } catch {
@@ -393,6 +435,12 @@ export default function EventsPage() {
   }, [filtered]);
 
   const toggleAttend = (id: string) => {
+    const event = events.find((e) => e.id === id);
+    if (!event) return;
+    if (!event.isAttending && eventRequiresPayment(event) && event.paymentSupported !== true) {
+      toast.error('Paid event tickets are not available yet');
+      return;
+    }
     setEvents((prev) =>
       prev.map((e) =>
         e.id === id
@@ -404,31 +452,123 @@ export default function EventsPage() {
           : e
       )
     );
-    const event = events.find((e) => e.id === id);
     if (!usingMock && isServerId(id)) {
       const numericId = serverIdNum(id);
       const promise = event?.isAttending
         ? ApiService.events.cancelAttendance(numericId)
         : ApiService.events.attend(numericId);
-      promise.catch(() => {
+      promise
+        .then((res) => {
+          const updated = res.data?.data?.event;
+          if (!updated) return;
+          setEvents((prev) =>
+            prev.map((e) =>
+              e.id === id
+                ? {
+                    ...mapApiEvent(updated),
+                    isBookmarked: e.isBookmarked,
+                    bookmarkId: e.bookmarkId,
+                  }
+                : e
+            )
+          );
+        })
+        .catch(() => {
         // revert on failure
-        setEvents((prev) =>
-          prev.map((e) =>
-            e.id === id
-              ? {
-                  ...e,
-                  isAttending: !e.isAttending,
-                  attendees: e.isAttending ? e.attendees - 1 : e.attendees + 1,
-                }
-              : e
-          )
-        );
-        toast.error('Could not update attendance');
-      });
+          setEvents((prev) =>
+            prev.map((e) =>
+              e.id === id
+                ? {
+                    ...e,
+                    isAttending: !e.isAttending,
+                    attendees: e.isAttending ? e.attendees - 1 : e.attendees + 1,
+                  }
+                : e
+            )
+          );
+          toast.error('Could not update attendance');
+        });
     }
     toast.success(
       event?.isAttending ? 'Removed from your events' : 'Added to your events'
     );
+  };
+
+  const toggleBookmark = async (id: string) => {
+    const event = events.find((e) => e.id === id);
+    if (!event) return;
+
+    if (usingMock || !isServerId(id)) {
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, isBookmarked: !e.isBookmarked } : e
+        )
+      );
+      toast.success(event.isBookmarked ? 'Event removed from saved' : 'Event saved');
+      return;
+    }
+
+    const numericId = serverIdNum(id);
+    if (event.isBookmarked) {
+      if (!event.bookmarkId) {
+        toast.error('Could not identify the saved event');
+        return;
+      }
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, isBookmarked: false, bookmarkId: null } : e
+        )
+      );
+      try {
+        await ApiService.bookmarks.delete(event.bookmarkId);
+        toast.success('Event removed from saved');
+      } catch {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === id
+              ? { ...e, isBookmarked: true, bookmarkId: event.bookmarkId }
+              : e
+          )
+        );
+        toast.error('Could not remove saved event');
+      }
+      return;
+    }
+
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, isBookmarked: true } : e))
+    );
+    try {
+      const res = await ApiService.bookmarks.create({
+        kind: 'event',
+        target_ref: eventTargetRef(numericId),
+        title: event.title,
+        description: `${new Date(event.startsAt).toLocaleString()} · ${
+          event.location || (event.isOnline ? 'Online' : 'TBA')
+        }`,
+        source: event.community,
+        href: `/dashboard/events/${numericId}`,
+        amount: event.ticketPrice,
+        community_id: event.communityId ?? null,
+        community_name: event.community,
+      });
+      const bookmark = res.data?.data?.bookmark;
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === id
+            ? { ...e, isBookmarked: true, bookmarkId: bookmark?.id ?? null }
+            : e
+        )
+      );
+      toast.success('Event saved');
+    } catch {
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === id ? { ...e, isBookmarked: false, bookmarkId: null } : e
+        )
+      );
+      toast.error('Could not save event');
+    }
   };
 
   return (
@@ -641,6 +781,7 @@ export default function EventsPage() {
                               <EventCard
                                 event={event}
                                 onToggleAttend={toggleAttend}
+                                onToggleBookmark={toggleBookmark}
                               />
                             </motion.li>
                           ))}
@@ -711,6 +852,13 @@ export default function EventsPage() {
           onSubmit={async (data) => {
             setCreateOpen(false);
             try {
+              let coverImage: string | null = null;
+              if (data.banner) {
+                const uploadData = new FormData();
+                uploadData.append('file', data.banner);
+                const uploadRes = await ApiService.events.uploadCover(uploadData);
+                coverImage = uploadRes.data?.data?.cover_image ?? null;
+              }
               const res = await ApiService.events.create({
                 title: data.title,
                 description: data.description,
@@ -718,6 +866,8 @@ export default function EventsPage() {
                 location: data.location,
                 is_private: data.isPrivate,
                 ticket_price: data.fee?.trim() ? data.fee.trim() : null,
+                cover_image: coverImage,
+                auto_approve_members: data.autoApproveMembers,
               });
               const created = res.data?.data?.event;
               if (created) {

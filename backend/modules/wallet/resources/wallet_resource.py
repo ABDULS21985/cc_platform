@@ -8,11 +8,8 @@ POST /api/v2/wallet/withdraw - Withdraw funds
 """
 from flask.views import MethodView
 from flask_smorest import Blueprint
-from flask_login import current_user as flask_current_user
 from modules.auth_v2.utils.decorators import token_required
 import logging
-from decimal import Decimal
-from datetime import datetime
 
 from modules.wallet.schemas.wallet_schema import (
     DepositSchema,
@@ -259,147 +256,46 @@ class WithdrawResource(MethodView):
         Rate limited to 3 requests per hour.
         """
         try:
-            from modules.wallet.repositories.wallet_repository import WalletRepository
-            from modules.wallet.repositories.wallet_transaction_repository import WalletTransactionRepository
-            from modules.auth_v2.extensions import db
-            from modules.wallet.services.pin_service import TransactionPinService
+            from modules.wallet.services.withdrawal_service import WithdrawalService
 
-            # Enforce transaction PIN for money-moving actions
-            try:
-                TransactionPinService().verify_pin(user_id=current_user.id, pin=str(data.get("pin", "")))
-            except ValueError as pin_err:
-                response, status = format_error(error="invalid_pin", message=str(pin_err), status_code=400)
-                return response, status
-            
-            amount = data['amount']
-            bank_code = data['bank_code'].strip()[:5]
-            account_number = data['account_number'].strip()[:20]
-            account_name = data.get('account_name', 'N/A').strip()[:255]
-            
-            # Get wallet
-            wallet_repo = WalletRepository()
-            wallet = wallet_repo.find_by_user_id(current_user.id)
-            
-            if not wallet:
-                response, status = format_error(
-                    error="wallet_not_found",
-                    message="Wallet not found. Please complete identity verification first.",
-                    status_code=404,
-                )
-                return response, status
-            
-            # Check balance
-            balance = Decimal(wallet.balance)
-            if balance < amount:
-                response, status = format_error(
-                    error="insufficient_balance",
-                    message=f"Insufficient balance. Available: ₦{balance:,.2f}",
-                    status_code=400,
-                    data={"available_balance": str(balance)},
-                )
-                return response, status
-            
-            # Calculate fee (2% or minimum ₦50)
-            fee = max(amount * Decimal('0.02'), Decimal('50.00'))
-            net_amount = amount - fee
-            
-            try:
-                # Debit wallet balance first (prevents double-spend)
-                updated_wallet = wallet_repo.decrement_balance(wallet.id, amount)
-                if not updated_wallet:
-                    db.session.rollback()
-                    response, status = format_error(
-                        error="insufficient_balance",
-                        message="Insufficient balance or wallet not found",
-                        status_code=400,
-                    )
-                    return response, status
-                
-                # Create transaction record
-                txn_repo = WalletTransactionRepository()
-                reference = f"WTH-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{wallet.id:06d}"
-                
-                transaction = txn_repo.create({
-                    'wallet_id': wallet.id,
-                    # NOTE: DB constraint expects business types (deposit/withdrawal/transfer/payment),
-                    # not accounting directions (credit/debit).
-                    'type': 'withdrawal',
-                    'amount': amount,
-                    'fee': fee,
-                    'net_amount': net_amount,
-                    'description': f'Withdrawal to {account_number} ({bank_code})',
-                    'reference': reference,
-                    # Must match wallet_transactions_status_check
-                    'status': 'pending',
-                    'transaction_type': 'withdrawal',
-                    'destination_account_number': account_number,
-                    'destination_account_name': account_name
-                })
-                
-                logger.info(
-                    f"Withdrawal initiated for user {current_user.id}: ₦{amount} to {bank_code}/{account_number}. "
-                    f"New balance: ₦{updated_wallet.balance}"
-                )
+            result = WithdrawalService().initiate_withdrawal(
+                user_id=current_user.id,
+                amount=data['amount'],
+                bank_code=data['bank_code'],
+                bank_name=data.get('bank_name'),
+                account_number=data['account_number'],
+                account_name=data.get('account_name'),
+                note=data.get('note'),
+                pin=data.get('pin'),
+            )
 
-                # Best-effort: notify the user + audit. Failures here must
-                # not roll back the withdrawal.
-                try:
-                    from modules.notifications.services.notification_service import NotificationService
-                    from modules.audit.services.audit_service import AuditService
-                    NotificationService().create_for_user(
-                        user_id=current_user.id,
-                        title="Withdrawal initiated",
-                        body=(
-                            f"₦{amount:,.2f} is on its way to {account_name or account_number}. "
-                            f"Funds typically arrive within 24 hours."
-                        ),
-                        category='money',
-                        source='Wallet',
-                        amount_value=f"{amount:,.2f}",
-                        amount_direction='out',
-                        action_href='/dashboard/activity',
-                    )
-                    AuditService().record(
-                        user_id=current_user.id,
-                        action='Withdrawal initiated',
-                        details=(
-                            f"Withdrew ₦{amount:,.2f} to {account_number} "
-                            f"({bank_code}); fee ₦{fee:,.2f}"
-                        ),
-                        category='money',
-                        severity='info',
-                        actor='You',
-                        target=account_name or account_number,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning('post-withdraw notify/audit failed: %s', exc)
-
-            except Exception as e:
-                db.session.rollback()
-                logger.error(f"Withdrawal transaction failed: {str(e)}", exc_info=True)
-                raise
-            
             response, status = format_data(
-                data={
-                    'transaction_id': transaction.id,
-                    'reference': f"WTH-{transaction.created_at.strftime('%Y%m%d')}-{transaction.id:06d}",
-                    'amount': str(amount),
-                    'fee': str(fee),
-                    'net_amount': str(net_amount),
-                    'status': 'pending',
-                    'destination_bank': bank_code,
-                    'destination_account': account_number,
-                },
-                message='Withdrawal initiated. Funds will be sent within 24 hours.',
+                data=result,
+                message=result.get('message', 'Withdrawal request recorded.'),
                 status_code=200,
             )
             return response, status
-            
+
         except Exception as e:
+            from modules.wallet.services.withdrawal_service import WalletWithdrawalError
+            if isinstance(e, WalletWithdrawalError):
+                response, status = format_error(
+                    error=e.error_code,
+                    message=str(e),
+                    status_code=e.status_code,
+                    data=e.data,
+                )
+                return response, status
+
+            try:
+                from modules.auth_v2.extensions import db
+                db.session.rollback()
+            except Exception:
+                pass
+
             logger.error(f"Withdrawal error for user {current_user.id}: {str(e)}", exc_info=True)
             response, status = format_internal_error("An error occurred while processing withdrawal")
             return response, status
-
 
 @wallet_blp.route('/pin/set')
 class WalletPinSetResource(MethodView):

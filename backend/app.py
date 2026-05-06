@@ -190,6 +190,8 @@ def create_app():
                 BillSession,
                 CommunityPost,
                 CommunityPostMention,
+                CommunityPostComment,
+                CommunityPostReaction,
                 Institution,
                 Organization,
                 InstitutionMember,

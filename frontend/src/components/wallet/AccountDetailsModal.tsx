@@ -4,17 +4,32 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Copy } from 'lucide-react';
 
+export interface WalletAccountDetails {
+  account_number: string;
+  account_name: string;
+  bank_name: string;
+  reference?: string;
+  amount?: string;
+  status?: string;
+  instructions?: string;
+  message?: string;
+}
+
 interface AccountDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  details: WalletAccountDetails | null;
 }
 
 export function AccountDetailsModal({
   isOpen,
   onClose,
+  details,
 }: AccountDetailsModalProps) {
   const handleCopy = () => {
-    navigator.clipboard.writeText('1123456985');
+    if (details?.account_number) {
+      navigator.clipboard?.writeText(details.account_number);
+    }
   };
 
   return (
@@ -28,17 +43,25 @@ export function AccountDetailsModal({
         </h2>
 
         <div className="p-4 space-y-2">
+          {!details ? (
+            <p className="text-sm text-[#959595]">
+              Account details are not available yet.
+            </p>
+          ) : null}
+
           <div>
             <label className="block text-sm font-medium text-[#959595] mb-1">
               Account number
             </label>
             <div className="flex items-center gap-2">
               <span className="text-lg font-semibold text-[#000000]">
-                1123456985
+                {details?.account_number ?? 'Unavailable'}
               </span>
               <Button
                 onClick={handleCopy}
                 size="sm"
+                disabled={!details?.account_number}
+                leadingIcon={<Copy className="size-3.5" aria-hidden="true" />}
                 className="h-8 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
               >
                 Copy
@@ -51,7 +74,7 @@ export function AccountDetailsModal({
               Bank Name
             </label>
             <span className="text-lg font-semibold text-[#000000]">
-              Bellbank
+              {details?.bank_name ?? 'Unavailable'}
             </span>
           </div>
 
@@ -60,9 +83,26 @@ export function AccountDetailsModal({
               Account Name
             </label>
             <span className="text-lg font-semibold text-[#000000]">
-              Aishat Adwan
+              {details?.account_name ?? 'Unavailable'}
             </span>
           </div>
+
+          {details?.reference ? (
+            <div>
+              <label className="block text-sm font-medium text-[#959595] mb-1">
+                Reference
+              </label>
+              <span className="break-all text-sm font-semibold text-[#000000]">
+                {details.reference}
+              </span>
+            </div>
+          ) : null}
+
+          {details?.instructions ? (
+            <p className="rounded-lg bg-gray-50 p-3 text-sm text-[#555555]">
+              {details.instructions}
+            </p>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

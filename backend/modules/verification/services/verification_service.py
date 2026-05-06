@@ -5,6 +5,7 @@ Follows Clean Architecture - coordinates between repositories and external servi
 ✨ UPDATED: Now focuses only on verification, wallet creation is separate
 """
 import logging
+import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 from modules.verification.repositories.verification_repository import VerificationRepository
@@ -13,6 +14,13 @@ from modules.verification.providers.provider_factory import VerificationProvider
 from modules.auth_v2.extensions import db
 
 logger = logging.getLogger(__name__)
+
+
+def _mock_verification_enabled() -> bool:
+    enabled = os.getenv('MOCK_VERIFICATION', 'false').lower() == 'true'
+    if enabled and os.getenv('ENV', 'development').lower() == 'production':
+        raise ValueError("Mock verification cannot be enabled in production")
+    return enabled
 
 
 class VerificationService:
@@ -87,9 +95,8 @@ class VerificationService:
             # ========================================
             logger.info(f"🔍 Verifying BVN with external provider for user {user_id}")
 
-            # Check if mock verification is enabled for testing
-            import os
-            if os.getenv('MOCK_VERIFICATION', 'false').lower() == 'true':
+            # Check if mock verification is enabled for testing.
+            if _mock_verification_enabled():
                 logger.info(f"🧪 MOCK MODE: Simulating successful BVN verification for user {user_id}")
                 verification_result = {
                     'verified': True,
@@ -220,9 +227,8 @@ class VerificationService:
             # ========================================
             logger.info(f"🔍 Verifying NIN with external provider for user {user_id}")
 
-            # Check if mock verification is enabled for testing
-            import os
-            if os.getenv('MOCK_VERIFICATION', 'false').lower() == 'true':
+            # Check if mock verification is enabled for testing.
+            if _mock_verification_enabled():
                 logger.info(f"🧪 MOCK MODE: Simulating successful NIN verification for user {user_id}")
                 verification_result = {
                     'verified': True,
@@ -364,4 +370,3 @@ class VerificationService:
             'error_message': verification.error_message,
             'has_wallet': has_wallet
         }
-

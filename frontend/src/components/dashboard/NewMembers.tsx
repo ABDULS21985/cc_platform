@@ -2,18 +2,24 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, Check, MessageCircle, UserPlus, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ApiService, type CommunityData } from '@/services/api';
+import { useDemoData } from '@/lib/demo-mode';
+import { toastAxiosError } from '@/hooks/useAxiosError';
+import { toast } from 'sonner';
 
 interface Member {
   id: number;
   name: string;
   role: string;
   community: string;
+  communityId?: number;
   avatar?: string;
   fallback: string;
 }
@@ -24,6 +30,7 @@ const MEMBERS: Member[] = [
     name: 'Sherifat Mobolaji',
     role: 'UI/UX designer',
     community: 'UI/UX Africa',
+    communityId: 7,
     fallback: 'SM',
   },
   {
@@ -31,6 +38,7 @@ const MEMBERS: Member[] = [
     name: 'John Smith',
     role: 'Frontend dev',
     community: 'Lagos Devs',
+    communityId: 5,
     fallback: 'JS',
   },
   {
@@ -38,6 +46,7 @@ const MEMBERS: Member[] = [
     name: 'Sarah Wilson',
     role: 'Product manager',
     community: 'Cryptos NG',
+    communityId: 6,
     fallback: 'SW',
   },
   {
@@ -45,6 +54,7 @@ const MEMBERS: Member[] = [
     name: 'Mike Johnson',
     role: 'Backend engineer',
     community: 'Lagos Devs',
+    communityId: 5,
     fallback: 'MJ',
   },
 ];
@@ -70,8 +80,10 @@ function initials(name: string): string {
 }
 
 export default function NewMembers({ loading: _loadingProp = false }: { loading?: boolean }) {
-  const [members, setMembers] = React.useState<Member[]>(MEMBERS);
+  const router = useRouter();
+  const [members, setMembers] = React.useState<Member[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [usingMock, setUsingMock] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -81,7 +93,10 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
         const joinedRes = await ApiService.communities.joined({ limit: 20 });
         const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
         if (joined.length === 0) {
-          if (!cancelled) setMembers(MEMBERS); // fall back to seed
+          if (!cancelled) {
+            setMembers(useDemoData() ? MEMBERS : []);
+            setUsingMock(useDemoData());
+          }
           return;
         }
         const lists = await Promise.all(
@@ -89,13 +104,13 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
             try {
               const res = await ApiService.communities.getMembers(c.id, { limit: 50 });
               const items = (res.data?.data?.members ?? []) as unknown as ApiMember[];
-              return items.map((m) => ({ ...m, _community: c.name }));
+              return items.map((m) => ({ ...m, _community: c }));
             } catch {
               return [];
             }
           })
         );
-        const flat = lists.flat() as Array<ApiMember & { _community: string }>;
+        const flat = lists.flat() as Array<ApiMember & { _community: CommunityData }>;
         // Dedupe by user_id, keep first appearance, sort by most-recently joined.
         const seen = new Set<number>();
         const ordered = flat
@@ -121,14 +136,21 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
             id: (m.user_id ?? u.id ?? i) as number,
             name,
             role: u.bio?.slice(0, 24) || 'Member',
-            community: m._community,
+            community: m._community.name,
+            communityId: m._community.id,
             avatar: u.profile_photo ?? undefined,
             fallback: initials(name),
           };
         });
-        if (!cancelled && mapped.length > 0) setMembers(mapped);
+        if (!cancelled) {
+          setMembers(mapped.length > 0 ? mapped : useDemoData() ? MEMBERS : []);
+          setUsingMock(mapped.length === 0 && useDemoData());
+        }
       } catch {
-        // keep seed
+        if (!cancelled) {
+          setMembers(useDemoData() ? MEMBERS : []);
+          setUsingMock(useDemoData());
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -142,13 +164,31 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
   // Track invited state per-member so the row updates after click.
   const [invited, setInvited] = React.useState<Set<number>>(new Set());
 
-  const toggleInvite = (id: number) => {
-    setInvited((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const handleInvite = async (member: Member) => {
+    if (usingMock) {
+      setInvited((prev) => new Set(prev).add(member.id));
+      toast.success('Invite link ready');
+      return;
+    }
+    if (!member.communityId) {
+      toast.error('No shared community found for this invite');
+      return;
+    }
+
+    try {
+      const res = await ApiService.communities.createInvite(member.communityId, {
+        expires_in_days: 7,
+        max_uses: 1,
+      });
+      const inviteCode = res.data?.data?.invite_code;
+      if (inviteCode && navigator.clipboard) {
+        await navigator.clipboard.writeText(`${window.location.origin}/join/${inviteCode}`);
+      }
+      setInvited((prev) => new Set(prev).add(member.id));
+      toast.success(`Invite link created for ${member.community}`);
+    } catch (err) {
+      toastAxiosError(err, 'Failed to create invite link.');
+    }
   };
 
   return (
@@ -183,6 +223,12 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
               </li>
             ))}
           </ul>
+        ) : members.length === 0 ? (
+          <EmptyState
+            icon={<Users className="size-5" aria-hidden="true" />}
+            title="No new members yet"
+            description="Recent members from your communities will show here."
+          />
         ) : (
           <ul role="list" className="space-y-3">
             {members.map((m) => {
@@ -215,6 +261,7 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
                       variant="ghost"
                       aria-label={`Message ${m.name}`}
                       className="hidden sm:inline-flex"
+                      onClick={() => router.push(`/dashboard/inbox?member=${m.id}`)}
                     >
                       <MessageCircle className="size-3.5" aria-hidden="true" />
                     </Button>
@@ -222,7 +269,7 @@ export default function NewMembers({ loading: _loadingProp = false }: { loading?
                       type="button"
                       size="sm"
                       variant={isInvited ? 'soft' : 'outline'}
-                      onClick={() => toggleInvite(m.id)}
+                      onClick={() => handleInvite(m)}
                       leadingIcon={
                         isInvited ? (
                           <Check className="size-3.5" />

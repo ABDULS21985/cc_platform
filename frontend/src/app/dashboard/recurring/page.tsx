@@ -20,6 +20,15 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import {
+  AddInstructionsModal,
+  type AddInstructionFormData,
+} from '@/components/settings/AddInstructionsModal';
+import { PasswordConfirmModal } from '@/components/settings/PasswordConfirmModal';
+import {
+  SplitPaymentModal,
+  type SplitPaymentFormData,
+} from '@/components/settings/SplitPaymentModal';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -36,7 +45,11 @@ import { motion, AnimatePresence } from '@/components/ui/motion';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { ApiService, type CommunityData } from '@/services/api';
+import {
+  ApiService,
+  type StandingInstructionCreatePayload,
+  type SubscriptionApi,
+} from '@/services/api';
 import { useDemoData } from '@/lib/demo-mode';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +58,7 @@ type RecurringStatus = 'active' | 'paused' | 'cancelled';
 type Frequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
 interface RecurringRule {
-  id: string;
+  id: number;
   title: string;
   description?: string;
   amount: number;
@@ -83,7 +96,7 @@ const FREQUENCY_LABEL: Record<Frequency, string> = {
 
 const MOCK: RecurringRule[] = [
   {
-    id: 'r1',
+    id: -1,
     title: 'Lekki Block 3 dues',
     description: 'Estate maintenance — auto-debit',
     amount: 18_500,
@@ -98,7 +111,7 @@ const MOCK: RecurringRule[] = [
     ranCount: 8,
   },
   {
-    id: 'r2',
+    id: -2,
     title: 'Trinity Co-op contribution',
     description: 'Monthly co-op rotation #14 onwards',
     amount: 8_000,
@@ -114,7 +127,7 @@ const MOCK: RecurringRule[] = [
     isHosting: true,
   },
   {
-    id: 'r3',
+    id: -3,
     title: 'Sunday tithe',
     description: 'Standing instruction · Grace Assembly',
     amount: 25_000,
@@ -129,7 +142,7 @@ const MOCK: RecurringRule[] = [
     ranCount: 32,
   },
   {
-    id: 'r4',
+    id: -4,
     title: 'Marathon training fund',
     description: 'Quarterly contribution to vendor pool',
     amount: 15_000,
@@ -144,7 +157,7 @@ const MOCK: RecurringRule[] = [
     ranCount: 3,
   },
   {
-    id: 'r5',
+    id: -5,
     title: 'Domain renewal',
     description: 'Card auto-charge',
     amount: 8_000,
@@ -158,7 +171,7 @@ const MOCK: RecurringRule[] = [
     ranCount: 1,
   },
   {
-    id: 'r6',
+    id: -6,
     title: 'Old gym membership',
     description: 'Cancelled May 2025',
     amount: 6_000,
@@ -206,84 +219,81 @@ const TABS: Array<{
   },
 ];
 
-interface ApiBill {
-  id: number;
-  community_id: number;
-  creator_id: number;
-  title: string;
-  description?: string | null;
-  amount: number;
-  status: string;
-  is_recurring?: boolean;
-  recurrence_type?: string | null;
-  due_date: string;
-  paid_member_count?: number;
-  created_at?: string;
+function parseAmount(value: string): number {
+  const normalized = value.replace(/[,\s₦]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-const FREQUENCY_FROM_API: Record<string, Frequency> = {
-  weekly: 'weekly',
-  monthly: 'monthly',
-  yearly: 'yearly',
-  daily: 'weekly',
-};
+function parseOptionalAmount(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = parseAmount(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
-function mapApiToRecurring(b: ApiBill, communityName: string, currentUserId?: number): RecurringRule {
-  const freq: Frequency = FREQUENCY_FROM_API[(b.recurrence_type ?? 'monthly').toLowerCase()] ?? 'monthly';
-  const status: RecurringStatus =
-    b.status === 'cancelled' || b.status === 'canceled'
-      ? 'cancelled'
-      : b.status === 'paused'
-        ? 'paused'
-        : 'active';
+function toInstructionDateIso(value: string): string | null {
+  if (!value) return null;
+  return new Date(`${value}T08:00:00+01:00`).toISOString();
+}
+
+function buildCreatePayload(
+  base: AddInstructionFormData,
+  split: SplitPaymentFormData,
+  pin: string,
+): StandingInstructionCreatePayload | null {
+  const amount = parseAmount(base.amount);
+  if (!amount) return null;
+
+  const startAt = toInstructionDateIso(base.startDate);
+  const endAt = toInstructionDateIso(base.endDate);
+
   return {
-    id: `bill-${b.id}`,
-    title: b.title,
-    description: b.description ?? undefined,
-    amount: b.amount,
-    amountFormatted: fmt(b.amount),
-    frequency: freq,
-    nextRunAt: b.due_date,
-    source: 'CCPay wallet',
-    recipient: { name: communityName },
-    community: { id: String(b.community_id), name: communityName },
-    status,
-    ranCount: b.paid_member_count ?? 0,
-    isHosting: !!currentUserId && b.creator_id === currentUserId,
+    name: base.title,
+    amount,
+    currency: 'NGN',
+    cadence: base.frequency,
+    start_at: startAt,
+    end_at: endAt,
+    next_charge_at: startAt,
+    destination_account_number: base.destinationAccountNumber,
+    destination_bank_code: base.destinationBankCode,
+    destination_account_name: base.destinationAccountName,
+    split_member_name: split.splitMemberName || null,
+    split_primary_amount: parseOptionalAmount(split.splitPrimaryAmount),
+    split_secondary_amount: parseOptionalAmount(split.splitSecondaryAmount),
+    pin,
   };
 }
 
-async function fetchAggregatedRecurring(currentUserId?: number): Promise<RecurringRule[]> {
-  const joinedRes = await ApiService.communities.joined({ limit: 100 });
-  const joined = (joinedRes.data?.data?.communities ?? []) as CommunityData[];
-  if (joined.length === 0) return [];
+function mapStandingInstruction(s: SubscriptionApi): RecurringRule {
+  const accountNumber = s.destination_account_number ?? undefined;
+  const nextRunAt =
+    s.next_charge_at ?? s.start_at ?? s.created_at ?? new Date().toISOString();
 
-  const lists = await Promise.all(
-    joined.map(async (c) => {
-      try {
-        const res = await ApiService.communities.getBills(c.id, { limit: 200 });
-        const items = (res.data?.data?.bills ?? []) as unknown as ApiBill[];
-        return items
-          .filter((b) => b.is_recurring)
-          .map((b) => mapApiToRecurring(b, c.name, currentUserId));
-      } catch {
-        return [];
-      }
-    })
-  );
-  return lists.flat();
+  return {
+    id: s.id,
+    title: s.name,
+    description: s.description ?? undefined,
+    amount: s.amount,
+    amountFormatted: fmt(s.amount),
+    frequency: s.cadence,
+    nextRunAt,
+    lastRunAt: s.last_charged_at ?? undefined,
+    source: 'CCPay wallet',
+    recipient: {
+      name: s.destination_account_name ?? s.name,
+      bank: s.destination_bank_code ?? undefined,
+      tail: accountNumber ? accountNumber.slice(-4) : undefined,
+    },
+    status: s.status,
+    ranCount: s.last_charged_at ? 1 : 0,
+  };
 }
 
-function readCurrentUserId(): number | undefined {
-  if (typeof window === 'undefined') return undefined;
-  try {
-    const raw = localStorage.getItem('user_data');
-    if (!raw) return undefined;
-    const u = JSON.parse(raw);
-    return typeof u?.id === 'number' ? u.id : undefined;
-  } catch {
-    return undefined;
-  }
+async function fetchStandingInstructions(): Promise<RecurringRule[]> {
+  const res = await ApiService.standingInstructions.list({ limit: 200 });
+  const items = (res.data?.data?.subscriptions ?? []) as SubscriptionApi[];
+  return items.map(mapStandingInstruction);
 }
 
 function nextRunLabel(iso: string, status: RecurringStatus): string {
@@ -308,25 +318,48 @@ export default function RecurringPage() {
   const [tab, setTab] = useState<TabValue>('active');
   const [search, setSearch] = useState('');
   const [frequency, setFrequency] = useState<'all' | Frequency>('all');
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [draft, setDraft] = useState<AddInstructionFormData | null>(null);
+  const [verifiedPin, setVerifiedPin] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const refreshRules = React.useCallback(async () => {
+    const real = await fetchStandingInstructions();
+    if (real.length === 0) {
+      const demo = useDemoData();
+      setRules(demo ? MOCK : []);
+      setUsingMock(demo);
+    } else {
+      setRules(real);
+      setUsingMock(false);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const real = await fetchAggregatedRecurring(readCurrentUserId());
+        const real = await fetchStandingInstructions();
         if (cancelled) return;
         if (real.length === 0) {
-          setRules(useDemoData() ? MOCK : []);
-          setUsingMock(useDemoData());
+          const demo = useDemoData();
+          setRules(demo ? MOCK : []);
+          setUsingMock(demo);
         } else {
           setRules(real);
           setUsingMock(false);
         }
       } catch {
         if (!cancelled) {
-          setRules(useDemoData() ? MOCK : []);
-          setUsingMock(useDemoData());
+          const demo = useDemoData();
+          setRules(demo ? MOCK : []);
+          setUsingMock(demo);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -396,32 +429,149 @@ export default function RecurringPage() {
       );
   }, [rules, tab, search, frequency]);
 
-  const togglePause = (id: string) => {
-    setRules((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: r.status === 'active' ? 'paused' : 'active' }
-          : r
-      )
-    );
+  const togglePause = async (id: number) => {
+    if (usingMock) {
+      toast.info('Sample rules cannot be changed');
+      return;
+    }
     const r = rules.find((r) => r.id === id);
-    toast.success(
-      r?.status === 'active'
-        ? `Paused "${r?.title}"`
-        : `Resumed "${r?.title}"`
-    );
+    if (!r) return;
+
+    const next = r.status === 'active' ? 'paused' : 'active';
+    setBusyId(id);
+    try {
+      const res = await ApiService.standingInstructions.setStatus(id, next);
+      const updated = res.data?.data?.subscription;
+      if (updated) {
+        setRules((prev) =>
+          prev.map((rule) =>
+            rule.id === id ? mapStandingInstruction(updated) : rule
+          )
+        );
+      } else {
+        await refreshRules();
+      }
+      toast.success(
+        next === 'paused' ? `Paused "${r.title}"` : `Resumed "${r.title}"`
+      );
+    } catch {
+      toast.error('Update failed');
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const cancelRule = (id: string) => {
+  const cancelRule = async (id: number) => {
+    if (usingMock) {
+      toast.info('Sample rules cannot be changed');
+      return;
+    }
     const r = rules.find((r) => r.id === id);
-    setRules((prev) =>
-      prev.map((rule) =>
-        rule.id === id ? { ...rule, status: 'cancelled' } : rule
-      )
-    );
-    toast.success(`Cancelled "${r?.title}"`, {
-      description: 'You can recreate this from the wallet.',
-    });
+    if (!r) return;
+
+    setBusyId(id);
+    try {
+      const res = await ApiService.standingInstructions.setStatus(id, 'cancelled');
+      const updated = res.data?.data?.subscription;
+      if (updated) {
+        setRules((prev) =>
+          prev.map((rule) =>
+            rule.id === id ? mapStandingInstruction(updated) : rule
+          )
+        );
+      } else {
+        await refreshRules();
+      }
+      toast.success(`Cancelled "${r.title}"`);
+    } catch {
+      toast.error('Cancel failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteRule = async (id: number) => {
+    if (usingMock) {
+      toast.info('Sample rules cannot be changed');
+      return;
+    }
+    const r = rules.find((r) => r.id === id);
+    if (!r) return;
+
+    setBusyId(id);
+    try {
+      await ApiService.standingInstructions.delete(id);
+      await refreshRules();
+      toast.success(`Deleted "${r.title}"`);
+    } catch {
+      toast.error('Delete failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const closeAll = () => {
+    setIsAddModalOpen(false);
+    setIsPasswordModalOpen(false);
+    setIsSplitModalOpen(false);
+    setDraft(null);
+    setVerifiedPin('');
+    setPinError(null);
+  };
+
+  const handleAddModalNext = (data: AddInstructionFormData) => {
+    setDraft(data);
+    setVerifiedPin('');
+    setPinError(null);
+    setIsAddModalOpen(false);
+    setIsPasswordModalOpen(true);
+  };
+
+  const handlePasswordModalNext = async (pin: string) => {
+    setVerifyingPin(true);
+    setPinError(null);
+    try {
+      await ApiService.standingInstructions.verifyPin({ pin });
+      setVerifiedPin(pin);
+      setIsPasswordModalOpen(false);
+      setIsSplitModalOpen(true);
+    } catch {
+      setPinError('PIN could not be verified');
+      toast.error('PIN verification failed');
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
+
+  const handleSplitModalComplete = async (data: SplitPaymentFormData) => {
+    if (!draft || !verifiedPin) {
+      toast.error('Start the instruction again');
+      return;
+    }
+
+    const payload = buildCreatePayload(draft, data, verifiedPin);
+    if (!payload) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const res = await ApiService.standingInstructions.create(payload);
+      const created = res.data?.data?.subscription;
+      if (created) {
+        setRules((prev) => [mapStandingInstruction(created), ...prev]);
+        setUsingMock(false);
+      } else {
+        await refreshRules();
+      }
+      closeAll();
+      toast.success('Standing instruction created');
+    } catch {
+      toast.error('Could not create standing instruction');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -469,12 +619,7 @@ export default function RecurringPage() {
               <Button
                 type="button"
                 size="default"
-                onClick={() =>
-                  toast.info('Open the wallet to add a new standing instruction', {
-                    description:
-                      'Or jump to Settings → Standing instructions for the full editor.',
-                  })
-                }
+                onClick={() => setIsAddModalOpen(true)}
                 leadingIcon={<Plus className="size-4" />}
               >
                 New rule
@@ -598,7 +743,7 @@ export default function RecurringPage() {
         {usingMock && !loading && (
           <p className="rounded-xl border border-dashed border-border bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
             <Sparkles className="mr-1 inline-block size-3" aria-hidden="true" />
-            Showing sample standing instructions. Once you join a community with recurring bills, your rules show up here.
+            Showing sample standing instructions. New rules you create through the API show up here.
           </p>
         )}
 
@@ -693,7 +838,7 @@ export default function RecurringPage() {
                 action={
                   tab === 'active' || tab === 'all' ? (
                     <Button
-                      onClick={() => toast.info('Open the wallet to create a rule')}
+                      onClick={() => setIsAddModalOpen(true)}
                       leadingIcon={<Plus className="size-4" />}
                     >
                       New rule
@@ -836,6 +981,7 @@ export default function RecurringPage() {
                                     variant={
                                       r.status === 'active' ? 'outline' : 'default'
                                     }
+                                    disabled={busyId === r.id}
                                     onClick={() => togglePause(r.id)}
                                     leadingIcon={
                                       r.status === 'active' ? (
@@ -852,6 +998,7 @@ export default function RecurringPage() {
                                     size="icon-sm"
                                     variant="ghost"
                                     aria-label={`Cancel ${r.title}`}
+                                    disabled={busyId === r.id}
                                     onClick={() => cancelRule(r.id)}
                                   >
                                     <Trash2 className="size-3.5" aria-hidden="true" />
@@ -869,6 +1016,18 @@ export default function RecurringPage() {
                                   </Button>
                                 </div>
                               )}
+                              {r.status === 'cancelled' && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busyId === r.id}
+                                  onClick={() => deleteRule(r.id)}
+                                  leadingIcon={<Trash2 className="size-3.5" />}
+                                >
+                                  Delete
+                                </Button>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -885,6 +1044,27 @@ export default function RecurringPage() {
           <Calendar className="mr-1 inline-block size-3" aria-hidden="true" />
           Rules run at 08:00 WAT on their scheduled dates. We notify you on success or failure.
         </p>
+
+        <AddInstructionsModal
+          isOpen={isAddModalOpen}
+          onClose={closeAll}
+          onNext={handleAddModalNext}
+        />
+        <PasswordConfirmModal
+          isOpen={isPasswordModalOpen}
+          onClose={closeAll}
+          onNext={handlePasswordModalNext}
+          title={draft?.title ?? ''}
+          isSubmitting={verifyingPin}
+          error={pinError}
+        />
+        <SplitPaymentModal
+          isOpen={isSplitModalOpen}
+          onClose={closeAll}
+          onComplete={handleSplitModalComplete}
+          title={draft?.title ?? ''}
+          isSubmitting={creating}
+        />
       </div>
     </DashboardLayout>
   );

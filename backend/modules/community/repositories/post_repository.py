@@ -9,7 +9,12 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from modules.auth_v2.extensions import db
 from modules.community.constants import CommunityPostStatus
-from modules.community.models.community_post import CommunityPost, CommunityPostMention
+from modules.community.models.community_post import (
+    CommunityPost,
+    CommunityPostComment,
+    CommunityPostMention,
+    CommunityPostReaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +88,95 @@ class CommunityPostRepository:
         post.is_pinned = False
         db.session.flush()
         return post
+
+    def create_comment(self, post_id: int, author_user_id: int, body: str) -> CommunityPostComment:
+        """Create a persisted post comment."""
+        comment = CommunityPostComment(
+            post_id=post_id,
+            author_user_id=author_user_id,
+            body=body,
+            status=CommunityPostStatus.ACTIVE.value,
+        )
+        db.session.add(comment)
+        db.session.flush()
+        logger.info("Created community post comment %s on post %s", comment.id, post_id)
+        return comment
+
+    def find_comment_by_id(self, comment_id: int) -> Optional[CommunityPostComment]:
+        """Find a comment by id with author and post loaded."""
+        return (
+            CommunityPostComment.query.options(
+                joinedload(CommunityPostComment.author),
+                joinedload(CommunityPostComment.post),
+            )
+            .filter(CommunityPostComment.id == comment_id)
+            .first()
+        )
+
+    def find_comments_by_post(
+        self,
+        post_id: int,
+        limit: int = 20,
+        offset: int = 0,
+        status: str = CommunityPostStatus.ACTIVE.value,
+    ) -> Tuple[List[CommunityPostComment], int]:
+        """List comments for a post oldest-first for conversation readability."""
+        query = CommunityPostComment.query.options(
+            joinedload(CommunityPostComment.author),
+        ).filter(CommunityPostComment.post_id == post_id)
+        if status:
+            query = query.filter(CommunityPostComment.status == status)
+
+        total = query.count()
+        comments = (
+            query.order_by(CommunityPostComment.created_at.asc(), CommunityPostComment.id.asc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return comments, total
+
+    def soft_delete_comment(self, comment: CommunityPostComment) -> CommunityPostComment:
+        """Soft delete a comment."""
+        comment.status = CommunityPostStatus.DELETED.value
+        db.session.flush()
+        return comment
+
+    def find_reaction(
+        self,
+        post_id: int,
+        user_id: int,
+        reaction_type: str = 'like',
+    ) -> Optional[CommunityPostReaction]:
+        """Find a user's reaction for a post."""
+        return CommunityPostReaction.query.filter_by(
+            post_id=post_id,
+            user_id=user_id,
+            reaction_type=reaction_type,
+        ).first()
+
+    def create_reaction(
+        self,
+        post_id: int,
+        user_id: int,
+        reaction_type: str = 'like',
+    ) -> CommunityPostReaction:
+        """Create a post reaction."""
+        reaction = CommunityPostReaction(
+            post_id=post_id,
+            user_id=user_id,
+            reaction_type=reaction_type,
+        )
+        db.session.add(reaction)
+        db.session.flush()
+        logger.info("Created community post reaction %s on post %s", reaction.id, post_id)
+        return reaction
+
+    def delete_reaction(self, reaction: CommunityPostReaction) -> None:
+        """Remove a post reaction."""
+        db.session.delete(reaction)
+        db.session.flush()
+
+    def count_reactions(self, post_id: int) -> int:
+        """Count all reactions for a post."""
+        return CommunityPostReaction.query.filter_by(post_id=post_id).count()

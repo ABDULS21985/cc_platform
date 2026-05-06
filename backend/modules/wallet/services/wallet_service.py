@@ -190,15 +190,7 @@ class WalletService:
             limit=1000  # Get all for calculation
         )
         
-        # Calculate totals
-        total_credits = sum(
-            txn.net_amount for txn in all_successful
-            if txn.type == 'credit'
-        )
-        total_debits = sum(
-            txn.net_amount for txn in all_successful
-            if txn.type == 'debit'
-        )
+        total_credits, total_debits = self._aggregate_credit_debit_totals(all_successful)
         
         return {
             'wallet': wallet.to_dict(),
@@ -209,6 +201,48 @@ class WalletService:
                 'transaction_count': len(all_successful)
             }
         }
+
+    def _aggregate_credit_debit_totals(self, transactions: List[Any]) -> tuple[Decimal, Decimal]:
+        """
+        Aggregate wallet totals across legacy accounting and current business types.
+
+        Older rows used ``credit``/``debit`` in ``type``. Current rows use
+        business values such as ``deposit``, ``withdrawal`` and ``payment`` and
+        carry the accounting direction in ``signed_amount``.
+        """
+        credit_types = {'credit', 'deposit'}
+        debit_types = {
+            'debit',
+            'withdrawal',
+            'transfer',
+            'payment',
+            'bill_payment',
+            'membership_payment',
+            'community_payment',
+        }
+        total_credits = Decimal('0.00')
+        total_debits = Decimal('0.00')
+
+        for txn in transactions:
+            signed_amount = getattr(txn, 'signed_amount', None)
+            if signed_amount is not None:
+                signed = Decimal(signed_amount)
+                if signed > 0:
+                    total_credits += signed
+                elif signed < 0:
+                    total_debits += abs(signed)
+                continue
+
+            txn_type = str(getattr(txn, 'type', '') or '').lower()
+            business_type = str(getattr(txn, 'transaction_type', '') or '').lower()
+            amount = Decimal(getattr(txn, 'net_amount', None) or getattr(txn, 'amount', 0) or 0)
+
+            if txn_type in credit_types or business_type in credit_types:
+                total_credits += amount
+            elif txn_type in debit_types or business_type in debit_types:
+                total_debits += amount
+
+        return total_credits, total_debits
     
     def check_wallet_exists(self, user_id: int) -> bool:
         """

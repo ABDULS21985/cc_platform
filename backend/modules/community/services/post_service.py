@@ -7,8 +7,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from modules.auth_v2.extensions import db
-from modules.community.constants import CommunityPostStatus, CommunityPostType
-from modules.community.models.community_post import CommunityPost
+from modules.community.constants import (
+    CommunityPostReactionType,
+    CommunityPostStatus,
+    CommunityPostType,
+)
+from modules.community.models.community_post import CommunityPost, CommunityPostComment
 from modules.community.repositories import CommunityRepository, MemberRepository
 from modules.community.repositories.post_repository import CommunityPostRepository
 
@@ -93,6 +97,102 @@ class CommunityPostService:
         if not self.member_repo.is_member(post.community_id, requester_user_id):
             return None, 'Only active community members can view posts'
         return post, None
+
+    def list_comments(self, post_id: int, requester_user_id: int, args: Dict[str, Any]) -> Tuple[Optional[Tuple[List[CommunityPostComment], int]], Optional[str]]:
+        """List persisted comments for a post if requester can view the post."""
+        post, error = self.get_post(post_id, requester_user_id)
+        if error:
+            return None, error
+
+        comments, total = self.post_repo.find_comments_by_post(
+            post_id=post.id,
+            limit=args.get('limit', 20),
+            offset=args.get('offset', 0),
+        )
+        return (comments, total), None
+
+    def create_comment(self, post_id: int, author_user_id: int, data: Dict[str, Any]) -> Tuple[Optional[CommunityPostComment], Optional[str]]:
+        """Create a persisted comment on a post."""
+        try:
+            post, error = self.get_post(post_id, author_user_id)
+            if error:
+                return None, error
+            if not post.comments_enabled:
+                return None, 'Comments are disabled for this post'
+
+            body = self._normalize_body(data.get('body'))
+            if not body:
+                return None, 'Comment must contain body text'
+
+            comment = self.post_repo.create_comment(
+                post_id=post.id,
+                author_user_id=author_user_id,
+                body=body,
+            )
+            db.session.commit()
+            logger.info("Created community post comment %s by user %s", comment.id, author_user_id)
+            return self.post_repo.find_comment_by_id(comment.id), None
+
+        except Exception as exc:
+            logger.error("Error creating comment for post %s: %s", post_id, exc, exc_info=True)
+            db.session.rollback()
+            return None, str(exc)
+
+    def delete_comment(self, comment_id: int, requester_user_id: int) -> Tuple[bool, Optional[str]]:
+        """Soft delete a comment as author or community admin/owner."""
+        try:
+            comment = self.post_repo.find_comment_by_id(comment_id)
+            if not comment or comment.status != CommunityPostStatus.ACTIVE.value or not comment.post:
+                return False, 'Comment not found'
+            post = comment.post
+            if post.status != CommunityPostStatus.ACTIVE.value:
+                return False, 'Post not found'
+            if not self.member_repo.is_member(post.community_id, requester_user_id):
+                return False, 'Only active community members can delete comments'
+
+            is_admin = self.member_repo.is_admin_or_owner(post.community_id, requester_user_id)
+            is_author = comment.author_user_id == requester_user_id
+            if not (is_author or is_admin):
+                return False, 'Not authorized to delete this comment'
+
+            self.post_repo.soft_delete_comment(comment)
+            db.session.commit()
+            logger.info("Deleted community post comment %s by user %s", comment.id, requester_user_id)
+            return True, None
+
+        except Exception as exc:
+            logger.error("Error deleting comment %s: %s", comment_id, exc, exc_info=True)
+            db.session.rollback()
+            return False, str(exc)
+
+    def toggle_reaction(self, post_id: int, user_id: int, data: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Toggle the current user's reaction on a post and return authoritative counts."""
+        try:
+            post, error = self.get_post(post_id, user_id)
+            if error:
+                return None, error
+
+            reaction_type = self._normalize_reaction_type(data.get('reaction_type'))
+            existing = self.post_repo.find_reaction(post.id, user_id, reaction_type)
+            reacted = existing is None
+            if existing:
+                self.post_repo.delete_reaction(existing)
+            else:
+                self.post_repo.create_reaction(post.id, user_id, reaction_type)
+
+            db.session.commit()
+            reactions_count = self.post_repo.count_reactions(post.id)
+            return {
+                'post_id': post.id,
+                'reaction_type': reaction_type,
+                'reacted': reacted,
+                'reactions_count': reactions_count,
+            }, None
+
+        except Exception as exc:
+            logger.error("Error toggling reaction for post %s: %s", post_id, exc, exc_info=True)
+            db.session.rollback()
+            return None, str(exc)
 
     def update_post(self, post_id: int, requester_user_id: int, data: Dict[str, Any]) -> Tuple[Optional[CommunityPost], Optional[str]]:
         """Update a post as author or community admin/owner."""
@@ -183,6 +283,12 @@ class CommunityPostService:
             seen.add(user_id)
             deduped.append(user_id)
         return deduped
+
+    def _normalize_reaction_type(self, reaction_type: Optional[str]) -> str:
+        value = (reaction_type or CommunityPostReactionType.LIKE.value).strip().lower()
+        if value not in CommunityPostReactionType.values():
+            raise ValueError(f'Unsupported reaction type: {value}')
+        return value
 
     def _validate_post_content(self, body: Optional[str], media_urls: List[str]) -> None:
         if not body and not media_urls:
