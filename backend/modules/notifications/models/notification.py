@@ -16,6 +16,12 @@ class Notification(db.Model):
         nullable=False,
         index=True,
     )
+    community_id = db.Column(
+        db.Integer,
+        db.ForeignKey('communities.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     category = db.Column(db.String(32), nullable=False, default='system', index=True)
     title = db.Column(db.String(255), nullable=False)
     body = db.Column(db.Text, nullable=False, default='')
@@ -37,6 +43,7 @@ class Notification(db.Model):
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'community_id': self.community_id,
             'category': self.category,
             'title': self.title,
             'body': self.body,

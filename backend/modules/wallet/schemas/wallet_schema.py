@@ -176,6 +176,57 @@ class ResetTransactionPinSchema(Schema):
             raise ValidationError('new_pin must be exactly 4 digits')
 
 
+class BeneficiaryQuerySchema(Schema):
+    limit = fields.Integer(
+        load_default=50,
+        validate=validate.Range(min=1, max=100),
+        metadata={'description': 'Number of beneficiaries to return', 'example': 50},
+    )
+    offset = fields.Integer(
+        load_default=0,
+        validate=validate.Range(min=0),
+        metadata={'description': 'Pagination offset', 'example': 0},
+    )
+
+
+class BeneficiaryCreateSchema(Schema):
+    account_number = fields.String(
+        required=True,
+        validate=validate.Length(min=10, max=20),
+        metadata={'description': 'Recipient account number', 'example': '0123456789'},
+    )
+    account_name = fields.String(
+        required=True,
+        validate=validate.Length(min=1, max=255),
+        metadata={'description': 'Recipient account holder name', 'example': 'Jane Doe'},
+    )
+    bank_code = fields.String(
+        required=True,
+        validate=validate.Length(min=3, max=20),
+        metadata={'description': 'Recipient bank code', 'example': '058'},
+    )
+    bank_name = fields.String(
+        required=True,
+        validate=validate.Length(min=1, max=100),
+        metadata={'description': 'Recipient bank name', 'example': 'GTBank'},
+    )
+    nickname = fields.String(
+        load_default=None,
+        allow_none=True,
+        validate=validate.Length(max=100),
+        metadata={'description': 'Optional display nickname', 'example': 'Rent account'},
+    )
+    is_favorite = fields.Boolean(
+        load_default=False,
+        metadata={'description': 'Whether the beneficiary is a favorite', 'example': False},
+    )
+
+    @validates('account_number')
+    def validate_account_number(self, value, **kwargs):
+        if not value.isdigit():
+            raise ValidationError('Account number must contain only digits')
+
+
 class WebhookPayloadSchema(Schema):
     """
     Generic webhook payload schema (Bell MFB + SafeHaven).

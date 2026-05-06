@@ -28,12 +28,15 @@ class NotificationRepository:
         offset: int = 0,
         unread_only: bool = False,
         category: Optional[str] = None,
+        community_id: Optional[int] = None,
     ) -> Tuple[List[Notification], int]:
         query = Notification.query.filter_by(user_id=user_id)
         if unread_only:
             query = query.filter_by(is_read=False)
         if category:
             query = query.filter_by(category=category)
+        if community_id is not None:
+            query = query.filter_by(community_id=community_id)
         total = query.count()
         items = (
             query.order_by(desc(Notification.created_at))
@@ -45,6 +48,13 @@ class NotificationRepository:
 
     def count_unread(self, user_id: int) -> int:
         return Notification.query.filter_by(user_id=user_id, is_read=False).count()
+
+    def count_unread_for_community(self, user_id: int, community_id: int) -> int:
+        return Notification.query.filter_by(
+            user_id=user_id,
+            community_id=community_id,
+            is_read=False,
+        ).count()
 
     def mark_read(self, notification_id: int, user_id: int) -> Optional[Notification]:
         notif = Notification.query.filter_by(id=notification_id, user_id=user_id).first()

@@ -25,6 +25,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { motion, AnimatePresence } from '@/components/ui/motion';
 import { ActivityHero } from '@/components/activity/ActivityHero';
@@ -127,6 +133,7 @@ function mapApiTransaction(
       : undefined,
     fee: Number(t.fee as string) || 0,
     reference: (t.reference as string) || undefined,
+    raw: t,
   };
 }
 
@@ -497,6 +504,8 @@ export default function ActivityPage() {
   });
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   // True when the user has no provisioned wallet yet (404 from the backend) —
   // renders an actionable empty state pointing them at verification.
   const [walletMissing, setWalletMissing] = useState(false);
@@ -625,6 +634,29 @@ export default function ActivityPage() {
     }
     exportCsv(filtered);
     toast.success(`Exported ${filtered.length} transactions`);
+  };
+
+  const openActivityDetail = async (item: ActivityItem) => {
+    setSelectedActivity(item);
+    const numericId = Number(item.id);
+    if (!Number.isFinite(numericId)) return;
+
+    setDetailLoading(true);
+    try {
+      const res = await ApiService.wallet.getTransaction(numericId);
+      const tx = (res.data?.data?.transaction ?? null) as Record<string, unknown> | null;
+      if (tx) {
+        setSelectedActivity((current) =>
+          current?.id === item.id
+            ? { ...mapApiTransaction(tx, new Map()), community: current.community, raw: tx }
+            : current,
+        );
+      }
+    } catch (err) {
+      toastAxiosError(err, 'Failed to refresh transaction details.');
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   return (
@@ -832,12 +864,7 @@ export default function ActivityPage() {
                           <ActivityRow
                             key={it.id}
                             item={it}
-                            onSelect={(id) => {
-                              // No detail page yet — just toast a placeholder.
-                              toast(`Opening transaction ${id}`, {
-                                description: 'Detailed view coming soon.',
-                              });
-                            }}
+                            onSelect={() => openActivityDetail(it)}
                           />
                         ))}
                       </ul>
@@ -871,7 +898,79 @@ export default function ActivityPage() {
             Reset filters
           </button>
         </p>
+        <ActivityDetailDialog
+          item={selectedActivity}
+          loading={detailLoading}
+          onOpenChange={(open) => {
+            if (!open) setSelectedActivity(null);
+          }}
+        />
       </div>
     </DashboardLayout>
+  );
+}
+
+function ActivityDetailDialog({
+  item,
+  loading,
+  onOpenChange,
+}: {
+  item: ActivityItem | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const raw = item?.raw ?? {};
+  const rows = item
+    ? [
+        ['Status', item.status],
+        ['Direction', item.direction === 'in' ? 'Money in' : 'Money out'],
+        ['Amount', `₦${item.amountFormatted}`],
+        ['Fee', `₦${(item.fee ?? 0).toLocaleString('en-NG')}`],
+        ['Reference', item.reference || String(raw.reference ?? '—')],
+        ['Provider reference', String(raw.bell_mfb_reference ?? '—')],
+        ['Community', item.community?.name ?? '—'],
+        ['Counterparty', item.counterparty?.name ?? '—'],
+        ['Source account', String(raw.source_account_number ?? '—')],
+        ['Destination account', String(raw.destination_account_number ?? '—')],
+        ['Balance before', raw.balance_before ? `₦${Number(raw.balance_before).toLocaleString('en-NG')}` : '—'],
+        ['Balance after', raw.balance_after ? `₦${Number(raw.balance_after).toLocaleString('en-NG')}` : '—'],
+        ['Created', new Date(item.timestamp).toLocaleString()],
+      ]
+    : [];
+
+  return (
+    <Dialog open={!!item} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{item?.title ?? 'Transaction details'}</DialogTitle>
+        </DialogHeader>
+        {item && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <p className="text-sm text-muted-foreground">{item.description || 'Transaction'}</p>
+              <p className={cn(
+                'mt-2 text-2xl font-black tabular-nums',
+                item.direction === 'in' && item.status !== 'failed' ? 'text-success' : 'text-foreground',
+              )}>
+                {item.direction === 'in' ? '+' : '-'}₦{item.amountFormatted}
+              </p>
+            </div>
+            {loading && <p className="text-xs text-muted-foreground">Refreshing details…</p>}
+            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {rows.map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-border p-3">
+                  <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    {label}
+                  </dt>
+                  <dd className="mt-1 break-words text-sm font-semibold text-foreground">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

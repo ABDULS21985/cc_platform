@@ -12,6 +12,7 @@ class NotificationAmountSchema(Schema):
 class NotificationResponseSchema(Schema):
     id = fields.Integer()
     user_id = fields.Integer()
+    community_id = fields.Integer(allow_none=True)
     category = fields.String()
     title = fields.String()
     body = fields.String()
@@ -36,6 +37,7 @@ class NotificationListQuerySchema(Schema):
     category = fields.String(
         load_default=None, validate=validate.OneOf(list(CATEGORIES))
     )
+    community_id = fields.Integer(load_default=None, allow_none=True)
 
 
 class NotificationListResponseSchema(Schema):

@@ -56,6 +56,7 @@ class NotificationService:
 
         notif = self.repo.create(
             user_id=user_id,
+            community_id=community_id,
             category=category,
             title=title,
             body=body or '',
@@ -89,6 +90,7 @@ class NotificationService:
         offset: int = 0,
         unread_only: bool = False,
         category: Optional[str] = None,
+        community_id: Optional[int] = None,
     ) -> Tuple[Dict[str, Any], int]:
         items, total = self.repo.list_for_user(
             user_id=user_id,
@@ -96,6 +98,7 @@ class NotificationService:
             offset=offset,
             unread_only=unread_only,
             category=category if category in CATEGORIES else None,
+            community_id=community_id,
         )
         unread_count = self.repo.count_unread(user_id)
         return {
@@ -136,6 +139,12 @@ class NotificationService:
         # Always emit every category so the frontend doesn't have to defensively check.
         full = {c: counts.get(c, 0) for c in CATEGORIES}
         return {'unread_by_category': full, 'total': sum(full.values())}, 200
+
+    def unread_for_community(
+        self, user_id: int, community_id: int
+    ) -> Tuple[Dict[str, Any], int]:
+        count = self.repo.count_unread_for_community(user_id, community_id)
+        return {'community_id': community_id, 'unread_count': count}, 200
 
     def list_muted_communities(self, user_id: int) -> Tuple[Dict[str, Any], int]:
         return {'community_ids': self.repo.list_muted_community_ids(user_id)}, 200

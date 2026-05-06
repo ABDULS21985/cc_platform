@@ -256,3 +256,13 @@ class WalletService:
         """
         wallet = self.wallet_repo.find_by_user_id(user_id)
         return wallet is not None
+
+    def get_wallet_transaction(self, user_id: int, transaction_id: int) -> Optional[Dict[str, Any]]:
+        """Return one transaction only when it belongs to the user's wallet."""
+        wallet = self.wallet_repo.find_by_user_id(user_id)
+        if not wallet:
+            return None
+        txn = self.transaction_repo.find_by_id(transaction_id)
+        if not txn or txn.wallet_id != wallet.id:
+            return None
+        return txn.to_dict()

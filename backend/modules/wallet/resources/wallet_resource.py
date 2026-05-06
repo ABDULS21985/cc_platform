@@ -128,6 +128,36 @@ class WalletTransactionsResource(MethodView):
             return response, status
 
 
+@wallet_blp.route('/transactions/<int:transaction_id>')
+class WalletTransactionDetailResource(MethodView):
+    """Get one wallet transaction for the logged-in user."""
+
+    @wallet_blp.response(200, TransactionResponseSchema, description='Transaction retrieved successfully')
+    @wallet_blp.alt_response(404, schema=WalletErrorSchema, description='Transaction not found')
+    @token_required
+    def get(self, transaction_id, current_user=None):
+        try:
+            service = WalletService()
+            transaction = service.get_wallet_transaction(current_user.id, transaction_id)
+            if not transaction:
+                response, status = format_error(
+                    error="transaction_not_found",
+                    message="Transaction not found",
+                    status_code=404,
+                )
+                return response, status
+            response, status = format_data(
+                data={"transaction": transaction},
+                message="Transaction retrieved successfully",
+                status_code=200,
+            )
+            return response, status
+        except Exception as e:
+            logger.error(f"Error getting transaction {transaction_id} for user {current_user.id}: {str(e)}", exc_info=True)
+            response, status = format_internal_error("An error occurred while fetching transaction")
+            return response, status
+
+
 @wallet_blp.route('/summary')
 class WalletSummaryResource(MethodView):
     """Get wallet summary with balance and statistics"""

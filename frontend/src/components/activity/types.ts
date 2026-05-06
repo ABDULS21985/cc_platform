@@ -30,6 +30,8 @@ export interface ActivityItem {
   fee?: number;
   /** Bank reference / transaction ref. */
   reference?: string;
+  /** Original backend row used for the transaction detail view. */
+  raw?: Record<string, unknown>;
 }
 
 export type ActivityPeriod = 'today' | '7d' | '30d' | '90d' | 'all';

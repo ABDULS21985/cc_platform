@@ -200,6 +200,12 @@ export interface TransactionList {
   pagination: Pagination;
 }
 
+export interface TransactionDetailResponse {
+  success: boolean;
+  message: string;
+  data: { transaction: TransactionData };
+}
+
 export interface TransactionResponse {
   success: boolean;
   message: string;
@@ -797,6 +803,9 @@ export const ApiService = {
       axiosInstance.get<TransactionResponse>("/v2/wallet/transactions", {
         params,
       }),
+
+    getTransaction: (id: number) =>
+      axiosInstance.get<TransactionDetailResponse>(`/v2/wallet/transactions/${id}`),
   },
 
   // =========================================================================

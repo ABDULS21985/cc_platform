@@ -50,13 +50,18 @@ def test_create_persists_when_category_allowed():
     svc = _make_service(pref=_FakePref(money=True))
     with patch('extension.extensions.get_socketio', return_value=None):
         result = svc.create_for_user(
-            user_id=1, title='Funded', category='money', source='Wallet',
+            user_id=1,
+            title='Funded',
+            category='money',
+            source='Wallet',
+            community_id=42,
         )
     assert result is not None
     svc.repo.create.assert_called_once()
     kwargs = svc.repo.create.call_args.kwargs
     assert kwargs['user_id'] == 1
     assert kwargs['category'] == 'money'
+    assert kwargs['community_id'] == 42
 
 
 def test_create_skipped_when_category_muted():
@@ -130,6 +135,18 @@ def test_unread_by_category_returns_all_keys():
         'events': 0, 'security': 0, 'system': 0,
     }
     assert result['total'] == 4
+
+
+def test_unread_for_community_delegates_to_repo():
+    svc = NotificationService()
+    svc.repo = MagicMock()
+    svc.repo.count_unread_for_community.return_value = 6
+
+    result, status = svc.unread_for_community(user_id=1, community_id=42)
+
+    assert status == 200
+    assert result == {'community_id': 42, 'unread_count': 6}
+    svc.repo.count_unread_for_community.assert_called_once_with(1, 42)
 
 
 def test_mute_and_unmute_community_delegate_to_repo():

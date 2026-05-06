@@ -45,6 +45,7 @@ class NotificationCollectionResource(MethodView):
                 offset=args.get('offset', 0),
                 unread_only=args.get('unread_only', False),
                 category=args.get('category'),
+                community_id=args.get('community_id'),
             )
             return format_data(data=result, message='Notifications retrieved', status_code=status)
         except Exception as exc:
@@ -124,6 +125,24 @@ class NotificationUnreadByCategoryResource(MethodView):
             return format_data(data=result, message='OK', status_code=status)
         except Exception as exc:
             logger.error('Error counting per-category unread: %s', exc, exc_info=True)
+            return format_internal_error(str(exc))
+
+
+@notification_blp.route('/communities/<int:community_id>/unread-count')
+class NotificationCommunityUnreadCountResource(MethodView):
+    """Unread notification count scoped to one community."""
+
+    @token_required
+    @notification_blp.response(200, NotificationListResponseSchema)
+    def get(self, community_id, current_user=None):
+        try:
+            result, status = notification_service.unread_for_community(
+                current_user.id,
+                community_id,
+            )
+            return format_data(data=result, message='OK', status_code=status)
+        except Exception as exc:
+            logger.error('Error counting community unread: %s', exc, exc_info=True)
             return format_internal_error(str(exc))
 
 
