@@ -28,6 +28,18 @@ class CommunityPostListQuerySchema(Schema):
         load_default=False,
         metadata={'description': 'Return only pinned posts'},
     )
+    sort = fields.String(
+        load_default='recent',
+        validate=validate.OneOf(['recent', 'popular', 'newest']),
+        metadata={
+            'description': (
+                'Ordering for the feed. '
+                '`recent` (default): pinned-first then created_at desc. '
+                '`newest`: strict chronological created_at desc, no pinned bias. '
+                '`popular`: weighted (reactions + comments*2) over the last 14 days, then created_at desc.'
+            )
+        },
+    )
 
 
 class CommunityPostCommentListQuerySchema(Schema):
@@ -129,6 +141,19 @@ class CreateCommunityPostCommentSchema(Schema):
         required=True,
         validate=validate.Length(min=1, max=2000),
         metadata={'description': 'Comment body text'},
+    )
+
+
+class UpdateCommunityPostCommentSchema(Schema):
+    """Schema for updating a post comment.
+
+    Only the body is mutable post-creation; threading metadata is immutable.
+    """
+
+    body = fields.String(
+        required=True,
+        validate=validate.Length(min=1, max=2000),
+        metadata={'description': 'Updated comment body text'},
     )
 
 

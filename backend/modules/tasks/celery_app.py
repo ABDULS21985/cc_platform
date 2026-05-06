@@ -84,14 +84,22 @@ def make_celery() -> Celery:
         worker_task_log_format='[%(asctime)s: %(levelname)s/%(processName)s] [%(task_name)s(%(task_id)s)] %(message)s',
 
         beat_schedule={
-            'execute-due-subscriptions-every-5-minutes': {
-                'task': 'modules.tasks.subscription_tasks.execute_due_subscriptions',
-                'schedule': 300.0,
-                'args': (100,),
+            'process-due-subscriptions': {
+                'task': 'tasks.process_due_subscriptions',
+                'schedule': 300.0,  # every 5 minutes
             },
         },
     )
-    
+
+    # Defensive: tolerate older deployments where beat_schedule may be unset.
+    if not getattr(celery_app.conf, 'beat_schedule', None):
+        celery_app.conf.beat_schedule = {
+            'process-due-subscriptions': {
+                'task': 'tasks.process_due_subscriptions',
+                'schedule': 300.0,
+            },
+        }
+
     return celery_app
 
 

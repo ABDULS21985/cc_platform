@@ -91,14 +91,18 @@ class CommunityPostListResource(MethodView):
                 return format_error(error='forbidden', message=error, status_code=403)
 
             posts, total = result
+            limit = args.get('limit', 20)
+            offset = args.get('offset', 0)
             return format_data(
                 data={
                     'posts': [post.to_dict(current_user_id=current_user.id) for post in posts],
                     'pagination': {
                         'total': total,
-                        'limit': args.get('limit', 20),
-                        'offset': args.get('offset', 0),
+                        'limit': limit,
+                        'offset': offset,
+                        'has_more': (offset + len(posts)) < total,
                     },
+                    'sort': args.get('sort', 'recent'),
                 },
                 message='Community posts retrieved successfully',
                 status_code=200,

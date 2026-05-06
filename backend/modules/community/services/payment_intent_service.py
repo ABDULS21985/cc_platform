@@ -22,6 +22,7 @@ from modules.community.repositories import (
 from modules.auth_v2.extensions import db
 from modules.wallet.models.wallet import Wallet
 from modules.wallet.models.wallet_transaction import WalletTransaction
+from modules.core.response_formatter import format_not_found
 
 logger = logging.getLogger(__name__)
 
@@ -293,17 +294,17 @@ class PaymentIntentService:
         
         return True, None
     
-    def get_payment_status(self, bill_id: int) -> Dict[str, Any]:
-        """Get payment status for bill"""
+    def get_payment_status(self, bill_id: int):
+        """Get payment status for a bill.
+
+        Returns the status dict on success, or a ``(response, status)`` tuple
+        produced by :func:`format_not_found` when the underlying bill does
+        not exist so the resource layer can propagate the 404 directly.
+        """
         bill = self.bill_repo.find_by_id(bill_id)
         if not bill:
-            return {
-                'success': False,
-                'error': 'not_found',
-                'message': 'Bill not found',
-                'bill_id': bill_id,
-            }
-        
+            return format_not_found("Payment")
+
         return {
             'bill_id': bill_id,
             'total_amount': float(bill.amount),

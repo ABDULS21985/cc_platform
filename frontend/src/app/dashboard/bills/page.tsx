@@ -360,8 +360,14 @@ export default function BillsPage() {
     (async () => {
       setLoading(true);
       try {
-        const profileRes = await ApiService.profile.get();
-        const real = await fetchAggregatedBills(profileRes.data?.data?.id);
+        let currentUserId: number | undefined;
+        try {
+          const profileRes = await ApiService.profile.get();
+          currentUserId = profileRes.data?.data?.id;
+        } catch {
+          currentUserId = undefined;
+        }
+        const real = await fetchAggregatedBills(currentUserId);
         if (cancelled) return;
         if (real.length === 0) {
           setBills(useDemoData() ? MOCK_BILLS : []);

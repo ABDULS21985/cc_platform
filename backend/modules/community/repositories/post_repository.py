@@ -3,8 +3,10 @@ Community Post Repository
 Data access layer for community feed posts and mentions.
 """
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from modules.auth_v2.extensions import db
@@ -58,8 +60,31 @@ class CommunityPostRepository:
         post_type: Optional[str] = None,
         pinned_only: bool = False,
         status: str = CommunityPostStatus.ACTIVE.value,
+        sort: str = 'recent',
     ) -> Tuple[List[CommunityPost], int]:
-        """List posts for a community ordered with pinned posts first."""
+        """List posts for a community with pluggable ordering.
+
+        Sort options:
+            ``recent``  (default) — pinned-first, then ``created_at`` desc.
+            ``newest``  — strict ``created_at`` desc; pinned posts are NOT
+                          floated to the top so the FE can render a strict
+                          chronological view.
+            ``popular`` — weighted score ``reactions_count + comments_count * 2``
+                          over the last 14 days, with ``created_at`` desc as
+                          the tiebreaker.
+
+        Args:
+            community_id: Owning community.
+            limit/offset: Pagination window.
+            post_type: Optional post-type filter (post / announcement / …).
+            pinned_only: If True, restrict the result set to pinned posts.
+            status: Status filter (defaults to active).
+            sort: One of ``recent`` | ``newest`` | ``popular``.
+
+        Returns:
+            ``(posts, total)`` — total reflects the filtered set so the FE
+            can render `total` and `has_more` for infinite scroll.
+        """
         query = self._base_query().filter(CommunityPost.community_id == community_id)
         if status:
             query = query.filter(CommunityPost.status == status)
@@ -68,11 +93,79 @@ class CommunityPostRepository:
         if pinned_only:
             query = query.filter(CommunityPost.is_pinned.is_(True))
 
+        sort = (sort or 'recent').lower()
+
+        if sort == 'newest':
+            # Strict chronological — exclude the pinned-first bias so this
+            # variant can power "All posts in chronological order" UIs.
+            query = query.filter(CommunityPost.is_pinned.is_(False))
+            total = query.count()
+            posts = (
+                query.order_by(CommunityPost.created_at.desc(), CommunityPost.id.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return posts, total
+
+        if sort == 'popular':
+            # Weighted score over the last 14 days; subqueries are filtered
+            # to the same window so we don't return stale-but-popular posts.
+            window_start = datetime.utcnow() - timedelta(days=14)
+            query = query.filter(CommunityPost.created_at >= window_start)
+
+            reactions_subq = (
+                db.session.query(
+                    CommunityPostReaction.post_id.label('post_id'),
+                    func.count(CommunityPostReaction.id).label('cnt'),
+                )
+                .group_by(CommunityPostReaction.post_id)
+                .subquery()
+            )
+            comments_subq = (
+                db.session.query(
+                    CommunityPostComment.post_id.label('post_id'),
+                    func.count(CommunityPostComment.id).label('cnt'),
+                )
+                .filter(CommunityPostComment.status == CommunityPostStatus.ACTIVE.value)
+                .group_by(CommunityPostComment.post_id)
+                .subquery()
+            )
+
+            query = (
+                query.outerjoin(reactions_subq, reactions_subq.c.post_id == CommunityPost.id)
+                .outerjoin(comments_subq, comments_subq.c.post_id == CommunityPost.id)
+            )
+            score_expr = (
+                func.coalesce(reactions_subq.c.cnt, 0)
+                + func.coalesce(comments_subq.c.cnt, 0) * 2
+            )
+
+            total = query.count()
+            posts = (
+                query.order_by(
+                    score_expr.desc(),
+                    CommunityPost.created_at.desc(),
+                    CommunityPost.id.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            return posts, total
+
+        # Default: pinned-first then chronological.
         total = query.count()
-        posts = query.order_by(
-            CommunityPost.is_pinned.desc(),
-            CommunityPost.created_at.desc(),
-        ).offset(offset).limit(limit).all()
+        posts = (
+            query.order_by(
+                CommunityPost.is_pinned.desc(),
+                CommunityPost.created_at.desc(),
+                CommunityPost.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         return posts, total
 
     def replace_mentions(self, post: CommunityPost, mentioned_user_ids: List[int]) -> None:
