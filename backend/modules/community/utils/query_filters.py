@@ -81,13 +81,41 @@ class MemberFilter(BaseFilter):
     """Filter for CommunityMember list queries."""
 
     def apply(self) -> "MemberFilter":
+        from modules.community.models.community_member import CommunityMember
+        from modules.auth_v2.models.user import User
+        from sqlalchemy import or_
+
         args = self._args
 
-        if status := args.get("status"):
+        # ``mentionable`` is a UX-level alias used by the @-autocomplete in
+        # the post composer. It pins status to "active" regardless of any
+        # caller-supplied status (we intentionally don't expose suspended /
+        # left users to the mention picker).
+        mentionable = bool(args.get("mentionable"))
+        if mentionable:
+            self._query = self._query.filter_by(status="active")
+        elif status := args.get("status"):
             self._query = self._query.filter_by(status=status)
 
         if role := args.get("role"):
             self._query = self._query.filter_by(role=role)
+
+        # Prefix search across firstname/lastname/email. We use ILIKE with a
+        # trailing wildcard so the FE autocomplete behaves like a typical
+        # mention picker — typing 'sa' → 'sam', 'sarah', 'sandra@…'.
+        if q := args.get("q"):
+            term = q.strip()
+            if term:
+                pattern = f"{term}%"
+                self._query = self._query.join(
+                    User, User.id == CommunityMember.user_id
+                ).filter(
+                    or_(
+                        User.firstname.ilike(pattern),
+                        User.lastname.ilike(pattern),
+                        User.email.ilike(pattern),
+                    )
+                )
 
         return self
 
@@ -100,5 +128,8 @@ class BillFilter(BaseFilter):
 
         if status := args.get("status"):
             self._query = self._query.filter_by(status=status)
+
+        if expense_kind := args.get("expense_kind"):
+            self._query = self._query.filter_by(expense_kind=expense_kind)
 
         return self

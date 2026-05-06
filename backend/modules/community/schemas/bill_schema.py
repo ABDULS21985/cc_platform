@@ -48,6 +48,15 @@ class CreateBillSchema(Schema):
             'example': 'fixed'
         }
     )
+
+    expense_kind = fields.String(
+        load_default='bill',
+        validate=validate.OneOf(['bill', 'campaign', 'split_payment']),
+        metadata={
+            'description': 'Bill surface/source',
+            'example': 'campaign',
+        },
+    )
     
     min_amount = fields.Decimal(
         load_default=Decimal('0.0'),
@@ -125,6 +134,11 @@ class UpdateBillSchema(Schema):
     type = fields.String(
         validate=validate.OneOf(BillType.values()),
         metadata={'description': 'Bill type'}
+    )
+
+    expense_kind = fields.String(
+        validate=validate.OneOf(['bill', 'campaign', 'split_payment']),
+        metadata={'description': 'Bill surface/source'}
     )
     
     min_amount = fields.Decimal(
@@ -216,6 +230,11 @@ class BillListQuerySchema(Schema):
         validate=validate.OneOf(['draft', 'active', 'closed', 'settled']),
         metadata={'description': 'Filter by bill status'}
     )
+    expense_kind = fields.String(
+        load_default=None,
+        validate=validate.OneOf(['bill', 'campaign', 'split_payment']),
+        metadata={'description': 'Filter by bill surface/source'}
+    )
     limit = fields.Integer(
         load_default=50,
         validate=validate.Range(min=1, max=200),
@@ -241,6 +260,7 @@ class BillDataSchema(Schema):
     description = fields.String(allow_none=True, metadata={'description': 'Description'})
     amount = fields.Float(metadata={'description': 'Bill amount'})
     type = fields.String(metadata={'description': 'fixed or free_will'})
+    expense_kind = fields.String(metadata={'description': 'bill, campaign, or split_payment'})
     min_amount = fields.Float(metadata={'description': 'Minimum amount'})
     status = fields.String(metadata={'description': 'Bill status'})
     is_recurring = fields.Boolean(metadata={'description': 'Is recurring'})

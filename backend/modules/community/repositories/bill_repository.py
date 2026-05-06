@@ -42,6 +42,7 @@ class BillRepository:
                 description=data.get('description'),
                 amount=data['amount'],
                 type=data.get('type', 'fixed'),
+                expense_kind=data.get('expense_kind', 'bill'),
                 min_amount=data.get('min_amount', 0.0),
                 status=data.get('status', 'active'),
                 is_recurring=data.get('is_recurring', False),
@@ -116,7 +117,17 @@ class BillRepository:
         if not bill:
             return None
         
-        allowed_fields = ['title', 'description', 'amount', 'min_amount', 'status', 'due_date', 'collected_amount']
+        allowed_fields = [
+            'title',
+            'description',
+            'amount',
+            'type',
+            'expense_kind',
+            'min_amount',
+            'status',
+            'due_date',
+            'collected_amount',
+        ]
         for key, value in data.items():
             if key in allowed_fields:
                 setattr(bill, key, value)

@@ -90,6 +90,13 @@ class Bill(db.Model):
         # 'fixed': Each member pays equal
         # 'free_will': Members donate >= min_amount
     )
+    expense_kind = db.Column(
+        db.String(32),
+        default='bill',
+        nullable=False,
+        index=True,
+        server_default='bill',
+    )
     min_amount = db.Column(
         db.Numeric(15, 2),
         default=Decimal('0.00'),
@@ -188,6 +195,7 @@ class Bill(db.Model):
             'description': self.description,
             'amount': float(self.amount),
             'type': self.type,
+            'expense_kind': self.expense_kind or 'bill',
             'min_amount': float(self.min_amount) if self.min_amount else 0.0,
             'status': self.status,
             'is_recurring': self.is_recurring,

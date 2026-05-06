@@ -60,6 +60,7 @@ class BillService:
                 'description': data.get('description'),
                 'amount': Decimal(str(data['amount'])),
                 'type': data['type'],
+                'expense_kind': data.get('expense_kind', 'bill'),
                 'min_amount': Decimal(str(data.get('min_amount', 0))),
                 'status': BillStatus.ACTIVE.value,
                 'is_recurring': data.get('is_recurring', False),

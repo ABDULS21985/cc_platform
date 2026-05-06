@@ -43,11 +43,14 @@ community_service = CommunityService()
 @member_blp.route('/<int:community_id>/members')
 class CommunityMembersResource(MethodView):
     """List community members"""
-    
+
+    @token_required
     @member_blp.arguments(MemberListQuerySchema, location='query')
     @member_blp.response(200, MemberListResponseSchema, description='Members retrieved')
+    @member_blp.alt_response(401, schema=CommunityErrorSchema, description='Unauthorized')
+    @member_blp.alt_response(403, schema=CommunityErrorSchema, description='Forbidden')
     @member_blp.alt_response(404, schema=CommunityErrorSchema, description='Community not found')
-    def get(self, args, community_id):
+    def get(self, args, community_id, current_user=None):
         """
         List community members
 
@@ -56,11 +59,22 @@ class CommunityMembersResource(MethodView):
             role: Role filter (owner/admin/member)
             limit: Page size (default 50)
             offset: Pagination offset (default 0)
+            q: Optional firstname/lastname/email prefix search (ILIKE q%)
+            mentionable: When true, restrict to active members for the
+                @-autocomplete in the post composer.
         """
         try:
             community, error = community_service.get_community(community_id)
             if error:
                 return format_not_found('Community')
+
+            # Membership requirement: callers must be active members of the
+            # community to view (and especially search/mention) members. The
+            # post-composer mention picker calls this with mentionable=true.
+            if not membership_service.is_member(community_id, current_user.id):
+                return format_forbidden(
+                    'Only active community members can view members'
+                )
 
             limit = args.get('limit', 50)
             offset = args.get('offset', 0)
@@ -108,7 +122,8 @@ class CommunityMembersResource(MethodView):
                         'total': total,
                         'limit': limit,
                         'offset': offset,
-                    }
+                        'has_more': (offset + len(payload)) < total,
+                    },
                 },
                 message='Members retrieved successfully',
                 status_code=200,

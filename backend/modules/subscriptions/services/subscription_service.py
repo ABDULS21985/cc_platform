@@ -396,9 +396,7 @@ class SubscriptionService:
         update_kwargs: Dict[str, Any] = {'next_charge_at': now + timedelta(hours=1)}
         if hasattr(Subscription, 'failure_count'):
             raw_count = getattr(item, 'failure_count', 0) or 0
-            try:
-                raw_count = int(raw_count)
-            except (TypeError, ValueError):
+            if not isinstance(raw_count, int):
                 raw_count = 0
             update_kwargs['failure_count'] = raw_count + 1
         if hasattr(Subscription, 'last_failure_at'):

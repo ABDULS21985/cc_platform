@@ -63,6 +63,26 @@ class MemberListQuerySchema(Schema):
         validate=validate.Range(min=0),
         metadata={'description': 'Pagination offset'}
     )
+    q = fields.String(
+        load_default=None,
+        validate=validate.Length(min=1, max=100),
+        metadata={
+            'description': (
+                'Optional name/email prefix search. Matches firstname, '
+                'lastname or email starting with the provided value '
+                '(case-insensitive).'
+            )
+        },
+    )
+    mentionable = fields.Boolean(
+        load_default=False,
+        metadata={
+            'description': (
+                'When true, restrict results to active members of this '
+                'community (used by the @-autocomplete in the post composer).'
+            )
+        },
+    )
 
 
 # ============================================================
