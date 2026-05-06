@@ -44,6 +44,9 @@ describe('ApiService route mirrors', () => {
     ApiService.communities.getAdminOverview();
     expect(axiosMock.get).toHaveBeenCalledWith('/v2/community/me/overview');
 
+    ApiService.communities.getBillsSummary();
+    expect(axiosMock.get).toHaveBeenCalledWith('/v2/community/me/bills-summary');
+
     ApiService.communities.getOverview(3);
     expect(axiosMock.get).toHaveBeenCalledWith('/v2/community/3/overview');
 

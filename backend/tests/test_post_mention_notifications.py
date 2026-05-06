@@ -25,11 +25,16 @@ def test_handle_mentions_creates_notifications_and_skips_author(monkeypatch):
         community=SimpleNamespace(name="Estate Circle"),
     )
 
-    CommunityPostService()._handle_mentions(post, mentioned_user_ids=[10, 20, 21])
+    created = CommunityPostService()._persist_mention_notifications(
+        post,
+        mentioned_user_ids=[10, 20, 21],
+    )
 
-    assert notif_service.create_for_user.call_count == 2
+    assert len(created) == 2
+    assert notif_service.create_required_for_user.call_count == 2
     notified_user_ids = [
-        call.kwargs["user_id"] for call in notif_service.create_for_user.call_args_list
+        call.kwargs["user_id"] for call in notif_service.create_required_for_user.call_args_list
     ]
     assert notified_user_ids == [20, 21]
-    assert notif_service.create_for_user.call_args_list[0].kwargs["category"] == "communities"
+    assert notif_service.create_required_for_user.call_args_list[0].kwargs["category"] == "communities"
+    assert notif_service.create_required_for_user.call_args_list[0].kwargs["commit"] is False

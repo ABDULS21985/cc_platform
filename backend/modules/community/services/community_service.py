@@ -254,6 +254,35 @@ class CommunityService:
             if membership.role in {MemberRole.OWNER.value, MemberRole.ADMIN.value}
         ]
         return self.repo.find_by_ids(ids, limit=limit, offset=offset)
+
+    def get_user_bills_summary(self, user_id: int) -> dict:
+        """Aggregate open bill totals across all active memberships in one query."""
+        from modules.community.models.bill import Bill
+        from modules.community.models.community_member import CommunityMember
+
+        open_statuses = [BillStatus.ACTIVE.value, 'pending', 'overdue']
+        row = (
+            db.session.query(
+                func.count(Bill.id),
+                func.coalesce(func.sum(Bill.amount), 0),
+            )
+            .join(
+                CommunityMember,
+                CommunityMember.community_id == Bill.community_id,
+            )
+            .filter(
+                CommunityMember.user_id == user_id,
+                CommunityMember.status == MemberStatus.ACTIVE.value,
+                Bill.status.in_(open_statuses),
+                Bill.expense_kind == 'bill',
+            )
+            .first()
+        )
+        count, amount = row if row else (0, 0)
+        return {
+            'bills_due_count': int(count or 0),
+            'bills_due_amount': float(amount or 0),
+        }
     
     def get_community_wallet(self, community_id: int) -> Tuple[Optional[CommunityWallet], Optional[str]]:
         """Get community wallet"""

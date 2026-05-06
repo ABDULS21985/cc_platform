@@ -49,6 +49,8 @@ def init_redis(app):
             continue
 
     if not redis_client:
+        if app.config.get("PRODUCTION"):
+            raise RuntimeError("Redis is required for production Socket.IO and rate-limited notifications")
         app.logger.warning("All Redis connection attempts failed - using Socket.IO without Redis message queue")
         # Create SocketIO without Redis (single-server mode with eventlet)
         _socketio_instance = SocketIO(

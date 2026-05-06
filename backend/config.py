@@ -48,6 +48,13 @@ def _int(value, default=0):
         return default
 
 
+def _required_secret(name: str, fallback: str) -> str:
+    value = os.getenv(name)
+    if (FLASK_ENV == "production" or os.getenv("ENV") == "production") and not value:
+        raise RuntimeError(f"{name} is required when ENV/FLASK_ENV=production")
+    return value or fallback
+
+
 class Config:
     """
     Base Application Configuration
@@ -72,7 +79,7 @@ class Config:
     TESTING = False
     
     # === FLASK ===
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+    SECRET_KEY = _required_secret("SECRET_KEY", "dev-secret-key-change-me")
     FLASK_ENV = FLASK_ENV
     
     # === DATABASE ===
@@ -90,7 +97,7 @@ class Config:
     DB_SSLMODE = os.getenv("DB_SSLMODE", "prefer")
     
     # === AUTHENTICATION ===
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-secret-dev")
+    JWT_SECRET_KEY = _required_secret("JWT_SECRET_KEY", "jwt-secret-dev")
     JWT_ACCESS_TOKEN_EXPIRES = _int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES"), 3600)
     JWT_REFRESH_TOKEN_EXPIRES = _int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES"), 86400)
     JWT_TOKEN_LOCATION = ["headers"]
@@ -187,6 +194,10 @@ class Config:
     # true. Standard production deploys leave this off — admin endpoints are
     # served by an isolated deploy with its own secrets and ACLs.
     ENABLE_ADMIN_API = os.getenv("ENABLE_ADMIN_API", "false").lower() == "true"
+    ENFORCE_PRODUCTION_READINESS = _bool(
+        os.getenv("ENFORCE_PRODUCTION_READINESS"),
+        PRODUCTION or ENV == "staging",
+    )
     
     # === MISC ===
     MESSAGES_PER_PAGE = _int(os.getenv("MESSAGES_PER_PAGE"), 20)
@@ -245,6 +256,4 @@ def from_env(cls):
         return TestingConfig()
     else:
         return DevelopmentConfig()
-
-
 

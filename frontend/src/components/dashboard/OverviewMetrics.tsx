@@ -43,13 +43,12 @@ export function OverviewMetrics() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Kick off the three sources in parallel — wallet summary, recent
-      // transactions for the weekly window, joined communities (then
-      // their bills) for the bills-due tally.
-      const [walletRes, txRes, joinedRes] = await Promise.allSettled([
+      // Kick off the three metric sources in parallel. Bills due is a backend
+      // aggregate so dashboard render does not fan out across memberships.
+      const [walletRes, txRes, billsRes] = await Promise.allSettled([
         ApiService.wallet.getSummary(),
         ApiService.wallet.getTransactions({ limit: 200 }),
-        ApiService.communities.joined({ limit: 50 }),
+        ApiService.communities.getBillsSummary(),
       ]);
       if (cancelled) return;
 
@@ -83,35 +82,12 @@ export function OverviewMetrics() {
         }
       }
 
-      // Bills due across joined communities. We cap parallel calls at 25 so a
-      // power user in 100+ circles doesn't fan out an unbounded burst on every
-      // dashboard render — the count is then suffixed with "+" in the UI.
-      // TODO: replace with a /v2/me/bills aggregate endpoint when the backend
-      // ships one.
-      const COMMUNITY_CAP = 25;
       let billsDueCount = 0;
       let billsDueAmount = 0;
-      if (joinedRes.status === 'fulfilled') {
-        const joined = joinedRes.value.data?.data?.communities ?? [];
-        const sliced = joined.slice(0, COMMUNITY_CAP);
-        const billLists = await Promise.allSettled(
-          sliced.map((c) =>
-            ApiService.communities.getBills(c.id, { limit: 100 }),
-          ),
-        );
-        for (const b of billLists) {
-          // One community failing must not abort the whole metric.
-          if (b.status !== 'fulfilled') continue;
-          const items = ((b.value.data?.data as { bills?: unknown[] })?.bills ?? []) as Array<
-            Record<string, unknown>
-          >;
-          for (const bill of items) {
-            const status = String(bill.status ?? '').toLowerCase();
-            if (status === 'paid' || status === 'completed' || status === 'cancelled') continue;
-            billsDueCount += 1;
-            billsDueAmount += Number(bill.amount ?? 0);
-          }
-        }
+      if (billsRes.status === 'fulfilled') {
+        const summary = billsRes.value.data?.data;
+        billsDueCount = summary?.bills_due_count ?? 0;
+        billsDueAmount = Number(summary?.bills_due_amount ?? 0);
       }
 
       if (!cancelled) {

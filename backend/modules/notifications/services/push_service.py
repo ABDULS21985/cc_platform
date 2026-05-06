@@ -79,12 +79,13 @@ class PushService:
         title: str,
         body: str,
         data: Optional[Dict[str, str]] = None,
+        force: bool = False,
     ) -> Dict:
         """Fan out a push to every active device the user owns. Best-effort."""
         prefs = self.notif_repo.get_or_create_preferences(user_id)
-        if not getattr(prefs, 'channel_push', False):
+        if not force and not getattr(prefs, 'channel_push', False):
             return {'sent': False, 'reason': 'channel_off'}
-        if not prefs.is_enabled(category):
+        if not force and not prefs.is_enabled(category):
             return {'sent': False, 'reason': 'category_muted'}
 
         tokens = self.list_active_for_user(user_id)

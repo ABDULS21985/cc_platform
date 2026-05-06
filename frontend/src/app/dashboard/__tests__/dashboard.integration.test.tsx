@@ -26,6 +26,7 @@ const apiMocks = {
   communities: {
     joined: vi.fn(),
     getBills: vi.fn(),
+    getBillsSummary: vi.fn(),
     getPosts: vi.fn(),
     getMembers: vi.fn(),
   },
@@ -140,6 +141,9 @@ beforeEach(() => {
   apiMocks.communities.getBills.mockResolvedValue({
     data: { data: { bills: [] } },
   });
+  apiMocks.communities.getBillsSummary.mockResolvedValue({
+    data: { data: { bills_due_count: 0, bills_due_amount: 0 } },
+  });
   apiMocks.communities.getPosts.mockResolvedValue({
     data: { data: { posts: [] } },
   });
@@ -220,13 +224,13 @@ describe('VerificationNotice', () => {
 // OverviewMetrics
 // ---------------------------------------------------------------------------
 describe('OverviewMetrics', () => {
-  it('calls wallet summary, transactions, and joined communities in parallel', async () => {
+  it('calls wallet summary, transactions, and bills summary in parallel', async () => {
     const { OverviewMetrics } = await importComponents();
     render(<OverviewMetrics />);
     await waitFor(() => {
       expect(apiMocks.wallet.getSummary).toHaveBeenCalledTimes(1);
       expect(apiMocks.wallet.getTransactions).toHaveBeenCalledWith({ limit: 200 });
-      expect(apiMocks.communities.joined).toHaveBeenCalledWith({ limit: 50 });
+      expect(apiMocks.communities.getBillsSummary).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -264,27 +268,18 @@ describe('OverviewMetrics', () => {
     expect(screen.getByText('−₦20,000.00')).toBeInTheDocument();
   });
 
-  it('aggregates bills_due across joined communities, ignoring paid/cancelled', async () => {
-    apiMocks.communities.joined.mockResolvedValue({
-      data: { data: { communities: [fakeCommunity({ id: 10 }), fakeCommunity({ id: 11, name: 'Runners' })] } },
+  it('renders bills_due from the backend aggregate without community fan-out', async () => {
+    apiMocks.communities.getBillsSummary.mockResolvedValue({
+      data: { data: { bills_due_count: 2, bills_due_amount: 7000 } },
     });
-    apiMocks.communities.getBills.mockImplementation(async (id: number) => ({
-      data: {
-        data: {
-          bills:
-            id === 10
-              ? [fakeBill({ id: 100, amount: 5000 }), fakeBill({ id: 101, amount: 3000, status: 'paid' })]
-              : [fakeBill({ id: 102, amount: 2000 })],
-        },
-      },
-    }));
     const { OverviewMetrics } = await importComponents();
     render(<OverviewMetrics />);
-    // 5000 + 2000 = 7000 across 2 active bills
     await waitFor(() => {
       expect(screen.getByText('7,000.00')).toBeInTheDocument();
     });
     expect(screen.getByText('2 pending')).toBeInTheDocument();
+    expect(apiMocks.communities.joined).not.toHaveBeenCalled();
+    expect(apiMocks.communities.getBills).not.toHaveBeenCalled();
   });
 });
 

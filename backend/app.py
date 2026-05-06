@@ -92,6 +92,10 @@ def create_app():
         from config import Config
         app.config.from_object(Config)
         logger.info(f"✓ Config loaded: ENV={app.config.get('ENV', 'development')}")
+        if app.config.get('ENFORCE_PRODUCTION_READINESS'):
+            from modules.core.production_readiness import assert_runtime_config_ready
+            assert_runtime_config_ready(Config)
+            logger.info("✓ Production readiness configuration checks passed")
         
         # ========== LAYER 3: Setup Extensions ==========
         # Initialize Swagger configuration (must be done before creating Swagger instance)
@@ -120,8 +124,10 @@ def create_app():
 
         if app.config.get('PRODUCTION') or app.config.get('SESSION_TYPE') == 'redis':
             if not redis_url:
-                logger.error("PRODUCTION mode but REDIS_URL not set! Using cookie sessions as fallback.")
-                app.config['SESSION_TYPE'] = 'filesystem'  # Fallback to filesystem sessions
+                if app.config.get('PRODUCTION'):
+                    raise RuntimeError("REDIS_URL is required in production")
+                logger.error("SESSION_TYPE=redis but REDIS_URL not set. Falling back to filesystem sessions.")
+                app.config['SESSION_TYPE'] = 'filesystem'
             else:
                 # Ensure Flask-Session uses the correct Redis URL.
                 # IMPORTANT: If Redis is unreachable/misconfigured (TLS issues, wrong port, firewall),
@@ -135,6 +141,10 @@ def create_app():
                     Session(app)
                     logger.info(f"✓ Flask-Session initialized with Redis: {redis_url[:50]}...")
                 except Exception as e:
+                    if app.config.get('PRODUCTION'):
+                        raise RuntimeError(
+                            f"Redis session backend unavailable in production: {type(e).__name__}: {e}"
+                        ) from e
                     logger.error(
                         f"Redis session backend unavailable ({type(e).__name__}): {e}. "
                         "Falling back to filesystem sessions."

@@ -62,9 +62,14 @@ class CommunityPostService:
                 mentioned_user_ids=mentioned_user_ids,
             )
 
+            mention_notifications = self._persist_mention_notifications(
+                post,
+                mentioned_user_ids=mentioned_user_ids,
+            )
             db.session.commit()
             logger.info("Created community post %s by user %s", post.id, author_user_id)
-            self._handle_mentions(post, mentioned_user_ids=mentioned_user_ids)
+            self._dispatch_mention_notifications(post, mention_notifications)
+            self._record_mention_audit(post, mentioned_user_ids=mentioned_user_ids)
             return self.post_repo.find_by_id(post.id), None
 
         except Exception as exc:
@@ -286,13 +291,18 @@ class CommunityPostService:
             post.edited_at = datetime.utcnow()
             self.post_repo.replace_mentions(post, mentioned_user_ids)
 
-            db.session.commit()
-            logger.info("Updated community post %s by user %s", post.id, requester_user_id)
             new_mentions = [
                 user_id for user_id in mentioned_user_ids
                 if user_id not in previous_mentioned_user_ids
             ]
-            self._handle_mentions(post, mentioned_user_ids=new_mentions)
+            mention_notifications = self._persist_mention_notifications(
+                post,
+                mentioned_user_ids=new_mentions,
+            )
+            db.session.commit()
+            logger.info("Updated community post %s by user %s", post.id, requester_user_id)
+            self._dispatch_mention_notifications(post, mention_notifications)
+            self._record_mention_audit(post, mentioned_user_ids=new_mentions)
             return self.post_repo.find_by_id(post.id), None
 
         except Exception as exc:
@@ -362,24 +372,20 @@ class CommunityPostService:
             if not self.member_repo.is_member(community_id, user_id):
                 raise ValueError(f'User {user_id} is not an active member of this community')
 
-    def _handle_mentions(self, post: CommunityPost, mentioned_user_ids: List[int]) -> None:
-        """Fan-out hook for explicit @-mentions on a post.
-
-        Records a per-user audit-log entry for each mentioned user via
-        :class:`AuditService` so the activity surfaces in the recipient's
-        Activity Log (community category). Also emits a structured
-        ``community.post.mentions`` log so the eventual notification
-        fan-out (deferred to a later round — see ``TODO(round-3)`` below) is
-        easy to wire.
-
-        The notifications-module call is wrapped in a defensive try/except so
-        a failing inbox dispatch never bubbles up into post creation.
-        """
+    def _mention_recipients(self, post: CommunityPost, mentioned_user_ids: List[int]) -> List[int]:
         recipients = [user_id for user_id in mentioned_user_ids if user_id != post.author_user_id]
-        if not recipients:
-            return
+        return recipients
 
-        # Structured info log — single source of truth for downstream replay.
+    def _persist_mention_notifications(
+        self,
+        post: CommunityPost,
+        mentioned_user_ids: List[int],
+    ) -> List[object]:
+        """Create required in-app notification rows inside the post transaction."""
+        recipients = self._mention_recipients(post, mentioned_user_ids)
+        if not recipients:
+            return []
+
         logger.info(
             'community.post.mentions',
             extra={
@@ -391,6 +397,50 @@ class CommunityPostService:
                 'mention_count': len(recipients),
             },
         )
+
+        from modules.notifications.services.notification_service import NotificationService
+
+        author_name = post.author.full_name if post.author else 'A member'
+        community_name = post.community.name if post.community else 'your community'
+        service = NotificationService()
+        notifications = []
+        for user_id in recipients:
+            notifications.append(
+                service.create_required_for_user(
+                    user_id=user_id,
+                    title=f"{author_name} mentioned you",
+                    body=f"{author_name} mentioned you in {community_name}.",
+                    category='communities',
+                    source=community_name,
+                    action_href=f"/dashboard/community/{post.community_id}/posts/{post.id}",
+                    action_label='Open post',
+                    community_id=post.community_id,
+                    commit=False,
+                )
+            )
+        return notifications
+
+    def _dispatch_mention_notifications(self, post: CommunityPost, notifications: List[object]) -> None:
+        """Best-effort live socket + push delivery after notification rows commit."""
+        if not notifications:
+            return
+        from modules.notifications.services.notification_service import NotificationService
+
+        service = NotificationService()
+        for notification in notifications:
+            service.emit_live(notification)
+            service.send_push_for_notification(notification, force=True)
+        logger.info(
+            "Post %s dispatched mention notifications %s",
+            post.id,
+            [getattr(n, 'user_id', None) for n in notifications],
+        )
+
+    def _record_mention_audit(self, post: CommunityPost, mentioned_user_ids: List[int]) -> None:
+        """Record audit rows after notification rows are safely committed."""
+        recipients = self._mention_recipients(post, mentioned_user_ids)
+        if not recipients:
+            return
 
         # Best-effort audit fan-out. Lazy import so this module stays
         # importable even if AuditService is temporarily unavailable.
@@ -432,41 +482,3 @@ class CommunityPostService:
                     'mentioned_user_ids': recipients,
                 },
             )
-
-        # Best-effort in-app notification fan-out. The in-app notifications
-        # module is the long-term home for this; we keep the call here behind
-        # a try/except so a partial outage in that module never breaks post
-        # creation. See TODO below for the hardened fan-out.
-        try:
-            from modules.notifications.services.notification_service import NotificationService
-
-            author_name = post.author.full_name if post.author else 'A member'
-            community_name = post.community.name if post.community else 'your community'
-            service = NotificationService()
-            for user_id in recipients:
-                service.create_for_user(
-                    user_id=user_id,
-                    title=f"{author_name} mentioned you",
-                    body=f"{author_name} mentioned you in {community_name}.",
-                    category='communities',
-                    source=community_name,
-                    action_href=f"/dashboard/community/{post.community_id}/posts/{post.id}",
-                    community_id=post.community_id,
-                )
-            logger.info("Post %s notified mentioned users %s", post.id, recipients)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("post mention notification failed for post %s: %s", post.id, exc)
-
-        # TODO(round-3): create Notification rows once notifications module
-        # work lands so the @-tagged user receives a guaranteed in-app + push
-        # fan-out (the call above is best-effort; this round we additionally
-        # rely on the audit row + structured logs above).
-        logger.info(
-            'community.post.mentions.notify_pending',
-            extra={
-                'event': 'community.post.mentions.notify_pending',
-                'post_id': post.id,
-                'community_id': post.community_id,
-                'mentioned_user_ids': recipients,
-            },
-        )

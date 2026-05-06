@@ -466,6 +466,25 @@ class UserAdminOverviewResource(MethodView):
             return format_internal_error('An error occurred while retrieving overview')
 
 
+@community_blp.route('/me/bills-summary')
+class UserBillsSummaryResource(MethodView):
+    """Aggregate open bill totals for the authenticated user's memberships."""
+
+    @token_required
+    @community_blp.response(200, description='User bills summary retrieved')
+    def get(self, current_user=None):
+        try:
+            payload = community_service.get_user_bills_summary(current_user.id)
+            return format_data(
+                data=payload,
+                message='Bills summary retrieved successfully',
+                status_code=200,
+            )
+        except Exception as e:
+            logger.error(f"Error getting user bills summary: {str(e)}", exc_info=True)
+            return format_internal_error('An error occurred while retrieving bills summary')
+
+
 @community_blp.route('/<int:community_id>/overview')
 class CommunityAdminOverviewResource(MethodView):
     """Community overview for owner/admin dashboard (scoped)."""

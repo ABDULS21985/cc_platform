@@ -100,6 +100,24 @@ def test_create_skipped_when_community_muted():
     svc.repo.create.assert_not_called()
 
 
+def test_create_required_bypasses_mutes_and_uses_existing_transaction():
+    svc = _make_service(pref=_FakePref(communities=False), muted_communities={42})
+    result = svc.create_required_for_user(
+        user_id=1,
+        title='Mentioned',
+        category='communities',
+        community_id=42,
+        commit=False,
+    )
+    assert result is not None
+    svc.repo.get_or_create_preferences.assert_not_called()
+    svc.repo.is_community_muted.assert_not_called()
+    kwargs = svc.repo.create.call_args.kwargs
+    assert kwargs['commit'] is False
+    assert kwargs['category'] == 'communities'
+    assert kwargs['community_id'] == 42
+
+
 def test_security_bypasses_community_mute():
     """Security category must override per-community mutes too."""
     svc = _make_service(muted_communities={42})

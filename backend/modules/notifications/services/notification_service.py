@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Tuple, Dict, Any
 
 from modules.notifications.models.notification import CATEGORIES
+from modules.notifications.models.notification import Notification
 from modules.notifications.repositories.notification_repository import NotificationRepository
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,82 @@ class NotificationService:
         except Exception as exc:
             logger.debug('socket emit for notification failed: %s', exc)
         return notif
+
+    def create_required_for_user(
+        self,
+        user_id: int,
+        title: str,
+        body: str = '',
+        category: str = 'system',
+        source: str = 'System',
+        action_href: Optional[str] = None,
+        action_label: Optional[str] = None,
+        amount_value: Optional[str] = None,
+        amount_direction: Optional[str] = None,
+        initials: Optional[str] = None,
+        community_id: Optional[int] = None,
+        commit: bool = False,
+    ) -> Notification:
+        """Persist a non-optional notification row.
+
+        Used for direct user-targeted notifications such as explicit @mentions.
+        It bypasses category and community mute preferences because the user was
+        directly addressed. Callers can set ``commit=False`` to include the row
+        in their current transaction.
+        """
+        if category not in CATEGORIES:
+            category = 'system'
+        return self.repo.create(
+            commit=commit,
+            user_id=user_id,
+            community_id=community_id,
+            category=category,
+            title=title,
+            body=body or '',
+            source=source or 'System',
+            action_href=action_href,
+            action_label=action_label,
+            amount_value=amount_value,
+            amount_direction=amount_direction,
+            initials=initials,
+        )
+
+    def emit_live(self, notif: Notification) -> None:
+        """Emit a persisted notification over Socket.IO after commit."""
+        try:
+            from extension.extensions import get_socketio
+            sio = get_socketio()
+            if sio is not None:
+                unread = self.repo.count_unread(notif.user_id)
+                sio.emit(
+                    'notification_created',
+                    {'notification': notif.to_dict(), 'unread_count': unread},
+                    room=f'notifications_{notif.user_id}',
+                )
+        except Exception as exc:
+            logger.debug('socket emit for notification failed: %s', exc)
+
+    def send_push_for_notification(self, notif: Notification, *, force: bool = False) -> Dict:
+        """Send an FCM push for an already persisted notification."""
+        try:
+            from modules.notifications.services.push_service import PushService
+
+            return PushService().send_to_user(
+                user_id=notif.user_id,
+                category=notif.category,
+                title=notif.title,
+                body=notif.body,
+                data={
+                    'notification_id': str(notif.id),
+                    'category': notif.category,
+                    'action_href': notif.action_href or '',
+                    'community_id': str(notif.community_id or ''),
+                },
+                force=force,
+            )
+        except Exception as exc:
+            logger.warning('push delivery for notification %s failed: %s', notif.id, exc)
+            return {'sent': False, 'reason': 'error', 'error': str(exc)}
 
     def list(
         self,

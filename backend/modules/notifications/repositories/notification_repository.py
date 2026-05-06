@@ -12,10 +12,13 @@ from sqlalchemy import func as sa_func
 
 
 class NotificationRepository:
-    def create(self, **kwargs) -> Notification:
+    def create(self, commit: bool = True, **kwargs) -> Notification:
         notif = Notification(**kwargs)
         db.session.add(notif)
-        db.session.commit()
+        if commit:
+            db.session.commit()
+        else:
+            db.session.flush()
         return notif
 
     def find_by_id(self, notification_id: int) -> Optional[Notification]:
