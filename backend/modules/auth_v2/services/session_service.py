@@ -37,14 +37,15 @@ def _parse_user_agent(ua: str) -> Tuple[str, str, str]:
         browser = 'Safari'
 
     os = None
-    if 'Mac OS X' in ua or 'macOS' in ua:
-        os = 'macOS'
-    elif 'Windows' in ua:
-        os = 'Windows'
-    elif 'iPhone' in ua or 'iOS' in ua:
+    # Order matters: iOS UAs include "like Mac OS X", so check iPhone/iPad first.
+    if 'iPhone' in ua or 'iPad' in ua or 'iOS' in ua:
         os = 'iOS'
     elif 'Android' in ua:
         os = 'Android'
+    elif 'Mac OS X' in ua or 'macOS' in ua:
+        os = 'macOS'
+    elif 'Windows' in ua:
+        os = 'Windows'
     elif 'Linux' in ua:
         os = 'Linux'
 
