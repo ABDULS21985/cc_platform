@@ -1,7 +1,7 @@
 """expand standing instruction fields
 
-Revision ID: 021_standing_instruction_fields
-Revises: 020_device_tokens
+Revision ID: 023_standing_instruction_fields
+Revises: 022_event_auto_approve
 Create Date: 2026-05-06 16:00:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '021_standing_instruction_fields'
-down_revision = '020_device_tokens'
+revision = '023_standing_instruction_fields'
+down_revision = '022_event_auto_approve'
 branch_labels = None
 depends_on = None
 

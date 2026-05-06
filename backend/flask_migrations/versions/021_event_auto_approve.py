@@ -1,7 +1,7 @@
 """add event auto approve setting
 
-Revision ID: 021_event_auto_approve
-Revises: 020_device_tokens
+Revision ID: 022_event_auto_approve
+Revises: 021_community_post_social
 Create Date: 2026-05-06 12:30:00.000000
 
 """
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '021_event_auto_approve'
-down_revision = '020_device_tokens'
+revision = '022_event_auto_approve'
+down_revision = '021_community_post_social'
 branch_labels = None
 depends_on = None
 

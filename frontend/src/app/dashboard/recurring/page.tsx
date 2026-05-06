@@ -35,6 +35,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1003,17 +1009,45 @@ export default function RecurringPage() {
                                   >
                                     <Trash2 className="size-3.5" aria-hidden="true" />
                                   </Button>
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    aria-label="More options"
-                                  >
-                                    <MoreHorizontal
-                                      className="size-3.5"
-                                      aria-hidden="true"
-                                    />
-                                  </Button>
+                                  <DropdownMenu modal={false}>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label={`More options for ${r.title}`}
+                                        disabled={busyId === r.id}
+                                      >
+                                        <MoreHorizontal
+                                          className="size-3.5"
+                                          aria-hidden="true"
+                                        />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-44">
+                                      <DropdownMenuItem
+                                        onSelect={() => {
+                                          void togglePause(r.id);
+                                        }}
+                                      >
+                                        {r.status === 'active' ? (
+                                          <PauseCircle className="mr-2 size-3.5" aria-hidden="true" />
+                                        ) : (
+                                          <PlayCircle className="mr-2 size-3.5" aria-hidden="true" />
+                                        )}
+                                        {r.status === 'active' ? 'Pause rule' : 'Resume rule'}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onSelect={() => {
+                                          void cancelRule(r.id);
+                                        }}
+                                      >
+                                        <Trash2 className="mr-2 size-3.5" aria-hidden="true" />
+                                        Cancel rule
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                 </div>
                               )}
                               {r.status === 'cancelled' && (
