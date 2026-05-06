@@ -349,6 +349,12 @@ export default function WalletTab({
                 <RefreshCw className="mr-2 size-4" />
                 Refresh wallet
               </DropdownMenuItem>
+              {balanceInfo?.account_number ? (
+                <DropdownMenuItem onClick={handleCopyAccount}>
+                  <Copy className="mr-2 size-4" />
+                  Copy account number
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onClick={() => setDetailsOpen(true)}>
                 <Landmark className="mr-2 size-4" />
                 Wallet details

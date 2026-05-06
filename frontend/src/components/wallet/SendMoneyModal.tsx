@@ -26,6 +26,8 @@ export interface WalletTransferDraft {
   bank_name: string;
   account_name?: string;
   note?: string;
+  /** When true, parent should persist the recipient as a beneficiary on success. */
+  save_beneficiary?: boolean;
 }
 
 export interface WalletTransferPrefill {
@@ -54,6 +56,9 @@ export function SendMoneyModal({
   const [accountName, setAccountName] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const [saveBeneficiary, setSaveBeneficiary] = useState(false);
+  // When prefilled from an existing beneficiary, never re-save by default.
+  const isExistingRecipient = Boolean(initialRecipient?.account_number);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,6 +67,7 @@ export function SendMoneyModal({
     setAccountName(initialRecipient?.account_name ?? '');
     setNote('');
     setAmount('');
+    setSaveBeneficiary(false);
   }, [initialRecipient, isOpen]);
 
   const handleSend = () => {
@@ -74,6 +80,7 @@ export function SendMoneyModal({
         bank_name: initialRecipient?.bank_name || selectedBank?.name || bank,
         account_name: accountName.trim() || undefined,
         note: note.trim() || undefined,
+        save_beneficiary: !isExistingRecipient && saveBeneficiary,
       });
     }
   };
@@ -167,6 +174,18 @@ export function SendMoneyModal({
               className="w-full h-9 rounded-full border border-gray-200 focus:border-[#4ab5ba] focus:ring-1 focus:ring-[#4ab5ba] focus:outline-none"
             />
           </div>
+
+          {!isExistingRecipient ? (
+            <label className="flex items-center gap-2 text-sm text-[#000000] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveBeneficiary}
+                onChange={(e) => setSaveBeneficiary(e.target.checked)}
+                className="size-4 rounded border-gray-300 accent-teal-600"
+              />
+              Save as beneficiary
+            </label>
+          ) : null}
         </div>
 
         <div className="p-4 flex gap-3">

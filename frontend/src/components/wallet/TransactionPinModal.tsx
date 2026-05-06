@@ -5,16 +5,42 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
+/** Maximum number of incorrect-PIN attempts before the modal hard-locks. */
+const MAX_PIN_ATTEMPTS = 3;
+
+/** Shape the parent should report after the server responds. */
+export interface TransactionPinResult {
+  ok: boolean;
+  /** True when the failure was caused by a bad PIN (not network / validation). */
+  pinError?: boolean;
+  /** Optional remaining attempts if the backend exposes one. */
+  attemptsRemaining?: number;
+  /** Server-supplied human-readable message. */
+  message?: string;
+}
+
 interface TransactionPinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Receives the entered PIN. Existing callers that don't need the PIN
-   * can simply ignore the argument. */
-  onConfirm: (pin: string) => void;
+  /**
+   * Called with the entered PIN.
+   * Existing parents that fire-and-forget keep working: returning `void` /
+   * `undefined` means "trust the parent to close on success and toast on error".
+   * Returning a `TransactionPinResult` opts the modal in to inline error
+   * handling (attempt counter, lockout state).
+   */
+  onConfirm: (
+    pin: string,
+  ) => void | TransactionPinResult | Promise<void | TransactionPinResult>;
   title: string;
   confirmButtonText: string;
   /** Show a busy state on the confirm button while the parent dispatches. */
   loading?: boolean;
+  /**
+   * When provided, overrides the modal's internal PIN error text. Useful when
+   * the parent owns transaction state.
+   */
+  errorMessage?: string | null;
 }
 
 export function TransactionPinModal({
@@ -24,20 +50,65 @@ export function TransactionPinModal({
   title,
   confirmButtonText,
   loading = false,
+  errorMessage = null,
 }: TransactionPinModalProps) {
   const [pin, setPin] = React.useState('');
+  const [pinFailures, setPinFailures] = React.useState(0);
+  const [internalError, setInternalError] = React.useState<string | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  // Reset the PIN whenever the dialog closes so a stale value never gets reused.
+  // Reset state whenever the dialog opens/closes so a stale value never gets reused.
   React.useEffect(() => {
-    if (!isOpen) setPin('');
+    if (!isOpen) {
+      setPin('');
+      setPinFailures(0);
+      setInternalError(null);
+      setSubmitting(false);
+    }
   }, [isOpen]);
 
-  const isValid = pin.length === 4;
+  const lockedOut = pinFailures >= MAX_PIN_ATTEMPTS;
+  const isLocallyValid = pin.length === 4;
+  const busy = loading || submitting;
 
-  const handleConfirm = () => {
-    if (!isValid || loading) return;
-    onConfirm(pin);
+  const visibleError = errorMessage ?? internalError;
+
+  const handleConfirm = async () => {
+    if (!isLocallyValid || busy || lockedOut) return;
+    setInternalError(null);
+    try {
+      setSubmitting(true);
+      const result = await Promise.resolve(onConfirm(pin));
+      if (result && typeof result === 'object' && 'ok' in result) {
+        if (result.ok) {
+          // Parent will typically close us; nothing to do.
+          return;
+        }
+        if (result.pinError) {
+          const next = pinFailures + 1;
+          setPinFailures(next);
+          const remaining =
+            typeof result.attemptsRemaining === 'number'
+              ? result.attemptsRemaining
+              : Math.max(MAX_PIN_ATTEMPTS - next, 0);
+          setInternalError(
+            remaining > 0
+              ? `Incorrect PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+              : 'Too many attempts. Try again in a few minutes.',
+          );
+          setPin('');
+        } else if (result.message) {
+          setInternalError(result.message);
+        }
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  const helperText = lockedOut
+    ? 'Too many attempts. Try again in a few minutes.'
+    : '4 digit transaction PIN.';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -60,14 +131,30 @@ export function TransactionPinModal({
               autoComplete="one-time-code"
               maxLength={4}
               value={pin}
+              disabled={busy || lockedOut}
+              aria-invalid={Boolean(visibleError) || lockedOut}
+              aria-describedby={visibleError ? 'transaction-pin-error' : 'transaction-pin-helper'}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleConfirm();
+                if (e.key === 'Enter') void handleConfirm();
               }}
             />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              4 digit transaction PIN.
-            </p>
+            {visibleError ? (
+              <p
+                id="transaction-pin-error"
+                role="alert"
+                className="mt-1 text-[11px] font-medium text-destructive"
+              >
+                {visibleError}
+              </p>
+            ) : (
+              <p
+                id="transaction-pin-helper"
+                className="mt-1 text-[11px] text-muted-foreground"
+              >
+                {helperText}
+              </p>
+            )}
           </div>
         </div>
 
@@ -75,15 +162,15 @@ export function TransactionPinModal({
           <Button
             onClick={onClose}
             variant="outline"
-            disabled={loading}
+            disabled={busy}
             className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
           >
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={!isValid || loading}
-            loading={loading}
+            disabled={!isLocallyValid || busy || lockedOut}
+            loading={busy}
             className="flex-1 bg-teal-600 hover:bg-teal-700 text-white"
           >
             {confirmButtonText}
