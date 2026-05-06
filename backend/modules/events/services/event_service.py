@@ -96,10 +96,17 @@ class EventService:
         self,
         user_id: int,
         scope: str = 'upcoming',
+        community_id: Optional[int] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> Tuple[Dict[str, Any], int]:
-        items, total = self.repo.list_for_user(user_id, limit=limit, offset=offset, scope=scope)
+        items, total = self.repo.list_for_user(
+            user_id,
+            limit=limit,
+            offset=offset,
+            scope=scope,
+            community_id=community_id,
+        )
         events = []
         for ev in items:
             events.append(

@@ -30,6 +30,7 @@ class EventListQuerySchema(Schema):
         load_default='upcoming',
         validate=validate.OneOf(['upcoming', 'live', 'hosting', 'past', 'all', 'suggested']),
     )
+    community_id = fields.Integer(load_default=None, allow_none=True)
     limit = fields.Integer(load_default=100, validate=validate.Range(min=1, max=200))
     offset = fields.Integer(load_default=0, validate=validate.Range(min=0))
 

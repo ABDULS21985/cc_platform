@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -31,10 +31,66 @@ function dateChip(iso: string): { day: number; month: string } {
   };
 }
 
+function icsDate(iso: string): string {
+  return new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
+function escapeIcs(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
 export function EventsRightRail() {
   const [live, setLive] = useState<EventApi[]>([]);
   const [suggested, setSuggested] = useState<EventApi[]>([]);
   const [loading, setLoading] = useState(true);
+  const calendarEvents = useMemo(() => {
+    const seen = new Set<number>();
+    return [...live, ...suggested].filter((event) => {
+      if (seen.has(event.id)) return false;
+      seen.add(event.id);
+      return true;
+    });
+  }, [live, suggested]);
+
+  const exportCalendar = () => {
+    if (calendarEvents.length === 0) return;
+
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//CCPay//Events//EN',
+      ...calendarEvents.flatMap((event) => {
+        const startsAt = new Date(event.starts_at);
+        const endsAt = event.ends_at
+          ? new Date(event.ends_at)
+          : new Date(startsAt.getTime() + 60 * 60 * 1000);
+        return [
+          'BEGIN:VEVENT',
+          `UID:ccpay-event-${event.id}@ccpay`,
+          `DTSTAMP:${icsDate(new Date().toISOString())}`,
+          `DTSTART:${icsDate(startsAt.toISOString())}`,
+          `DTEND:${icsDate(endsAt.toISOString())}`,
+          `SUMMARY:${escapeIcs(event.title)}`,
+          `DESCRIPTION:${escapeIcs(event.description || event.community_name || 'CCPay event')}`,
+          `LOCATION:${escapeIcs(event.location || (event.is_online ? 'Online' : ''))}`,
+          'END:VEVENT',
+        ];
+      }),
+      'END:VCALENDAR',
+    ];
+
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'ccpay-events.ics';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -232,9 +288,10 @@ export function EventsRightRail() {
             size="sm"
             variant="outline"
             className="w-full"
-            disabled
+            disabled={calendarEvents.length === 0}
+            onClick={exportCalendar}
           >
-            Coming soon
+            Export .ics
           </Button>
         </CardContent>
       </Card>

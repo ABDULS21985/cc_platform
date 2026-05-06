@@ -1,185 +1,197 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Calendar, Clock, MapPin, Users } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ApiService, type EventApi } from '@/services/api';
 
 interface EventsTabProps {
+  communityId: number;
   communityName: string;
 }
 
-interface Event {
-  id: string;
-  title: string;
-  host: string;
-  isPrivate: boolean;
-  date: string;
-  time: string;
-  location: string;
-  attendees: number;
-  imagePlaceholder: string;
-  attendeesAvatars: string[];
+type TabValue = 'ongoing' | 'upcoming' | 'past';
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
-export function EventsTab({ communityName }: EventsTabProps) {
-  const [activeTab, setActiveTab] = useState<'ongoing' | 'upcoming' | 'past'>(
-    'ongoing'
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function emptyCopy(tab: TabValue): string {
+  if (tab === 'ongoing') return 'No live events at the moment';
+  if (tab === 'upcoming') return 'No upcoming events at the moment';
+  return 'No past events to display';
+}
+
+export function EventsTab({ communityId, communityName }: EventsTabProps) {
+  const [activeTab, setActiveTab] = useState<TabValue>('ongoing');
+  const [events, setEvents] = useState<EventApi[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await ApiService.events.list({
+          scope: 'all',
+          community_id: communityId,
+          limit: 100,
+        });
+        if (!cancelled) {
+          setEvents(res.data?.data?.events ?? []);
+        }
+      } catch {
+        if (!cancelled) setEvents([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [communityId]);
+
+  const filtered = useMemo(
+    () =>
+      events.filter((event) => {
+        if (activeTab === 'ongoing') return event.status === 'live';
+        if (activeTab === 'upcoming') return event.status === 'upcoming';
+        return event.status === 'past';
+      }),
+    [activeTab, events],
   );
 
-  const events: Event[] = [
-    {
-      id: '1',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: true,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-      attendeesAvatars: [
-        '/images/avatar1.png',
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-      ],
-    },
-    {
-      id: '2',
-      title: 'Virtual Coffee Chat: Networking for Designers',
-      host: '@cryptoacademy',
-      isPrivate: true,
-      date: 'Tue jun 12',
-      time: '11:15pm',
-      location: 'Online zoom',
-      attendees: 200,
-      imagePlaceholder: 'TALK\nLIVE\nSHOW',
-      attendeesAvatars: [
-        '/images/avatar1.png',
-        '/images/avatar2.png',
-        '/images/avatar3.png',
-      ],
-    },
-  ];
+  const counts = useMemo(
+    () => ({
+      ongoing: events.filter((event) => event.status === 'live').length,
+      upcoming: events.filter((event) => event.status === 'upcoming').length,
+      past: events.filter((event) => event.status === 'past').length,
+    }),
+    [events],
+  );
 
   return (
     <div className="space-y-6 bg-white p-4 sm:p-3">
       <div className="rounded-lg">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <Tabs
             value={activeTab}
-            onValueChange={(v) =>
-              setActiveTab(v as 'ongoing' | 'upcoming' | 'past')
-            }
+            onValueChange={(v) => setActiveTab(v as TabValue)}
           >
             <TabsList className="bg-gray-100 p-1">
-              <TabsTrigger
-                value="ongoing"
-                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-[#000000] data-[state=active]:shadow-sm data-[state=inactive]:text-[#525252] data-[state=inactive]:hover:text-[#000000]"
-              >
-                Ongoing
-              </TabsTrigger>
-              <TabsTrigger
-                value="upcoming"
-                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-[#000000] data-[state=active]:shadow-sm data-[state=inactive]:text-[#525252] data-[state=inactive]:hover:text-[#000000]"
-              >
-                Upcoming
-              </TabsTrigger>
-              <TabsTrigger
-                value="past"
-                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-[#000000] data-[state=active]:shadow-sm data-[state=inactive]:text-[#525252] data-[state=inactive]:hover:text-[#000000]"
-              >
-                Past
-              </TabsTrigger>
+              {(['ongoing', 'upcoming', 'past'] as const).map((tab) => (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  className="text-xs capitalize data-[state=active]:bg-white data-[state=active]:text-[#000000] data-[state=active]:shadow-sm data-[state=inactive]:text-[#525252] data-[state=inactive]:hover:text-[#000000] sm:text-sm"
+                >
+                  {tab === 'ongoing' ? 'Live' : tab}
+                  {counts[tab] > 0 && (
+                    <span className="ml-1 tabular-nums">({counts[tab]})</span>
+                  )}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
 
-          <Button className="bg-[#0E9DA5] hover:bg-[#0E9DA5]/90 text-white px-4 py-2 rounded-full">
-            Create event
+          <Button
+            asChild
+            className="rounded-full bg-[#0E9DA5] px-4 py-2 text-white hover:bg-[#0E9DA5]/90"
+          >
+            <Link href="/dashboard/events">Create event</Link>
           </Button>
         </div>
       </div>
 
       <Tabs
         value={activeTab}
-        onValueChange={(v) =>
-          setActiveTab(v as 'ongoing' | 'upcoming' | 'past')
-        }
+        onValueChange={(v) => setActiveTab(v as TabValue)}
       >
-        <TabsContent value="ongoing" className="space-y-6">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              className="bg-[#fafafb] rounded-lg overflow-hidden border border-[#f2f2f3] p-3"
-            >
-              <div className="flex">
-                <div className="w-1/3 p-4">
-                  <img
-                    src="/images/event.svg"
-                    alt="Event banner"
-                    className="w-full h-full object-cover rounded"
-                  />
-                </div>
-
-                <div className="w-full p-4 sm:p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-sm text-[#525252]">
-                      <span className="text-sm font-[500] text-[#000000]">
-                        {event.host}
-                      </span>{' '}
-                      is hosting
-                    </span>
-                    {event.isPrivate && (
-                      <span className="bg-[#fbefe8] text-[#ff984f] text-xs px-2 py-1 rounded-full">
-                        Private
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="text-md sm:text-md font-bold text-[#000000] mb-4">
-                    {event.title}
-                  </h3>
-
-                  <div className="flex items-center gap-3 text-sm text-[#959595] flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>{event.date}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4" />
-                      <span>{event.time}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4" />
-                      <span>{event.location}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      <span>{event.attendees} attendees</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+        <TabsContent value={activeTab} className="space-y-6">
+          {loading ? (
+            <div className="rounded-lg bg-[#fafafb] p-6 text-center">
+              <p className="text-sm text-[#525252]">Loading events...</p>
             </div>
-          ))}
-        </TabsContent>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-lg bg-[#fafafb] p-6 text-center">
+              <p className="text-sm text-[#525252]">{emptyCopy(activeTab)}</p>
+            </div>
+          ) : (
+            filtered.map((event) => (
+              <Link
+                href={`/dashboard/events/${event.id}`}
+                key={event.id}
+                className="block overflow-hidden rounded-lg border border-[#f2f2f3] bg-[#fafafb] p-3 transition-colors hover:border-[#0E9DA5]/40"
+              >
+                <div className="flex">
+                  <div className="w-1/3 p-4">
+                    <img
+                      src={event.cover_image || '/images/event.svg'}
+                      alt=""
+                      className="h-full w-full rounded object-cover"
+                    />
+                  </div>
 
-        <TabsContent value="upcoming" className="space-y-6">
-          <div className="bg-[#fafafb] rounded-lg p-6 text-center">
-            <p className="text-[#525252] text-sm">
-              No upcoming events at the moment
-            </p>
-          </div>
-        </TabsContent>
+                  <div className="w-full p-4 sm:p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-sm text-[#525252]">
+                        <span className="text-sm font-medium text-[#000000]">
+                          {event.community_name || communityName}
+                        </span>{' '}
+                        is hosting
+                      </span>
+                      {event.is_private && (
+                        <span className="rounded-full bg-[#fbefe8] px-2 py-1 text-xs text-[#ff984f]">
+                          Private
+                        </span>
+                      )}
+                    </div>
 
-        <TabsContent value="past" className="space-y-6">
-          <div className="bg-[#fafafb] rounded-lg p-6 text-center">
-            <p className="text-[#525252] text-sm">No past events to display</p>
-          </div>
+                    <h3 className="mb-4 text-base font-bold text-[#000000]">
+                      {event.title}
+                    </h3>
+
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-[#959595]">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="size-4" aria-hidden="true" />
+                        <span>{formatDate(event.starts_at)}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Clock className="size-4" aria-hidden="true" />
+                        <span>{formatTime(event.starts_at)}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <MapPin className="size-4" aria-hidden="true" />
+                        <span>{event.location || (event.is_online ? 'Online' : 'TBA')}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Users className="size-4" aria-hidden="true" />
+                        <span>{event.attendees} attendees</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
         </TabsContent>
       </Tabs>
     </div>

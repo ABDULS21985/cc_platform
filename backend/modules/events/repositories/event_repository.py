@@ -54,6 +54,7 @@ class EventRepository:
         limit: int = 100,
         offset: int = 0,
         scope: str = 'upcoming',
+        community_id: Optional[int] = None,
     ) -> Tuple[List[Event], int]:
         """Aggregate events visible to a user across joined communities + public events."""
         joined_ids_subq = (
@@ -96,6 +97,9 @@ class EventRepository:
                 ),
             )
         # 'live' and 'all' return everything; the service decides slicing by status
+
+        if community_id is not None:
+            query = query.filter(Event.community_id == community_id)
 
         total = query.count()
         if scope == 'past':

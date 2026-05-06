@@ -1240,6 +1240,7 @@ export const ApiService = {
   events: {
     list: (params?: {
       scope?: "upcoming" | "live" | "hosting" | "past" | "all" | "suggested";
+      community_id?: number;
       limit?: number;
       offset?: number;
     }) =>

@@ -380,7 +380,12 @@ export default function CommunityDetailsClient({
                 )}
                 {activeTab === 'wallet' && <WalletTab communityName={community.name} communityId={community.id} />}
                 {activeTab === 'expenses' && <ExpensesTab communityName={community.name} />}
-                {activeTab === 'events' && <EventsTab communityName={community.name} />}
+                {activeTab === 'events' && (
+                  <EventsTab
+                    communityId={community.id}
+                    communityName={community.name}
+                  />
+                )}
                 {activeTab === 'bills' && <BillsTab communityId={community.id} isOwner={isOwner} />}
               </>
             )}

@@ -43,6 +43,7 @@ class EventCollectionResource(MethodView):
             result, status = event_service.list_for_user(
                 user_id=current_user.id,
                 scope=args.get('scope', 'upcoming'),
+                community_id=args.get('community_id'),
                 limit=args.get('limit', 100),
                 offset=args.get('offset', 0),
             )
