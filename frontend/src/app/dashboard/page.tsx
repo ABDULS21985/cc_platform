@@ -11,7 +11,7 @@ import { WelcomeHero } from '@/components/dashboard/WelcomeHero';
 import { OverviewMetrics } from '@/components/dashboard/OverviewMetrics';
 import { MyCommunities } from '@/components/dashboard/MyCommunities';
 import { PendingActions } from '@/components/dashboard/PendingActions';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -76,7 +76,6 @@ export default function DashboardPage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src="/images/image.png" alt="" />
                     <AvatarFallback>You</AvatarFallback>
                   </Avatar>
                   <button

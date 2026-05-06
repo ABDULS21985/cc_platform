@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Loader2,
   Mail,
-  MapPin,
   Phone,
   RotateCcw,
   Save,
@@ -340,22 +339,6 @@ export function AccountInformationForm() {
 
       {/* Meta cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Card variant="default" density="compact">
-          <CardContent className="flex items-center gap-3 px-5">
-            <span
-              className="grid size-10 shrink-0 place-items-center rounded-xl bg-info/15 text-info"
-              aria-hidden="true"
-            >
-              <MapPin className="size-5" />
-            </span>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Location
-              </p>
-              <p className="text-sm font-semibold text-foreground">Lagos, Nigeria</p>
-            </div>
-          </CardContent>
-        </Card>
         <Card variant="default" density="compact">
           <CardContent className="flex items-center gap-3 px-5">
             <span

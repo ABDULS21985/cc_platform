@@ -149,8 +149,7 @@ function CommunityContent() {
               isPrivate: c.visibility === 'private',
               isJoined: !!c.is_joined,
               isOwner: c.created_by === userData?.id,
-              avatar:
-                c.community_profile_picture || '/images/image.png',
+              avatar: c.community_profile_picture || '',
               cover: c.community_cover_photo || c.banner_url || null,
             })
           )
@@ -164,7 +163,6 @@ function CommunityContent() {
         setCounts((prev) => ({ ...prev, [activeTab]: total }));
       } catch (err) {
         if (cancelled) return;
-        console.error('Failed to fetch communities', err);
         toastAxiosError(err, 'Failed to load communities. Please try again.');
       } finally {
         if (!cancelled) setLoading(false);

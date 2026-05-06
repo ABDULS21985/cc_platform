@@ -67,7 +67,7 @@ export function TrendingRow({ categoryLabel, search }: TrendingRowProps) {
               isPrivate: c.visibility === 'private',
               isJoined: !!c.is_joined,
               isOwner: c.created_by === userData?.id,
-              avatar: c.community_profile_picture || '/images/image.png',
+              avatar: c.community_profile_picture || '',
               cover: c.community_cover_photo || c.banner_url || null,
             })
           )

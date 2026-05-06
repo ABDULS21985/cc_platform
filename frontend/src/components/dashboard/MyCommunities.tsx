@@ -60,21 +60,25 @@ export function MyCommunities() {
               name: string;
               description?: string;
               avatar?: string | null;
+              community_profile_picture?: string | null;
               role?: string;
               members_count?: number;
+              member_count?: number;
               is_private?: boolean;
+              visibility?: string;
             }) => ({
               id: c.id,
               name: c.name,
               description: c.description,
-              avatar: c.avatar,
+              avatar: c.community_profile_picture ?? c.avatar ?? null,
               role: (c.role === 'owner'
                 ? 'owner'
                 : c.role === 'admin'
                   ? 'admin'
                   : 'member') as CommunitySummary['role'],
-              member_count: c.members_count ?? 0,
-              is_private: c.is_private,
+              member_count: c.members_count ?? c.member_count ?? 0,
+              is_private:
+                c.is_private ?? (c.visibility === 'private' ? true : undefined),
             })
           )
         );
@@ -172,7 +176,7 @@ export function MyCommunities() {
                     <Avatar className="size-11 rounded-xl">
                       <AvatarImage src={c.avatar || undefined} alt="" />
                       <AvatarFallback className="rounded-xl bg-primary text-primary-foreground font-bold">
-                        {c.name.charAt(0).toUpperCase()}
+                        {(c.name?.trim()?.charAt(0) || 'C').toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1 space-y-1">
