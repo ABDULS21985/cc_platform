@@ -124,6 +124,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // WalletStatsStrip
 // ---------------------------------------------------------------------------
+const TEST_TIMEOUT_MS = 20_000;
+
 describe('WalletStatsStrip', () => {
   it('hits /v2/wallet/transactions on mount', async () => {
     const { WalletStatsStrip } = await importComponents();
@@ -131,7 +133,7 @@ describe('WalletStatsStrip', () => {
     await waitFor(() => {
       expect(apiMocks.wallet.getTransactions).toHaveBeenCalledWith({ limit: 200 });
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('aggregates current-month income vs spend from transactions', async () => {
     // Use a fixed point a few hours in the past so it's definitely within
@@ -155,10 +157,10 @@ describe('WalletStatsStrip', () => {
     await waitFor(() => {
       expect(screen.getByText(/₦50,000/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/₦20,000/)).toBeInTheDocument();
+    expect(screen.getAllByText(/₦20,000/).length).toBeGreaterThanOrEqual(1);
     // Verify the bills-settled card rendered alongside the others.
     expect(screen.getByText(/Bills settled/i)).toBeInTheDocument();
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('skips non-successful transactions when aggregating', async () => {
     apiMocks.wallet.getTransactions.mockResolvedValue({

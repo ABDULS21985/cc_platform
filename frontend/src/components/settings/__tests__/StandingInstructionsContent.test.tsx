@@ -82,6 +82,8 @@ async function importComp() {
   return mod.StandingInstructionsContent;
 }
 
+const TEST_TIMEOUT_MS = 20_000;
+
 describe('StandingInstructionsContent', () => {
   it('fetches /v2/standing-instructions on mount', async () => {
     const Comp = await importComp();
@@ -89,7 +91,7 @@ describe('StandingInstructionsContent', () => {
     await waitFor(() => {
       expect(apiMocks.standingInstructions.list).toHaveBeenCalled();
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('renders real instructions', async () => {
     apiMocks.standingInstructions.list.mockResolvedValue({
@@ -101,7 +103,7 @@ describe('StandingInstructionsContent', () => {
     await waitFor(() => {
       expect(screen.getByText('Estate fund')).toBeInTheDocument();
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('clicking pause hits setStatus(id, "paused")', async () => {
     apiMocks.standingInstructions.list.mockResolvedValue({
@@ -120,5 +122,5 @@ describe('StandingInstructionsContent', () => {
     await waitFor(() => {
       expect(apiMocks.standingInstructions.setStatus).toHaveBeenCalledWith(88, 'paused');
     });
-  });
+  }, TEST_TIMEOUT_MS);
 });

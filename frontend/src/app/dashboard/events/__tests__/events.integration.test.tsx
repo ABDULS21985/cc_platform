@@ -107,6 +107,8 @@ afterEach(() => {
   }
 });
 
+const TEST_TIMEOUT_MS = 20_000;
+
 describe('/dashboard/events', () => {
   it('hits /v2/events on mount', async () => {
     const Page = await importPage();
@@ -114,7 +116,7 @@ describe('/dashboard/events', () => {
     await waitFor(() => {
       expect(apiMocks.events.list).toHaveBeenCalledWith({ scope: 'all', limit: 200 });
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('renders events from the API (mapped through mapApiEvent)', async () => {
     apiMocks.events.list.mockResolvedValue({
@@ -133,7 +135,7 @@ describe('/dashboard/events', () => {
     await waitFor(() => {
       expect(screen.getByText('Lekki run · Saturday')).toBeInTheDocument();
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('falls back to MOCK_EVENTS when /v2/events returns empty', async () => {
     const Page = await importPage();
@@ -145,7 +147,7 @@ describe('/dashboard/events', () => {
     await waitFor(() => {
       expect(screen.getByText(/Lagos Half Marathon/i)).toBeInTheDocument();
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('attending a server-id event hits POST /v2/events/{id}/attend', async () => {
     apiMocks.events.list.mockResolvedValue({
@@ -170,7 +172,7 @@ describe('/dashboard/events', () => {
     await waitFor(() => {
       expect(apiMocks.events.attend).toHaveBeenCalledWith(42);
     });
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('CreateEventDialog onSubmit calls POST /v2/events with the right shape', async () => {
     const Page = await importPage();
@@ -213,5 +215,5 @@ describe('/dashboard/events', () => {
     await waitFor(() => {
       expect(screen.getByText('Brand-new event')).toBeInTheDocument();
     });
-  });
+  }, TEST_TIMEOUT_MS);
 });

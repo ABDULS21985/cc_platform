@@ -658,9 +658,14 @@ export default function MembersPage() {
 
   const handleInvite = async (id: string) => {
     const m = members.find((m) => m.id === id);
-    const community = m?.communities[0];
+    if (!m) {
+      router.push('/dashboard/community');
+      return;
+    }
+
+    const community = m.communities[0];
     const communityId = community ? Number(community.id) : NaN;
-    if (!m || !Number.isFinite(communityId)) {
+    if (!community || !Number.isFinite(communityId)) {
       router.push('/dashboard/community');
       return;
     }
