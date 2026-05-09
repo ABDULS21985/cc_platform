@@ -1,7 +1,11 @@
 import type { NextConfig } from 'next';
 
+const outputMode = process.env.NEXT_OUTPUT;
+const output =
+  outputMode === 'export' || outputMode === 'standalone' ? outputMode : undefined;
+
 const nextConfig: NextConfig = {
-  output: 'export',
+  ...(output ? { output } : {}),
   images: {
     unoptimized: true,
   },

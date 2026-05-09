@@ -4,6 +4,7 @@
 
 # Python caches and virtual environments
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -17,6 +18,9 @@ venv/
 .env
 .env.*
 firebase_credentials.json
+*credentials*.json
+*.pem
+*.p8
 
 # Logs and runtime artifacts
 logs/

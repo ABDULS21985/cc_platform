@@ -16,6 +16,9 @@ logs/
 .pm2/
 ecosystem.config.local.js
 
+# Deployment runtime
+.uat/
+
 # Editors / IDEs
 .vscode/
 .idea/

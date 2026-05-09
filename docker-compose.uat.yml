@@ -1,0 +1,334 @@
+name: ${COMPOSE_PROJECT_NAME:-cc-platform-uat}
+
+x-uat-logging: &uat-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: ${DOCKER_LOG_MAX_FILE:-5}
+
+x-service-defaults: &service-defaults
+  init: true
+  logging: *uat-logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  nginx:
+    <<: *service-defaults
+    image: nginx:1.27-alpine
+    container_name: ${NGINX_CONTAINER_NAME:-cc-platform-uat-nginx}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_BIND_ADDRESS:-0.0.0.0}:80:80"
+      - "${HTTPS_BIND_ADDRESS:-0.0.0.0}:443:443"
+    volumes:
+      - ${NGINX_CONF_PATH:-./.uat/nginx/default.conf}:/etc/nginx/conf.d/default.conf:ro
+      - letsencrypt_data:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - cc-platform-net
+
+  certbot:
+    image: certbot/certbot:v2.11.0
+    container_name: ${CERTBOT_CONTAINER_NAME:-cc-platform-uat-certbot}
+    volumes:
+      - letsencrypt_data:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    networks:
+      - cc-platform-net
+
+  postgres:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    container_name: ${POSTGRES_CONTAINER_NAME:-cc-platform-uat-postgres}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ccp_uat}
+      POSTGRES_USER: ${DB_USER:-ccp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_HOST_PORT:-5434}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ccp} -d ${DB_NAME:-ccp_uat}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - cc-platform-net
+
+  redis:
+    <<: *service-defaults
+    image: redis:7-alpine
+    container_name: ${REDIS_CONTAINER_NAME:-cc-platform-uat-redis}
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6381}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - cc-platform-net
+
+  typesense:
+    <<: *service-defaults
+    image: typesense/typesense:0.25.1
+    container_name: ${TYPESENSE_CONTAINER_NAME:-cc-platform-uat-typesense}
+    restart: unless-stopped
+    command: ["--data-dir", "/data", "--api-key", "${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required}", "--enable-cors"]
+    ports:
+      - "${TYPESENSE_BIND_ADDRESS:-127.0.0.1}:${TYPESENSE_HOST_PORT:-8109}:8108"
+    volumes:
+      - typesense_data:/data
+    networks:
+      - cc-platform-net
+
+  backend:
+    <<: *service-defaults
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: cc-platform-backend:${IMAGE_TAG:-uat}
+    container_name: ${BACKEND_CONTAINER_NAME:-cc-platform-uat-backend}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      typesense:
+        condition: service_started
+    command: ["gunicorn", "--worker-class", "eventlet", "-w", "1", "-b", "0.0.0.0:8080", "--timeout", "120", "app:application"]
+    environment:
+      FLASK_APP: app:application
+      FLASK_ENV: production
+      ENV: ${APP_ENV:-uat}
+      DEBUG: "False"
+      PORT: 8080
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?FLASK_SECRET_KEY is required}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      JWT_ACCESS_TOKEN_EXPIRES: ${JWT_ACCESS_TOKEN_EXPIRES:-3600}
+      JWT_REFRESH_TOKEN_EXPIRES: ${JWT_REFRESH_TOKEN_EXPIRES:-86400}
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-ccp}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:-ccp_uat}
+      DB_PORT: 5432
+      DB_SSLMODE: disable
+      REDIS_URL: redis://redis:6379/0
+      REDIS_FALLBACK_URL: redis://redis:6379/1
+      SOCKETIO_MESSAGE_QUEUE: redis://redis:6379/0
+      SESSION_TYPE: redis
+      SESSION_PERMANENT: "True"
+      SESSION_USE_SIGNER: "True"
+      SESSION_COOKIE_HTTPONLY: "True"
+      SESSION_COOKIE_SECURE: "True"
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-Lax}
+      SESSION_LIFETIME: ${SESSION_LIFETIME:-604800}
+      API_HOST: ${API_HOST:?API_HOST is required}
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required}
+      TYPESENSE_HOST: typesense
+      TYPESENSE_PORT: 8108
+      TYPESENSE_PROTOCOL: http
+      TYPESENSE_PROD_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required}
+      TYPESENSE_PROD_HOST: typesense
+      TYPESENSE_PROD_PORT: 8108
+      TYPESENSE_PROD_PROTOCOL: http
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      CLOUDINARY_UPLOAD_FOLDER: ${CLOUDINARY_UPLOAD_FOLDER:-community_posts}
+      FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+      ENABLE_PUSH_NOTIFICATIONS: ${ENABLE_PUSH_NOTIFICATIONS:-false}
+      FCM_ENABLED: ${FCM_ENABLED:-false}
+      MAIL_SERVER: ${MAIL_SERVER:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USE_TLS: ${MAIL_USE_TLS:-True}
+      MAIL_USE_SSL: ${MAIL_USE_SSL:-False}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_NAME: ${MAIL_NAME:-CCPay}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@ccpay.ng}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@ccpay.ng}
+      FROM_NAME: ${FROM_NAME:-CCPay}
+      IDCHECK_API_KEY: ${IDCHECK_API_KEY:-}
+      IDCHECK_PUBLIC_KEY: ${IDCHECK_PUBLIC_KEY:-}
+      IDCHECK_LIVE_KEY: ${IDCHECK_LIVE_KEY:-}
+      IDCHECK_BASE_URL: ${IDCHECK_BASE_URL:-https://devapi.idcheck.ng}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+      BELL_MFB_CLIENT_ID: ${BELL_MFB_CLIENT_ID:-}
+      BELL_MFB_CLIENT_SECRET: ${BELL_MFB_CLIENT_SECRET:-}
+      BELL_MFB_BASE_URL: ${BELL_MFB_BASE_URL:-}
+      BELL_MFB_BUSINESS_ACCOUNT: ${BELL_MFB_BUSINESS_ACCOUNT:-}
+      BELL_MFB_WEBHOOK_SECRET: ${BELL_MFB_WEBHOOK_SECRET:-}
+      PERSONAL_PAYMENT_PROVIDER: ${PERSONAL_PAYMENT_PROVIDER:-safehaven}
+      COMMUNITY_PAYMENT_PROVIDER: ${COMMUNITY_PAYMENT_PROVIDER:-safehaven}
+      SAFEHAVEN_OAUTH_APP_CLIENT_ID: ${SAFEHAVEN_OAUTH_APP_CLIENT_ID:-}
+      SAFEHAVEN_USER_ID: ${SAFEHAVEN_USER_ID:-}
+      SAFEHAVEN_CLIENT_ID: ${SAFEHAVEN_CLIENT_ID:-}
+      SAFEHAVEN_BASE_URL: ${SAFEHAVEN_BASE_URL:-}
+      SAFEHAVEN_CALLBACK_URL: ${SAFEHAVEN_CALLBACK_URL:-}
+      SAFEHAVEN_WEBHOOK_SECRET: ${SAFEHAVEN_WEBHOOK_SECRET:-}
+      SAFEHAVEN_COMPANY_URL: ${SAFEHAVEN_COMPANY_URL:-}
+      SAFEHAVEN_ACCOUNT_VALID_FOR: ${SAFEHAVEN_ACCOUNT_VALID_FOR:-900}
+      SAFEHAVEN_AMOUNT_CONTROL: ${SAFEHAVEN_AMOUNT_CONTROL:-OverPayment}
+      SAFEHAVEN_SETTLEMENT_ACCOUNT_NUMBER: ${SAFEHAVEN_SETTLEMENT_ACCOUNT_NUMBER:-}
+      SAFEHAVEN_SETTLEMENT_ACCOUNT_BANK_CODE: ${SAFEHAVEN_SETTLEMENT_ACCOUNT_BANK_CODE:-}
+      SAFEHAVEN_PRIVATE_KEY_PEM: ${SAFEHAVEN_PRIVATE_KEY_PEM:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APPLE_KEY_ID: ${APPLE_KEY_ID:-}
+      APPLE_PRIVATE_KEY_PATH: ${APPLE_PRIVATE_KEY_PATH:-}
+      APPLE_REDIRECT_URI: ${APPLE_REDIRECT_URI:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-}
+      SMS_ENABLED: ${SMS_ENABLED:-false}
+      TERMII_API_KEY: ${TERMII_API_KEY:-}
+      TERMII_SENDER_ID: ${TERMII_SENDER_ID:-CCPay}
+      MAX_DAILY_SMS_NAIRA: ${MAX_DAILY_SMS_NAIRA:-5000}
+      USE_NEW_USER_SERVICE: ${USE_NEW_USER_SERVICE:-false}
+      USE_NEW_AUTH_SERVICE: ${USE_NEW_AUTH_SERVICE:-false}
+      USE_NEW_WALLET_SERVICE: ${USE_NEW_WALLET_SERVICE:-false}
+      USE_NEW_COMMUNITY_SERVICE: ${USE_NEW_COMMUNITY_SERVICE:-false}
+      USE_NEW_NOTIFICATION_SERVICE: ${USE_NEW_NOTIFICATION_SERVICE:-false}
+      SHADOW_MODE: ${SHADOW_MODE:-false}
+      NEW_CODE_PERCENTAGE: ${NEW_CODE_PERCENTAGE:-0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      MOCK_VERIFICATION: ${MOCK_VERIFICATION:-false}
+      USE_MOCK_PROVIDER: ${USE_MOCK_PROVIDER:-false}
+      ENFORCE_PRODUCTION_READINESS: ${ENFORCE_PRODUCTION_READINESS:-false}
+      ALLOW_SUPER_ADMIN_BOOTSTRAP: ${ALLOW_SUPER_ADMIN_BOOTSTRAP:-false}
+      ALLOW_DUMMY_DATA_SEED: ${ALLOW_DUMMY_DATA_SEED:-false}
+      MESSAGES_PER_PAGE: ${MESSAGES_PER_PAGE:-20}
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-18080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/v2/auth/health >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - cc-platform-net
+
+  celery-worker:
+    <<: *service-defaults
+    image: cc-platform-backend:${IMAGE_TAG:-uat}
+    container_name: ${CELERY_WORKER_CONTAINER_NAME:-cc-platform-uat-celery-worker}
+    restart: unless-stopped
+    command: ["celery", "-A", "modules.tasks.celery_app.celery", "worker", "--loglevel=info", "--pool=solo", "--concurrency=2"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      FLASK_APP: app:application
+      FLASK_ENV: production
+      ENV: ${APP_ENV:-uat}
+      DEBUG: "False"
+      PYTHONUNBUFFERED: "1"
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:?FLASK_SECRET_KEY is required}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      DB_HOST: postgres
+      DB_USER: ${DB_USER:-ccp}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_NAME: ${DB_NAME:-ccp_uat}
+      DB_PORT: 5432
+      DB_SSLMODE: disable
+      REDIS_URL: redis://redis:6379/0
+      REDIS_FALLBACK_URL: redis://redis:6379/1
+      SOCKETIO_MESSAGE_QUEUE: redis://redis:6379/0
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required}
+      TYPESENSE_PROD_API_KEY: ${TYPESENSE_API_KEY:?TYPESENSE_API_KEY is required}
+      TYPESENSE_PROD_HOST: typesense
+      TYPESENSE_PROD_PORT: 8108
+      TYPESENSE_PROD_PROTOCOL: http
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      MAIL_SERVER: ${MAIL_SERVER:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USE_TLS: ${MAIL_USE_TLS:-True}
+      MAIL_USE_SSL: ${MAIL_USE_SSL:-False}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@ccpay.ng}
+      FROM_NAME: ${FROM_NAME:-CCPay}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENFORCE_PRODUCTION_READINESS: ${ENFORCE_PRODUCTION_READINESS:-false}
+    networks:
+      - cc-platform-net
+
+  frontend:
+    <<: *service-defaults
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.uat
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    image: cc-platform-frontend:${IMAGE_TAG:-uat}
+    container_name: ${FRONTEND_CONTAINER_NAME:-cc-platform-uat-frontend}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - cc-platform-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  typesense_data:
+  letsencrypt_data:
+  certbot_webroot:
+
+networks:
+  cc-platform-net:
+    driver: bridge
