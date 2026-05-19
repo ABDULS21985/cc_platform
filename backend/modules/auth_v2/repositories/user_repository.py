@@ -5,9 +5,11 @@ Handles ALL database operations for users using Flask-SQLAlchemy.
 Uses db.session (Flask-native) instead of manual session management.
 """
 import logging
+import re
 from typing import Optional
 from modules.auth_v2.extensions import db
 from modules.auth_v2.models.user import User
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +22,23 @@ class UserRepository:
     """
     
     @staticmethod
-    def find_by_email(email: str) -> Optional[User]:
+    def normalize_phone_number(phone_number: Optional[str]) -> Optional[str]:
+        """Normalize user-entered phone numbers for lookup/storage."""
+        if not phone_number:
+            return None
+        cleaned = re.sub(r'[\s\-()]', '', phone_number.strip())
+        return cleaned or None
+    
+    @staticmethod
+    def find_by_email(email: Optional[str]) -> Optional[User]:
         """
         Find user by email address
         
         Flask-SQLAlchemy way:
             User.query.filter_by(email=email).first()
         """
+        if not email:
+            return None
         try:
             return User.query.filter(
                 User.email == email.lower().strip()
@@ -34,6 +46,43 @@ class UserRepository:
         except Exception as e:
             logger.error(f"Error finding user by email: {e}")
             raise
+    
+    @staticmethod
+    def find_by_phone_number(phone_number: Optional[str]) -> Optional[User]:
+        """Find user by normalized phone number."""
+        normalized = UserRepository.normalize_phone_number(phone_number)
+        if not normalized:
+            return None
+        try:
+            stored_phone = func.replace(
+                func.replace(
+                    func.replace(
+                        func.replace(User.phone_number, ' ', ''),
+                        '-',
+                        '',
+                    ),
+                    '(',
+                    '',
+                ),
+                ')',
+                '',
+            )
+            return User.query.filter(stored_phone == normalized).first()
+        except Exception as e:
+            logger.error(f"Error finding user by phone number: {e}")
+            raise
+    
+    @staticmethod
+    def find_by_login_identifier(identifier: str) -> Optional[User]:
+        """Find user by email address or phone number."""
+        value = (identifier or '').strip()
+        if not value:
+            return None
+        if '@' in value:
+            user = UserRepository.find_by_email(value)
+            if user:
+                return user
+        return UserRepository.find_by_phone_number(value)
     
     @staticmethod
     def find_by_id(user_id: int) -> Optional[User]:
@@ -55,7 +104,7 @@ class UserRepository:
     
     @staticmethod
     def create_user(
-        email: str,
+        email: Optional[str],
         firstname: str,
         lastname: str,
         password_hash: str,
@@ -63,7 +112,8 @@ class UserRepository:
         phone_number: Optional[str] = None,
         nin: Optional[str] = None,
         role: str = 'user',
-        firebase_uid: Optional[str] = None
+        firebase_uid: Optional[str] = None,
+        email_verified: bool = False
     ) -> User:
         """
         Create a new user with Flask-SQLAlchemy
@@ -72,16 +122,16 @@ class UserRepository:
         """
         try:
             user = User(
-                email=email.lower().strip(),
+                email=email.lower().strip() if email else None,
                 firstname=firstname,
                 lastname=lastname,
                 password_hash=password_hash,
                 date_of_birth=date_of_birth,
-                phone_number=phone_number,
+                phone_number=UserRepository.normalize_phone_number(phone_number),
                 nin=nin,
                 role=role,
                 firebase_uid=firebase_uid,
-                email_verified=False
+                email_verified=email_verified
             )
             
             db.session.add(user)

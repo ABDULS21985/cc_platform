@@ -19,9 +19,9 @@ interface Topic {
 }
 
 const TOPICS: Topic[] = [
-  { id: 1, tag: 'estate-dues',     category: 'Real estate',  posts: 184, velocity: 'rising' },
+  { id: 1, tag: 'weekend-run',     category: 'Fitness',      posts: 184, velocity: 'rising' },
   { id: 2, tag: 'marathon-2026',   category: 'Events',       posts: 132, velocity: 'hot' },
-  { id: 3, tag: 'crypto-academy',  category: 'Finance',      posts: 96,  velocity: 'steady' },
+  { id: 3, tag: 'founder-clinic',  category: 'Business',     posts: 96,  velocity: 'steady' },
   { id: 4, tag: 'ui-design',       category: 'Technology',   posts: 71,  velocity: 'rising' },
   { id: 5, tag: 'climate-action',  category: 'Environment',  posts: 58,  velocity: 'steady' },
 ];

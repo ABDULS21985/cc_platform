@@ -7,13 +7,6 @@ import { AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { ApiService, SignupPayload } from '@/services/api';
 import { toast } from 'sonner';
 import { toastAxiosError } from '@/hooks/useAxiosError';
@@ -23,15 +16,11 @@ import {
   PasswordStrength,
   passwordScore,
 } from '@/components/auth/PasswordStrength';
-import { cn } from '@/lib/utils';
 
 type FieldKey =
   | 'firstName'
   | 'lastName'
-  | 'email'
   | 'phoneNumber'
-  | 'gender'
-  | 'dateOfBirth'
   | 'password';
 
 interface FieldProps {
@@ -90,10 +79,7 @@ export default function AccountSetupForm() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    dateOfBirth: '',
-    email: '',
     phoneNumber: '',
-    gender: '',
     password: '',
   });
 
@@ -121,8 +107,9 @@ export default function AccountSetupForm() {
     const next: Partial<Record<FieldKey, string>> = {};
     if (!formData.firstName) next.firstName = 'First name is required';
     if (!formData.lastName) next.lastName = 'Last name is required';
-    if (!formData.email) next.email = 'Email is required';
-    else if (!/^\S+@\S+\.\S+$/.test(formData.email)) next.email = 'Enter a valid email';
+    if (!formData.phoneNumber) next.phoneNumber = 'Phone number is required';
+    else if (!/^\+?[0-9\s\-()]{10,20}$/.test(formData.phoneNumber.trim()))
+      next.phoneNumber = 'Enter a valid phone number';
     if (!formData.password) next.password = 'Password is required';
     else if (!passwordValid)
       next.password = 'Password must meet at least 3 of the 4 requirements';
@@ -140,19 +127,16 @@ export default function AccountSetupForm() {
     setIsLoading(true);
     try {
       const payload: SignupPayload = {
-        email: formData.email,
         password: formData.password,
         firstname: formData.firstName,
         lastname: formData.lastName,
-        phone_number: formData.phoneNumber || null,
-        date_of_birth: formData.dateOfBirth,
-        nin: null,
+        phone_number: formData.phoneNumber,
         role: 'user',
       };
 
       await ApiService.auth.signup(payload);
-      toast.success('Account created — verify your email');
-      router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
+      toast.success('Account created. Sign in to continue.');
+      router.push(`/signin?identifier=${encodeURIComponent(formData.phoneNumber)}`);
     } catch (error: unknown) {
       const err = error as {
         response?: { status?: number; data?: { errors?: { json?: Record<string, string[]> } } };
@@ -162,13 +146,9 @@ export default function AccountSetupForm() {
         const newFieldErrors: Partial<Record<FieldKey, string>> = {};
         if (apiErrors.firstname) newFieldErrors.firstName = apiErrors.firstname[0];
         if (apiErrors.lastname) newFieldErrors.lastName = apiErrors.lastname[0];
-        if (apiErrors.date_of_birth)
-          newFieldErrors.dateOfBirth = apiErrors.date_of_birth[0];
-        if (apiErrors.email) newFieldErrors.email = apiErrors.email[0];
         if (apiErrors.phone_number)
           newFieldErrors.phoneNumber = apiErrors.phone_number[0];
         if (apiErrors.password) newFieldErrors.password = apiErrors.password[0];
-        if (apiErrors.gender) newFieldErrors.gender = apiErrors.gender[0];
         setFieldErrors(newFieldErrors);
         toast.error('Please fix the errors in the form');
       } else {
@@ -183,7 +163,7 @@ export default function AccountSetupForm() {
   return (
     <AuthLayout
       title="Set up your account"
-      subtitle="A few details to get you started — KYC happens in the next step."
+      subtitle="Create your account with your name and phone number. Identity verification happens after you sign in."
       heroTitle={
         <>
           Create your profile
@@ -213,10 +193,10 @@ export default function AccountSetupForm() {
             >
               1
             </span>
-            Step 1 of 3 · Account
+            Step 1 of 2 · Account
           </Badge>
           <span className="hidden text-xs text-muted-foreground sm:inline">
-            ~2 min to complete
+            ~1 min to complete
           </span>
         </div>
       </FadeIn>
@@ -260,91 +240,27 @@ export default function AccountSetupForm() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field id="gender" label="Gender" error={fieldErrors.gender}>
-                {(slotProps) => (
-                  <Select
-                    value={formData.gender}
-                    onValueChange={(v) => handleInputChange('gender', v)}
-                  >
-                    <SelectTrigger
-                      id="gender"
-                      className="h-11"
-                      aria-invalid={slotProps['aria-invalid']}
-                      aria-describedby={slotProps['aria-describedby']}
-                    >
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                      <SelectItem value="PreferNotToSay">Prefer not to say</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </Field>
-
-              <Field
-                id="dob"
-                label="Date of birth"
-                error={fieldErrors.dateOfBirth}
-                hint="You must be 18 or older."
-              >
-                {(slotProps) => (
-                  <Input
-                    id="dob"
-                    type="date"
-                    autoComplete="bday"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                    className="h-11"
-                    max={new Date().toISOString().split('T')[0]}
-                    {...slotProps}
-                  />
-                )}
-              </Field>
-            </div>
+            <Field id="phone" label="Phone number" required error={fieldErrors.phoneNumber}>
+              {(slotProps) => (
+                <Input
+                  id="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+234..."
+                  value={formData.phoneNumber}
+                  onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
+                  className="h-11"
+                  {...slotProps}
+                />
+              )}
+            </Field>
           </fieldset>
 
           <fieldset className="space-y-4">
             <legend className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Contact &amp; security
+              Security
             </legend>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field id="email" label="Email" required error={fieldErrors.email}>
-                {(slotProps) => (
-                  <Input
-                    id="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    placeholder="ada@example.com"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="h-11"
-                    {...slotProps}
-                  />
-                )}
-              </Field>
-
-              <Field id="phone" label="Phone number" error={fieldErrors.phoneNumber}>
-                {(slotProps) => (
-                  <Input
-                    id="phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="+234..."
-                    value={formData.phoneNumber}
-                    onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                    className="h-11"
-                    {...slotProps}
-                  />
-                )}
-              </Field>
-            </div>
 
             <Field id="password" label="Password" required error={fieldErrors.password}>
               {(slotProps) => (
@@ -387,8 +303,8 @@ export default function AccountSetupForm() {
             <div className="text-xs text-muted-foreground">
               <p className="font-medium text-foreground">Your data is safe.</p>
               <p>
-                Encrypted at rest and in transit. We use it only for KYC and account
-                recovery — never sold, never shared with third parties.
+                Encrypted at rest and in transit. We use it only for account access,
+                recovery, and required verification.
               </p>
             </div>
           </div>

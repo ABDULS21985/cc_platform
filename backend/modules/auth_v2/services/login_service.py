@@ -37,24 +37,24 @@ class LoginService:
             "recommended_portal": "admin" if is_platform_staff else "app",
         }
     
-    def login(self, email: str, password: str, remember: bool = False) -> Tuple[Dict, int]:
+    def login(self, identifier: str, password: str, remember: bool = False) -> Tuple[Dict, int]:
         """
         Authenticate user and create session
         
         Args:
-            email: User's email
+            identifier: User's email address or phone number
             password: User's password
             remember: Keep user logged in (default: False)
             
         Returns:
             Tuple of (response_dict, status_code)
         """
-        # Find user by email
-        user = self.user_repo.find_by_email(email)
+        # Find user by email or phone number
+        user = self.user_repo.find_by_login_identifier(identifier)
         
         if not user:
             return {
-                "error": "Invalid email or password",
+                "error": "Invalid email/phone or password",
                 "code": "INVALID_CREDENTIALS"
             }, 401
         
@@ -100,7 +100,7 @@ class LoginService:
             except Exception:
                 pass
             return {
-                "error": "Invalid email or password",
+                "error": "Invalid email/phone or password",
                 "code": "INVALID_CREDENTIALS"
             }, 401
 
@@ -126,14 +126,6 @@ class LoginService:
                 "deactivated_at": user.deactivated_at.isoformat(),
             }, 403
         
-        # Check if email is verified
-        if not user.email_verified:
-            return {
-                "error": "Please verify your email before logging in",
-                "code": "EMAIL_NOT_VERIFIED",
-                "user_id": user.id
-            }, 403
-        
         # Create Flask-Login session directly (no OTP required)
         login_user(user, remember=remember)
 
@@ -149,7 +141,7 @@ class LoginService:
             AuditService().record(
                 user_id=user.id,
                 action='Sign-in successful',
-                details='Signed in with email and password',
+                details='Signed in with email/phone and password',
                 category='security',
                 severity='info',
                 actor='You',
@@ -175,6 +167,7 @@ class LoginService:
                 "lastname": user.lastname,
                 "full_name": user.full_name,
                 "role": user.role,
+                "phone_number": user.phone_number,
                 "email_verified": user.email_verified
             },
             "verification": {
@@ -237,6 +230,7 @@ class LoginService:
                 "lastname": user.lastname,
                 "full_name": user.full_name,
                 "role": user.role,
+                "phone_number": user.phone_number,
                 "email_verified": user.email_verified
             },
             "verification": {

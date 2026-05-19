@@ -8,6 +8,7 @@ REMOTE_USER="${UAT_REMOTE_USER:-root}"
 REMOTE_PORT="${UAT_REMOTE_PORT:-22}"
 REMOTE_PATH="${UAT_REMOTE_PATH:-/opt/cc_platform}"
 REMOTE_SSH_KEY="${UAT_REMOTE_SSH_KEY:-}"
+REMOTE_PASSWORD="${UAT_REMOTE_PASSWORD:-${SSHPASS:-}}"
 
 SYNC_SOURCE=1
 DELETE_REMOTE=1
@@ -43,6 +44,7 @@ Required access:
   This deploys over SSH. Configure SSH access for the remote user first,
   preferably with a key:
     ssh-copy-id root@203.0.113.10
+  Password auth is also supported through UAT_REMOTE_PASSWORD or SSHPASS.
 USAGE
 }
 
@@ -121,6 +123,9 @@ done
 
 require_cmd ssh
 require_cmd rsync
+if [[ -n "$REMOTE_PASSWORD" && -z "$REMOTE_SSH_KEY" ]]; then
+  require_cmd sshpass
+fi
 
 SSH_BASE=(ssh -p "$REMOTE_PORT" -o StrictHostKeyChecking=accept-new)
 if [[ -n "$REMOTE_SSH_KEY" ]]; then
@@ -136,12 +141,38 @@ fi
 REMOTE="${REMOTE_USER}@${REMOTE_HOST}"
 REMOTE_PATH_Q="$(shell_quote "$REMOTE_PATH")"
 
+ssh_cmd() {
+  if [[ -n "$REMOTE_PASSWORD" && -z "$REMOTE_SSH_KEY" ]]; then
+    SSHPASS="$REMOTE_PASSWORD" sshpass -e "${SSH_BASE[@]}" "$@"
+  else
+    "${SSH_BASE[@]}" "$@"
+  fi
+}
+
+ssh_run_cmd() {
+  if [[ -n "$REMOTE_PASSWORD" && -z "$REMOTE_SSH_KEY" ]]; then
+    SSHPASS="$REMOTE_PASSWORD" sshpass -e "${SSH_RUN[@]}" "$@"
+  else
+    "${SSH_RUN[@]}" "$@"
+  fi
+}
+
 build_rsync_transport() {
   local transport=(ssh -p "$REMOTE_PORT" -o StrictHostKeyChecking=accept-new)
   if [[ -n "$REMOTE_SSH_KEY" ]]; then
     transport+=(-i "$REMOTE_SSH_KEY")
+  elif [[ -n "$REMOTE_PASSWORD" ]]; then
+    transport=(sshpass -e "${transport[@]}")
   fi
   join_quoted "${transport[@]}"
+}
+
+rsync_cmd() {
+  if [[ -n "$REMOTE_PASSWORD" && -z "$REMOTE_SSH_KEY" ]]; then
+    SSHPASS="$REMOTE_PASSWORD" rsync "$@"
+  else
+    rsync "$@"
+  fi
 }
 
 sync_source() {
@@ -188,15 +219,15 @@ sync_source() {
   fi
 
   log "ensuring remote path exists: $REMOTE:$REMOTE_PATH"
-  "${SSH_BASE[@]}" "$REMOTE" "mkdir -p $REMOTE_PATH_Q"
+  ssh_cmd "$REMOTE" "mkdir -p $REMOTE_PATH_Q"
 
   log "syncing repository to $REMOTE:$REMOTE_PATH"
-  rsync "${rsync_args[@]}" -e "$(build_rsync_transport)" "$ROOT_DIR/" "$REMOTE:$REMOTE_PATH/"
+  rsync_cmd "${rsync_args[@]}" -e "$(build_rsync_transport)" "$ROOT_DIR/" "$REMOTE:$REMOTE_PATH/"
 }
 
 check_remote_prereqs() {
   log "checking remote Docker prerequisites"
-  "${SSH_BASE[@]}" "$REMOTE" "command -v docker >/dev/null && docker compose version >/dev/null"
+  ssh_cmd "$REMOTE" "command -v docker >/dev/null && docker compose version >/dev/null"
 }
 
 remote_env_exports() {
@@ -206,8 +237,13 @@ remote_env_exports() {
     UAT_DOMAIN
     UAT_SERVER_IP
     UAT_URL
+    UAT_HTTP_ONLY
     TLS_EMAIL
     NEXT_PUBLIC_API_URL
+    FRONTEND_URL
+    ALLOWED_ORIGINS
+    API_HOST
+    SESSION_COOKIE_SECURE
     ALLOW_DNS_MISMATCH
     CLOUDINARY_CLOUD_NAME
     CLOUDINARY_API_KEY
@@ -293,7 +329,7 @@ run_remote_deploy() {
   command="cd $REMOTE_PATH_Q && $(remote_env_exports) bash scripts/deploy-uat.sh $remote_args"
 
   log "running UAT deployment on $REMOTE"
-  "${SSH_RUN[@]}" "$REMOTE" "$command"
+  ssh_run_cmd "$REMOTE" "$command"
 }
 
 main() {

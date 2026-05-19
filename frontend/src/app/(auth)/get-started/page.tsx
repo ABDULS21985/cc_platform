@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowRight,
   CheckCircle2,
-  Mail,
   ShieldCheck,
   Sparkles,
+  Smartphone,
   Users,
   Wallet,
   Zap,
@@ -156,7 +156,7 @@ export default function GetStartedPage() {
                 className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
               >
                 <span className="h-px flex-1 bg-border" />
-                Or continue with email
+                Or continue with phone
                 <span className="h-px flex-1 bg-border" />
               </div>
 
@@ -164,7 +164,7 @@ export default function GetStartedPage() {
                 size="xl"
                 block
                 onClick={() => router.push('/account-setup')}
-                leadingIcon={<Mail className="size-4" />}
+                leadingIcon={<Smartphone className="size-4" />}
                 trailingIcon={<ArrowRight className="size-4" />}
                 className="h-12 text-base"
               >

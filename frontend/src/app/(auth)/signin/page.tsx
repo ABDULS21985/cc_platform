@@ -37,11 +37,11 @@ import { cn } from '@/lib/utils';
 const VALUE_PROPS = [
   { icon: Wallet, label: 'Your communities and bills, right where you left them' },
   { icon: Fingerprint, label: 'Encrypted login · MFA-ready' },
-  { icon: Mail, label: 'One-tap recovery via email' },
+  { icon: Mail, label: 'Sign in with phone number or email' },
 ] as const;
 
 export default function SignInPage() {
-  const [email, setEmail] = React.useState('');
+  const [identifier, setIdentifier] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -49,16 +49,25 @@ export default function SignInPage() {
 
   const router = useRouter();
 
+  React.useEffect(() => {
+    const presetIdentifier = new URLSearchParams(window.location.search).get('identifier');
+    if (presetIdentifier) setIdentifier(presetIdentifier);
+  }, []);
+
   const handleLogin = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!email || !password) {
-      toast.error('Please enter both email and password');
+    if (!identifier || !password) {
+      toast.error('Please enter your email/phone and password');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await ApiService.auth.login({ email, password, remember: rememberMe });
+      const response = await ApiService.auth.login({
+        identifier,
+        password,
+        remember: rememberMe,
+      });
       const loginData = response.data.data;
 
       if (loginData?.tokens && loginData.tokens.access_token) {
@@ -214,26 +223,26 @@ export default function SignInPage() {
                 className="my-5 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground"
               >
                 <span className="h-px flex-1 bg-border" />
-                Or sign in with email
+                Or sign in with email or phone
                 <span className="h-px flex-1 bg-border" />
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label
-                    htmlFor="email"
+                    htmlFor="identifier"
                     className="block text-sm font-medium text-foreground"
                   >
-                    Email address
+                    Email or phone number
                   </label>
                   <Input
-                    id="email"
-                    type="email"
-                    inputMode="email"
-                    autoComplete="email"
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="identifier"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="username"
+                    placeholder="name@example.com or +234..."
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     required
                     className="h-12"
                   />

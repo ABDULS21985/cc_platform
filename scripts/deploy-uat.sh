@@ -8,9 +8,14 @@ HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-240}"
 UAT_RUNTIME_DIR="${UAT_RUNTIME_DIR:-$ROOT_DIR/.uat}"
 export NGINX_CONF_PATH="${NGINX_CONF_PATH:-$UAT_RUNTIME_DIR/nginx/default.conf}"
 
+REMOTE_DEPLOY=0
+REMOTE_OPTIONS=()
+LOCAL_DEPLOY_ARGS=()
+
 SKIP_BUILD=0
 SKIP_MIGRATE=0
 SKIP_PROXY=0
+HTTP_ONLY=0
 WRITE_ENV_ONLY=0
 FORCE_RECREATE=0
 
@@ -25,8 +30,19 @@ Options:
   --skip-build          Do not run docker compose build
   --skip-migrate        Do not run Flask database migrations
   --skip-proxy          Do not start the bundled Nginx/Certbot proxy
+  --http-only           Serve UAT over HTTP for IP-only deployments; skips TLS
   --force-recreate      Force container recreation during up
   --write-env-only      Create/validate the env file, then exit
+
+Remote deployment options:
+  --host HOST           Deploy to a remote SSH host instead of this machine
+  --user USER           Remote SSH user. Default: root
+  --port PORT           Remote SSH port. Default: 22
+  --path PATH           Remote repo path. Default: /opt/cc_platform
+  -i, --identity-file   SSH private key path
+  --no-sync             Do not rsync the repo before running deployment
+  --no-delete           Do not delete stale remote files during rsync
+
   -h, --help            Show this help
 
 First-run configuration can be supplied with environment variables:
@@ -47,6 +63,8 @@ written to .env.uat:
 
 Existing .env.uat files are never overwritten.
 DNS must point UAT_DOMAIN at UAT_SERVER_IP before Nginx/Certbot can issue TLS.
+For IP-only UAT deployments, use --http-only with UAT_URL=http://SERVER_IP and
+NEXT_PUBLIC_API_URL=http://SERVER_IP/api.
 USAGE
 }
 
@@ -62,6 +80,56 @@ fail() {
   printf '[uat] error: %s\n' "$*" >&2
   exit 1
 }
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host|--remote-host)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=(--host "${2:?$1 requires a value}")
+      shift 2
+      ;;
+    --user|--remote-user)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=(--user "${2:?$1 requires a value}")
+      shift 2
+      ;;
+    --port|--remote-port)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=(--port "${2:?$1 requires a value}")
+      shift 2
+      ;;
+    --path|--remote-path)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=(--path "${2:?$1 requires a value}")
+      shift 2
+      ;;
+    -i|--identity-file)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=("$1" "${2:?$1 requires a path}")
+      shift 2
+      ;;
+    --no-sync|--no-delete)
+      REMOTE_DEPLOY=1
+      REMOTE_OPTIONS+=("$1")
+      shift
+      ;;
+    --)
+      shift
+      LOCAL_DEPLOY_ARGS+=("$@")
+      break
+      ;;
+    *)
+      LOCAL_DEPLOY_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if ((REMOTE_DEPLOY)); then
+  exec "$ROOT_DIR/scripts/remote-deploy-uat.sh" "${REMOTE_OPTIONS[@]}" -- "${LOCAL_DEPLOY_ARGS[@]}"
+fi
+
+set -- "${LOCAL_DEPLOY_ARGS[@]}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +151,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-proxy)
       SKIP_PROXY=1
+      shift
+      ;;
+    --http-only)
+      HTTP_ONLY=1
+      export UAT_HTTP_ONLY=1
       shift
       ;;
     --force-recreate)
@@ -128,6 +201,22 @@ env_file_value() {
   ' "$ENV_FILE"
 }
 
+is_truthy() {
+  local value="${1:-}"
+  value="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+  [[ "$value" == "1" || "$value" == "true" || "$value" == "yes" || "$value" == "on" ]]
+}
+
+is_http_only() {
+  if ((HTTP_ONLY)); then
+    return 0
+  fi
+  if is_truthy "${UAT_HTTP_ONLY:-}"; then
+    return 0
+  fi
+  is_truthy "$(env_file_value UAT_HTTP_ONLY || true)"
+}
+
 config_value() {
   local key="$1"
   if [[ -n "${!key-}" ]]; then
@@ -170,17 +259,31 @@ require_https_url() {
   [[ "$value" == https://* ]] || fail "$key must be an HTTPS URL"
 }
 
-normalize_https_url() {
+require_public_url() {
+  local key="$1"
+  local value="$2"
+  if is_http_only; then
+    [[ "$value" == http://* || "$value" == https://* ]] || fail "$key must be an HTTP or HTTPS URL"
+  else
+    require_https_url "$key" "$value"
+  fi
+}
+
+normalize_public_url() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   value="${value%/}"
 
-  if [[ "$value" == http://* ]]; then
+  if [[ "$value" == http://* ]] && ! is_http_only; then
     fail "public UAT URLs must use HTTPS, not HTTP: $value"
   fi
-  if [[ "$value" != https://* ]]; then
-    value="https://$value"
+  if [[ "$value" != http://* && "$value" != https://* ]]; then
+    if is_http_only; then
+      value="http://$value"
+    else
+      value="https://$value"
+    fi
   fi
   printf '%s' "$value"
 }
@@ -225,15 +328,37 @@ create_env_file_if_missing() {
   local server_ip
   local tls_email
   local next_public_api_url
+  local default_public_url
+  local http_only_value
+  local enforce_production_readiness
+  local session_cookie_secure
 
-  public_url="$(normalize_https_url "$(prompt_value UAT_URL "Public UAT URL" "${UAT_DOMAIN:+https://$UAT_DOMAIN}")")"
+  default_public_url="${UAT_DOMAIN:+https://$UAT_DOMAIN}"
+  if is_http_only; then
+    default_public_url="${UAT_DOMAIN:+http://$UAT_DOMAIN}"
+    if [[ -z "$default_public_url" && -n "${UAT_SERVER_IP:-}" ]]; then
+      default_public_url="http://$UAT_SERVER_IP"
+    fi
+  fi
+
+  public_url="$(normalize_public_url "$(prompt_value UAT_URL "Public UAT URL" "$default_public_url")")"
   domain="$(host_from_url "$public_url")"
   server_ip="$(prompt_value UAT_SERVER_IP "UAT server public IP" "${UAT_SERVER_IP:-}")"
-  tls_email="$(prompt_value TLS_EMAIL "TLS/Let's Encrypt contact email" "${TLS_EMAIL:-}")"
-  next_public_api_url="$(normalize_https_url "$(prompt_value NEXT_PUBLIC_API_URL "Frontend API URL" "$public_url/api")")"
+  if is_http_only; then
+    tls_email="$(config_value TLS_EMAIL)"
+    http_only_value=true
+    enforce_production_readiness="${ENFORCE_PRODUCTION_READINESS:-false}"
+    session_cookie_secure="${SESSION_COOKIE_SECURE:-False}"
+  else
+    tls_email="$(prompt_value TLS_EMAIL "TLS/Let's Encrypt contact email" "${TLS_EMAIL:-}")"
+    http_only_value=false
+    enforce_production_readiness="${ENFORCE_PRODUCTION_READINESS:-true}"
+    session_cookie_secure="${SESSION_COOKIE_SECURE:-True}"
+  fi
+  next_public_api_url="$(normalize_public_url "$(prompt_value NEXT_PUBLIC_API_URL "Frontend API URL" "$public_url/api")")"
 
-  require_https_url UAT_URL "$public_url"
-  require_https_url NEXT_PUBLIC_API_URL "$next_public_api_url"
+  require_public_url UAT_URL "$public_url"
+  require_public_url NEXT_PUBLIC_API_URL "$next_public_api_url"
 
   umask 077
   cat > "$ENV_FILE" <<EOF
@@ -245,6 +370,7 @@ IMAGE_TAG=uat
 UAT_DOMAIN=$domain
 UAT_SERVER_IP=$server_ip
 TLS_EMAIL=$tls_email
+UAT_HTTP_ONLY=$http_only_value
 NGINX_CONF_PATH=$NGINX_CONF_PATH
 
 APP_ENV=uat
@@ -282,6 +408,7 @@ FRONTEND_URL=$public_url
 ALLOWED_ORIGINS=$public_url
 NEXT_PUBLIC_API_URL=$next_public_api_url
 API_HOST=$domain
+SESSION_COOKIE_SECURE=$session_cookie_secure
 SESSION_COOKIE_SAMESITE=Lax
 SESSION_LIFETIME=604800
 
@@ -362,7 +489,7 @@ SHADOW_MODE=${SHADOW_MODE:-false}
 NEW_CODE_PERCENTAGE=${NEW_CODE_PERCENTAGE:-0}
 MOCK_VERIFICATION=${MOCK_VERIFICATION:-false}
 USE_MOCK_PROVIDER=${USE_MOCK_PROVIDER:-false}
-ENFORCE_PRODUCTION_READINESS=${ENFORCE_PRODUCTION_READINESS:-true}
+ENFORCE_PRODUCTION_READINESS=$enforce_production_readiness
 ALLOW_SUPER_ADMIN_BOOTSTRAP=${ALLOW_SUPER_ADMIN_BOOTSTRAP:-false}
 ALLOW_DUMMY_DATA_SEED=${ALLOW_DUMMY_DATA_SEED:-false}
 
@@ -379,7 +506,7 @@ validate_env() {
   local key
   local value
 
-  for key in \
+  local required_keys=(
     DB_PASSWORD \
     SECRET_KEY \
     FLASK_SECRET_KEY \
@@ -389,15 +516,20 @@ validate_env() {
     FRONTEND_URL \
     ALLOWED_ORIGINS \
     NEXT_PUBLIC_API_URL \
-    TLS_EMAIL \
     UAT_DOMAIN \
-    UAT_SERVER_IP; do
+    UAT_SERVER_IP
+  )
+  if ! is_http_only; then
+    required_keys+=(TLS_EMAIL)
+  fi
+
+  for key in "${required_keys[@]}"; do
     value="$(config_value "$key")"
     require_not_placeholder "$key" "$value"
   done
 
-  require_https_url FRONTEND_URL "$(config_value FRONTEND_URL)"
-  require_https_url NEXT_PUBLIC_API_URL "$(config_value NEXT_PUBLIC_API_URL)"
+  require_public_url FRONTEND_URL "$(config_value FRONTEND_URL)"
+  require_public_url NEXT_PUBLIC_API_URL "$(config_value NEXT_PUBLIC_API_URL)"
 
   if [[ "$(config_value ALLOWED_ORIGINS)" =~ localhost|127\.0\.0\.1|0\.0\.0\.0 ]]; then
     fail "ALLOWED_ORIGINS must not contain localhost, 127.0.0.1, or 0.0.0.0"
@@ -483,6 +615,30 @@ write_nginx_http_config() {
   domain="$(config_value UAT_DOMAIN)"
 
   mkdir -p "$(dirname "$NGINX_CONF_PATH")"
+  if is_http_only; then
+    cat > "$NGINX_CONF_PATH" <<EOF
+server {
+  listen 80 default_server;
+  server_name _ $domain;
+  client_max_body_size 20m;
+
+  location = /nginx-health {
+    access_log off;
+    return 200 "ok\n";
+    add_header Content-Type text/plain;
+  }
+
+$(backend_locations)
+
+  location / {
+$(proxy_headers)
+    proxy_pass http://frontend:3000;
+  }
+}
+EOF
+    return 0
+  fi
+
   cat > "$NGINX_CONF_PATH" <<EOF
 server {
   listen 80 default_server;
@@ -664,7 +820,11 @@ main() {
   fi
 
   if ((SKIP_PROXY == 0)); then
-    validate_dns
+    if is_http_only; then
+      warn "HTTP-only mode enabled; DNS validation and TLS issuance will be skipped"
+    else
+      validate_dns
+    fi
     write_nginx_http_config
   fi
 
@@ -709,9 +869,13 @@ main() {
   compose up "${up_flags[@]}" nginx
   wait_for_services nginx
 
-  issue_tls_certificate
-  write_nginx_https_config
-  reload_nginx
+  if is_http_only; then
+    warn "HTTP-only mode enabled; keeping Nginx on port 80"
+  else
+    issue_tls_certificate
+    write_nginx_https_config
+    reload_nginx
+  fi
 
   log "UAT stack is up"
   compose ps

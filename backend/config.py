@@ -245,15 +245,3 @@ class TestingConfig(Config):
     SESSION_TYPE = "filesystem"
     REDIS_URL = None  # No Redis in tests
 
-
-@classmethod
-def from_env(cls):
-    """Factory method to create appropriate config from environment"""
-    env = os.getenv('ENV', 'development')
-    if env == 'production':
-        return ProductionConfig()
-    elif env == 'testing':
-        return TestingConfig()
-    else:
-        return DevelopmentConfig()
-

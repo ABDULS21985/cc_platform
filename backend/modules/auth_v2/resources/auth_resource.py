@@ -33,6 +33,7 @@ from modules.auth_v2.services.verify_email_service import VerifyEmailService
 from modules.auth_v2.services.logout_service import LogoutService
 from modules.auth_v2.services.forgot_password_service import ForgotPasswordService
 from modules.core.response_formatter import format_data, format_error, format_internal_error
+from modules.verification.utils.rate_limiter import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +88,16 @@ class SignupResource(MethodView):
     POST /api/v2/auth/signup - Register a new user
     """
     
+    @rate_limit(max_requests=5, window_minutes=60, key_prefix="auth_signup")
     @auth_blp.arguments(SignupSchema)
     @auth_blp.response(201, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(409, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='User Signup',
-        description='Register a new user with email and password. An OTP will be sent for email verification.'
+        description='Register a new user with name, phone number, and password.'
     )
     def post(self, signup_data):
         """User signup endpoint."""
@@ -131,21 +134,23 @@ class LoginResource(MethodView):
     POST /api/v2/auth/login - Authenticate user
     """
     
+    @rate_limit(max_requests=10, window_minutes=5, key_prefix="auth_login")
     @auth_blp.arguments(LoginSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(401, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(403, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='User Login',
-        description='Authenticate user with email and password. May require OTP verification.'
+        description='Authenticate user with email or phone number and password.'
     )
     def post(self, login_data):
         """User login endpoint."""
         try:
             result, status_code = login_service.login(
-                login_data['email'],
+                login_data['identifier'],
                 login_data['password'],
                 login_data.get('remember', False)
             )
@@ -185,9 +190,11 @@ class VerifyEmailResource(MethodView):
     POST /api/v2/auth/verify-email - Verify email with OTP
     """
     
+    @rate_limit(max_requests=10, window_minutes=10, key_prefix="auth_verify_email")
     @auth_blp.arguments(VerifyOTPSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='Verify Email',
@@ -231,9 +238,11 @@ class ResendOTPResource(MethodView):
     POST /api/v2/auth/resend-otp - Resend verification OTP
     """
     
+    @rate_limit(max_requests=5, window_minutes=60, key_prefix="auth_resend_otp")
     @auth_blp.arguments(ResendOTPSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='Resend OTP',
@@ -276,9 +285,11 @@ class VerifyLoginOTPResource(MethodView):
     POST /api/v2/auth/verify-login-otp - Verify login OTP and create session
     """
     
+    @rate_limit(max_requests=10, window_minutes=10, key_prefix="auth_verify_login_otp")
     @auth_blp.arguments(VerifyOTPSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='Verify Login OTP',
@@ -367,9 +378,11 @@ class ForgotPasswordResource(MethodView):
     POST /api/v2/auth/forgot-password - Request password reset OTP
     """
 
+    @rate_limit(max_requests=5, window_minutes=60, key_prefix="auth_forgot_password")
     @auth_blp.arguments(ForgotPasswordSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='Forgot Password',
@@ -406,9 +419,11 @@ class ResetPasswordResource(MethodView):
     POST /api/v2/auth/reset-password - Confirm reset with OTP + new password
     """
 
+    @rate_limit(max_requests=10, window_minutes=10, key_prefix="auth_reset_password")
     @auth_blp.arguments(ResetPasswordSchema)
     @auth_blp.response(200, ApiSuccessEnvelopeSchema)
     @auth_blp.alt_response(400, schema=ApiErrorEnvelopeSchema)
+    @auth_blp.alt_response(429, schema=ApiErrorEnvelopeSchema)
     @auth_blp.alt_response(500, schema=ApiErrorEnvelopeSchema)
     @auth_blp.doc(
         summary='Reset Password',

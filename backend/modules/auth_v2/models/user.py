@@ -18,12 +18,12 @@ class User(db.Model, UserMixin):
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     firebase_uid = db.Column(db.String(255), unique=True, nullable=True, index=True)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(255), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=True)
     firstname = db.Column(db.String(100), nullable=False)
     lastname = db.Column(db.String(100), nullable=False)
     date_of_birth = db.Column(db.String(50), nullable=True)
-    phone_number = db.Column(db.String(20), nullable=True)
+    phone_number = db.Column(db.String(20), nullable=True, index=True)
     nin = db.Column(db.String(50), nullable=True)
     bio = db.Column(db.Text, nullable=True)
     profile_photo = db.Column(db.String(500), nullable=True)  # Cloudinary URL

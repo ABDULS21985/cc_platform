@@ -17,7 +17,7 @@ from modules.community.repositories import CommunityRepository, MemberRepository
 from modules.community.models.community import Community
 from modules.community.models.community_interest import Interest
 from modules.community.models.community_wallet import CommunityWallet
-from modules.community.constants import CommunityStatus, MemberRole, MemberStatus, WalletStatus
+from modules.community.constants import BillStatus, CommunityStatus, MemberRole, MemberStatus, WalletStatus
 from modules.community.utils import generate_slug
 from modules.community.repositories import OrganizationRepository, InstitutionMemberRepository
 from modules.community.services.organization_service import OrganizationService

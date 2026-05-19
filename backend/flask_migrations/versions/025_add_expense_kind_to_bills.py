@@ -1,7 +1,7 @@
 """add expense_kind to bills
 
 Revision ID: 026_bill_expense_kind
-Revises: 025_subscription_execution_fields
+Revises: 025_subscription_exec_fields
 Create Date: 2026-05-06 17:45:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = '026_bill_expense_kind'
-down_revision = '025_subscription_execution_fields'
+down_revision = '025_subscription_exec_fields'
 branch_labels = None
 depends_on = None
 

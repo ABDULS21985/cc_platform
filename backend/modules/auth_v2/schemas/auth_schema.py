@@ -18,7 +18,11 @@ class SignupSchema(Schema):
     class Meta:
         unknown = EXCLUDE
     
-    email = fields.Email(required=True, metadata={'description': 'User email address'})
+    email = fields.Email(
+        load_default=None,
+        allow_none=True,
+        metadata={'description': 'Optional user email address'}
+    )
     password = fields.Str(
         required=True,
         validate=validate.Length(min=8),
@@ -36,11 +40,12 @@ class SignupSchema(Schema):
         metadata={'description': 'Last name'}
     )
     date_of_birth = fields.Str(
-        required=True,
+        load_default=None,
+        allow_none=True,
         metadata={'description': 'Date of birth (YYYY-MM-DD)'}
     )
     phone_number = fields.Str(
-        load_default=None,
+        required=True,
         validate=validate.Length(max=20),
         metadata={'description': 'Phone number'}
     )
@@ -88,6 +93,8 @@ class SignupSchema(Schema):
     @validates('date_of_birth')
     def validate_dob(self, value, **kwargs):
         """Validate date of birth format and age."""
+        if value is None:
+            return
         try:
             dob = datetime.strptime(value, '%Y-%m-%d')
             age = (datetime.now() - dob).days / 365.25
@@ -118,6 +125,8 @@ class SignupSchema(Schema):
             data['lastname'] = data['lastname'].strip()
         if data.get('email'):
             data['email'] = data['email'].lower().strip()
+        if data.get('phone_number'):
+            data['phone_number'] = re.sub(r'[\s\-()]', '', data['phone_number'].strip())
         return data
 
 
@@ -126,7 +135,14 @@ class LoginSchema(Schema):
     class Meta:
         unknown = EXCLUDE
     
-    email = fields.Email(required=True, metadata={'description': 'User email address'})
+    identifier = fields.Str(
+        load_default=None,
+        metadata={'description': 'User email address or phone number'}
+    )
+    email = fields.Str(
+        load_default=None,
+        metadata={'description': 'Deprecated. Use identifier; kept for older clients.'}
+    )
     password = fields.Str(
         required=True,
         validate=validate.Length(min=1),
@@ -138,11 +154,19 @@ class LoginSchema(Schema):
         metadata={'description': 'Remember login session'}
     )
     
+    @validates_schema
+    def validate_identifier(self, data, **kwargs):
+        """Require either the new identifier field or legacy email field."""
+        if not (data.get('identifier') or data.get('email')):
+            raise ValidationError('Email or phone number is required', field_name='identifier')
+    
     @post_load
     def process_data(self, data, **kwargs):
         """Clean up data after loading."""
-        if data.get('email'):
-            data['email'] = data['email'].lower().strip()
+        identifier = data.get('identifier') or data.get('email')
+        if identifier:
+            identifier = identifier.strip()
+            data['identifier'] = identifier.lower() if '@' in identifier else re.sub(r'[\s\-()]', '', identifier)
         return data
 
 

@@ -139,7 +139,7 @@ export function MyCommunities() {
           <EmptyState
             icon={<Users className="size-5" aria-hidden="true" />}
             title="No communities yet"
-            description="Join a circle or create your own to start pooling funds, splitting bills, and running events."
+            description="Join a circle or create your own to follow conversations, events, and member updates."
             action={
               <Link href="/dashboard/community?new=1">
                 <Button leadingIcon={<Plus className="size-4" />}>

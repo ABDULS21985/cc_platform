@@ -48,18 +48,19 @@ export interface AuthSuccess {
 }
 
 export interface SignupPayload {
-  email: string;
+  email?: string | null;
   password: string;
   firstname: string;
   lastname: string;
-  date_of_birth: string;
+  date_of_birth?: string | null;
   phone_number?: string | null;
   nin?: string | null;
   role?: "user" | "admin";
 }
 
 export interface LoginPayload {
-  email: string;
+  identifier: string;
+  email?: string;
   password?: string;
   remember?: boolean;
 }

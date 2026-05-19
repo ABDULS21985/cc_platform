@@ -3,52 +3,50 @@
 import * as React from 'react';
 import Link from 'next/link';
 import {
-  ArrowDownToLine,
   ArrowRight,
-  ArrowUpRight,
+  CalendarDays,
+  Compass,
+  MessageSquareText,
   Plus,
-  Receipt,
-  Sparkles,
+  Users,
 } from 'lucide-react';
 import useUserData from '@/hooks/useUserData';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { FadeIn, SlideUp } from '@/components/ui/motion';
 import { cn } from '@/lib/utils';
 
-interface QuickAction {
-  id: 'send' | 'topup' | 'paybill' | 'create';
+interface CommunityAction {
+  id: 'circles' | 'discover' | 'events' | 'create';
   label: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   href: string;
-  /** Tone class pair (background + foreground) for the icon tile. */
   tone: string;
 }
 
-const ACTIONS: QuickAction[] = [
+const ACTIONS: CommunityAction[] = [
   {
-    id: 'send',
-    label: 'Send money',
-    description: 'Transfer to a member or bank',
-    icon: ArrowUpRight,
-    href: '/dashboard/wallet?action=send',
-    tone: 'bg-brand-soft text-accent-foreground',
-  },
-  {
-    id: 'topup',
-    label: 'Top up',
-    description: 'Fund your wallet via Bell MFB',
-    icon: ArrowDownToLine,
-    href: '/dashboard/wallet?action=fund',
-    tone: 'bg-success/15 text-success',
-  },
-  {
-    id: 'paybill',
-    label: 'Pay a bill',
-    description: 'Settle community dues',
-    icon: Receipt,
+    id: 'circles',
+    label: 'Your circles',
+    description: 'Open the communities you follow',
+    icon: Users,
     href: '/dashboard/community',
+    tone: 'bg-brand-soft text-primary',
+  },
+  {
+    id: 'discover',
+    label: 'Discover',
+    description: 'Find active communities',
+    icon: Compass,
+    href: '/dashboard/explore',
+    tone: 'bg-info/15 text-info',
+  },
+  {
+    id: 'events',
+    label: 'Events',
+    description: 'Catch what is happening',
+    icon: CalendarDays,
+    href: '/dashboard/events',
     tone: 'bg-warning/15 text-warning',
   },
   {
@@ -57,7 +55,7 @@ const ACTIONS: QuickAction[] = [
     description: 'Start a new circle',
     icon: Plus,
     href: '/dashboard/community?new=1',
-    tone: 'bg-info/15 text-info',
+    tone: 'bg-success/15 text-success',
   },
 ];
 
@@ -100,20 +98,10 @@ export function WelcomeHero() {
   return (
     <section
       aria-labelledby="welcome-heading"
-      className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card to-brand-soft/30 px-6 py-7 shadow-xs sm:px-8"
+      className="rounded-2xl border border-border bg-card px-5 py-5 shadow-xs sm:px-6"
     >
-      {/* Ambient glow */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-brand/15 blur-3xl"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-32 -left-16 h-56 w-56 rounded-full bg-info/10 blur-3xl"
-      />
-
       <FadeIn>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="size-12 ring-2 ring-card shadow-sm">
               <AvatarImage src={user?.avatar || undefined} alt="" />
@@ -133,21 +121,23 @@ export function WelcomeHero() {
               </h1>
             </div>
           </div>
-          <Badge variant="successSoft" size="lg" className="hidden gap-1.5 sm:inline-flex">
-            <Sparkles className="size-3" aria-hidden="true" />
-            All systems normal
-          </Badge>
+          <Link
+            href="#community-feed-heading"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-border bg-background px-4 text-sm font-semibold text-foreground transition-colors hover:border-input hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <MessageSquareText className="size-4" aria-hidden="true" />
+            Go to feed
+          </Link>
         </div>
       </FadeIn>
 
       <SlideUp delay={0.05}>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
-          Here&apos;s a quick look at your circles, balances, and what needs your
-          attention today.
+          Catch up on posts, events, and member updates across the circles you
+          belong to.
         </p>
       </SlideUp>
 
-      {/* Quick actions */}
       <SlideUp delay={0.1}>
         <ul className="mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
           {ACTIONS.map((action) => (
@@ -155,13 +145,13 @@ export function WelcomeHero() {
               <Link
                 href={action.href}
                 className={cn(
-                  'group flex h-full items-center gap-3 rounded-2xl border border-border bg-card/80 p-3.5 backdrop-blur-sm transition-all',
-                  'hover:border-input hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+                  'group flex h-full items-center gap-3 rounded-xl border border-border bg-background p-3 transition-all',
+                  'hover:border-input hover:bg-accent/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
                 )}
               >
                 <span
                   className={cn(
-                    'grid size-10 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-105',
+                    'grid size-10 shrink-0 place-items-center rounded-lg transition-transform group-hover:scale-105',
                     action.tone
                   )}
                   aria-hidden="true"

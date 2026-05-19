@@ -256,9 +256,9 @@ class TransactionQuerySchema(Schema):
     """
     limit = fields.Integer(
         load_default=50,
-        validate=validate.Range(min=1, max=100),
+        validate=validate.Range(min=1, max=200),
         metadata={
-            'description': 'Number of transactions to return (1-100)',
+            'description': 'Number of transactions to return (1-200)',
             'example': 50
         }
     )
